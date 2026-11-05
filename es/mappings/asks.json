@@ -1,0 +1,14 @@
+{
+  "mappings": {
+    "properties": {
+      "user_id": { "type": "keyword" },
+      "ask_id": { "type": "keyword" },
+      "text": { "type": "text" },
+      "query": { "type": "percolator" },
+      "title": { "type": "text" },
+      "bio": { "type": "text" },
+      "languages": { "type": "keyword" },
+      "organisations": { "type": "keyword" }
+    }
+  }
+}

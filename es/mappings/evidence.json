@@ -1,0 +1,17 @@
+{
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "person_id": { "type": "keyword" },
+      "kind": { "type": "keyword" },
+      "title": { "type": "text" },
+      "text": { "type": "text" },
+      "url": { "type": "keyword" },
+      "country": { "type": "keyword" },
+      "ror_id": { "type": "keyword" },
+      "hiring": { "type": "boolean" },
+      "free_times": { "type": "date_range", "format": "strict_date_optional_time" },
+      "content": { "type": "semantic_text", "inference_id": ".elser-2-elasticsearch" }
+    }
+  }
+}

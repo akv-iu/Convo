@@ -1,0 +1,19 @@
+{
+  "mappings": {
+    "properties": {
+      "id": { "type": "keyword" },
+      "name": { "type": "text" },
+      "github_login": { "type": "keyword" },
+      "bio": { "type": "text" },
+      "languages": { "type": "keyword" },
+      "organisations": { "type": "keyword" },
+      "country": { "type": "keyword" },
+      "ror_id": { "type": "keyword" },
+      "hiring": { "type": "boolean" },
+      "synthetic": { "type": "boolean" },
+      "free_times": { "type": "date_range", "format": "strict_date_optional_time" },
+      "rating": { "type": "float" },
+      "summary": { "type": "semantic_text", "inference_id": ".elser-2-elasticsearch" }
+    }
+  }
+}
