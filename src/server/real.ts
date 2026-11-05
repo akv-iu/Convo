@@ -6,6 +6,7 @@ import type { Api } from "@/contracts/routes";
 import { notImplemented } from "@/server/api";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 import { searchWorkplaces } from "@/server/profile/ror";
+import { createAsk, matchAsk } from "@/server/requests/asks";
 
 export const real: Api = {
   getMe: ({ userId }) => getProfile(userId),
@@ -13,8 +14,8 @@ export const real: Api = {
   searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),
   getAvailability: ({ userId }) => getAvailability(userId),
   putAvailability: ({ userId, body }) => saveAvailability(userId, body),
-  refine: notImplemented("B2: create ask, call ai.refineAsk, search.registerAsk"),
-  match: notImplemented("B2: load ask and exclusions, call runMatch"),
+  refine: ({ userId, body }) => createAsk(userId, body.text),
+  match: ({ userId, body }) => matchAsk(userId, body.askId, body.query),
   reject: notImplemented("B2: rejections table, batch-reject rule"),
   setSoftBlocker: notImplemented("B2: soft blocker flag on the ask"),
   sendRequest: notImplemented("B2: requests table"),
