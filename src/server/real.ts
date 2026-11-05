@@ -4,13 +4,14 @@
  */
 import type { Api } from "@/contracts/routes";
 import { notImplemented } from "@/server/api";
+import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 
 export const real: Api = {
-  getMe: notImplemented("B2: profile from Postgres"),
-  putMe: notImplemented("B2: save profile, re-ingest to Elasticsearch"),
+  getMe: ({ userId }) => getProfile(userId),
+  putMe: ({ userId, body }) => updateProfile(userId, body),
   searchRor: notImplemented("B2: ROR lookup"),
-  getAvailability: notImplemented("B2: free times from Postgres"),
-  putAvailability: notImplemented("B2: save free times, update Elasticsearch"),
+  getAvailability: ({ userId }) => getAvailability(userId),
+  putAvailability: ({ userId, body }) => saveAvailability(userId, body),
   refine: notImplemented("B2: create ask, call ai.refineAsk, search.registerAsk"),
   match: notImplemented("B2: load ask and exclusions, call runMatch"),
   reject: notImplemented("B2: rejections table, batch-reject rule"),

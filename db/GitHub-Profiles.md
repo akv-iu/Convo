@@ -14,7 +14,8 @@ Languages come from the returned repositories' primary languages.
 
 `src/server/profile/persistence.ts` inserts the initial fields into `users`. On repeat sign-in, it
 only refreshes `github_login`; saved profile edits, onboarding filters and free
-times survive. There is no automatic refresh of the user's editable fields.
+times survive. Its internal revision also increments so later search updates
+can reject older snapshots. There is no automatic refresh of editable fields.
 Import or database failures deny sign-in rather than creating a partial profile.
 Errors logged by the sign-in callback do not include provider or database details.
 
@@ -30,7 +31,8 @@ use. The session response and profile database writes do not contain it.
 - This step builds repository `EvidenceDoc`s but does not persist or index them.
   Search ingestion joins at C2 after onboarding provides the required filters.
 - New rows have `filters = null` and empty free times. No country or workplace is
-  guessed. Real `/api/me` and onboarding handlers are a subsequent B2 step.
+  guessed. Real `/api/me` returns 409 until onboarding answers are saved through
+  `PUT /api/me`; see [Profile API](Profile-API.md) for the sequence and checks.
 
 ## Verification
 

@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   filters: jsonb("filters").$type<HardFilters>(),
   freeTimes: jsonb("free_times").$type<TimeBlock[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revision: integer("revision").notNull().default(0),
 });
 
 export const asks = pgTable(
