@@ -14,7 +14,8 @@ Languages come from the returned repositories' primary languages.
 
 `src/server/profile/persistence.ts` inserts the initial fields into `users`. On repeat sign-in, it
 only refreshes `github_login`; saved profile edits, onboarding filters and free
-times survive. There is no automatic refresh of the user's editable fields.
+times survive. Its internal revision also increments so later search updates
+can reject older snapshots. There is no automatic refresh of editable fields.
 Import or database failures deny sign-in rather than creating a partial profile.
 Errors logged by the sign-in callback do not include provider or database details.
 

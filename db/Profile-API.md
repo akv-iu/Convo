@@ -1,7 +1,8 @@
 # Profile and availability API
 
 With `FAKE_API=0`, the existing GET/PUT `/api/me` and GET/PUT `/api/availability`
-routes read and update the signed-in user's Neon row. No migration is needed.
+routes read and update the signed-in user's Neon row. Apply migration
+`0001_profile_revision.sql` before running these routes with the real database.
 Use `FAKES=search,ai` until B1's Elasticsearch adapter is ready. Production and
 A's environment stay in fake mode during this step.
 
@@ -26,17 +27,23 @@ fake API have not changed; A must account for this real onboarding state at C2.
 
 ## Search boundary
 
-Saving a complete profile or its availability calls `ingestPerson(person)`.
+Saving a complete profile or its availability calls
+`ingestPerson(person, undefined, revision)`.
 Omitted evidence preserves existing repository evidence; an explicit `[]`
-clears it. B1's real adapter must implement the same distinction. This step
+clears it. Each database write atomically increments the user's revision,
+including GitHub login refreshes. Search ignores older revisions and unversioned
+writes after a versioned save; equal revisions can retry. The revision stays
+internal and is not part of the frontend Person contract. B1's real adapter must
+implement the same evidence semantics and atomic revision check. This step
 does not ingest the repositories built during sign-in; that connection remains
 for C2. The in-memory search index is temporary and resets when the process does.
 
 Postgres is saved before search. If indexing fails, the response explicitly
 says the profile was saved and asks the caller to retry the same save. There is
-no transaction across the two services or background retry. Concurrent saves
-can reach search out of order; durable, ordered indexing is future work before
-using this approach beyond the initial demo.
+no transaction across the two services or background retry. Revisions prevent
+an older successful save from overwriting newer indexed data; they do not
+automatically repair an index write that fails. Keep using the in-memory adapter
+until B1 implements and verifies these rules in Elasticsearch.
 
 ## Manual local check
 
@@ -47,12 +54,17 @@ From PowerShell:
 ```powershell
 cd D:\Projects\convo-b2-profile-api
 Copy-Item "D:\Projects\Convo\.env.local" ".env.local"
+node --env-file=.env.local ./node_modules/drizzle-kit/bin.cjs migrate
 $env:FAKE_API = "0"
 $env:FAKES = "search,ai"
 npm run dev -- --port 3000
 ```
 
-Next loads `.env.local` itself; do not start it with Node's `--env-file` flag.
+The migration adds one non-null integer column with default zero; it drops
+nothing. The CLI command loads the env file explicitly. Next loads `.env.local`
+itself; do not start Next with Node's `--env-file` flag. Check for an existing
+shell `DATABASE_URL` override before running the migration (see [database
+instructions](README.md)).
 Sign in at `http://localhost:3000/api/auth/signin`, then use that same browser's
 developer console. These calls use your signed-in session:
 
@@ -93,6 +105,7 @@ console.log(original, originalTimes);
 
 `npm run lint`, `npm run typecheck`, and `npm test` exercise the four actual
 HTTP handlers in fake and real mode, the Drizzle SQL through a mocked Neon
-driver, failure handling, invalid intervals and preservation of search evidence.
+driver, failure handling, invalid intervals, preservation of search evidence,
+and a delayed older database response arriving after a newer save was indexed.
 All service calls are local fakes or mocks; no automated test contacts live
 GitHub, Neon, Elasticsearch or OpenAI. No screens changed in this step.

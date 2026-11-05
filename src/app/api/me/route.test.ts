@@ -28,7 +28,7 @@ const request = (path: string, body?: unknown) => new Request(`http://localhost:
 function result(value: Person = person, filters: Person["filters"] | null = value.filters) {
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations), filters === null ? null : JSON.stringify(filters),
-    JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z"]] };
+    JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", 1]] };
 }
 beforeEach(() => {
   runtime.fakeApi = false;

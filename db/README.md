@@ -8,6 +8,11 @@ The initial migration creates `users`, `asks`, `rejections`, `requests`, and
 `ai_cache`. Availability is stored in `users.free_times`; a booked meeting is
 stored in `requests.slot` with status `scheduled`, matching the existing schema.
 
+`0001_profile_revision.sql` adds `users.revision` (integer, not null, default 0).
+Profile/availability writes and GitHub login refreshes increment it atomically;
+search uses it to ignore out-of-order snapshots. Apply it before enabling the
+real profile API on this version. It is additive and preserves existing rows.
+
 ## Generate and check
 
 Run from the repository root after installing dependencies:

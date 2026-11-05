@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { routes, type RouteBody } from "@/contracts/routes";
@@ -26,7 +26,8 @@ async function readUser(userId: string): Promise<User> {
 async function writeUser(userId: string, changes: ProfilePatch): Promise<User> {
   let rows: User[];
   try {
-    rows = await db().update(users).set(changes).where(eq(users.id, userId)).returning();
+    rows = await db().update(users).set({ ...changes, revision: sql`${users.revision} + 1` })
+      .where(eq(users.id, userId)).returning();
   } catch {
     throw new ProfileError("Profile storage is unavailable. Try again.", 503);
   }
@@ -47,10 +48,9 @@ function validateTimes(times: TimeBlock[]): void {
   }
 }
 
-async function syncProfile(person: Person): Promise<void> {
+async function syncProfile(person: Person, revision: number): Promise<void> {
   try {
-    // shortcut: concurrent saves can index out of order; add durable ordering at C2 before real search.
-    await search.ingestPerson(person);
+    await search.ingestPerson(person, undefined, revision);
   } catch {
     // Postgres is already saved. An identical retry can repair search without losing data.
     throw new ProfileError("Profile saved, but search update failed. Retry the same save.", 503);
@@ -68,7 +68,7 @@ export async function updateProfile(userId: string, changes: ProfilePatch): Prom
   const saved = Object.values(changes).some((value) => value !== undefined)
     ? await writeUser(userId, changes) : existing;
   const person = toPerson(saved);
-  await syncProfile(person);
+  await syncProfile(person, saved.revision);
   return person;
 }
 
@@ -82,6 +82,6 @@ export async function getAvailability(userId: string): Promise<TimeBlock[]> {
 export async function saveAvailability(userId: string, times: TimeBlock[]): Promise<TimeBlock[]> {
   validateTimes(times);
   const saved = await writeUser(userId, { freeTimes: times });
-  if (saved.filters !== null) await syncProfile(toPerson(saved));
+  if (saved.filters !== null) await syncProfile(toPerson(saved), saved.revision);
   return saved.freeTimes;
 }

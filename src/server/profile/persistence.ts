@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { buildProfile } from "./index";
@@ -12,6 +13,6 @@ export async function initializeGitHubProfile(accountId: string, profile: unknow
   }).onConflictDoUpdate({
     target: users.id,
     // Sign-in must not overwrite the user's edits, filters or saved availability.
-    set: { githubLogin: person.githubLogin },
+    set: { githubLogin: person.githubLogin, revision: sql`${users.revision} + 1` },
   });
 }

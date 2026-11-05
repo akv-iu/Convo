@@ -11,10 +11,10 @@ vi.mock("@/server/search", () => ({ search: { ingestPerson } }));
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "./service";
 
 const person = structuredClone(people[0]);
-function result(value: Person = person, filters: Person["filters"] | null = value.filters) {
+function result(value: Person = person, filters: Person["filters"] | null = value.filters, revision = 1) {
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations),
-    filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z"]] };
+    filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision]] };
 }
 beforeEach(() => {
   query.mockReset().mockResolvedValue(result());
@@ -32,6 +32,7 @@ describe("real profile and availability services", () => {
     expect(sql).toContain('where "users"."id" =');
     expect(params).toContain(person.id);
     expect(actual).not.toHaveProperty("createdAt");
+    expect(actual).not.toHaveProperty("revision");
   });
 
   it("reports missing profiles without returning another user's data", async () => {
@@ -47,7 +48,7 @@ describe("real profile and availability services", () => {
   it("saves initial onboarding answers before syncing a complete profile", async () => {
     query.mockResolvedValueOnce(result(person, null)).mockResolvedValueOnce(result());
     expect(await updateProfile(person.id, { filters: person.filters })).toEqual(person);
-    expect(ingestPerson).toHaveBeenCalledWith(person);
+    expect(ingestPerson).toHaveBeenCalledWith(person, undefined, 1);
     expect(query.mock.calls[1][0]).toContain('set "filters" =');
   });
 
@@ -63,9 +64,9 @@ describe("real profile and availability services", () => {
     query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
     expect(await updateProfile(person.id, { name: "New name" })).toEqual(updated);
     const [sql, params] = query.mock.calls[1];
-    expect(sql).toMatch(/set "name" = \$\d+ where "users"\."id" = \$\d+ returning/);
+    expect(sql).toMatch(/set "name" = \$\d+, "revision" = "users"\."revision" \+ 1 where "users"\."id" = \$\d+ returning/);
     expect(params).toEqual(["New name", person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
   });
 
   it("handles an empty patch without issuing an invalid empty UPDATE", async () => {
@@ -83,9 +84,9 @@ describe("real profile and availability services", () => {
     query.mockResolvedValueOnce(result(updated));
     expect(await saveAvailability(person.id, [])).toEqual([]);
     const [sql, params] = query.mock.calls[0];
-    expect(sql).toMatch(/set "free_times" = \$\d+ where "users"\."id" = \$\d+ returning/);
+    expect(sql).toMatch(/set "free_times" = \$\d+, "revision" = "users"\."revision" \+ 1 where "users"\."id" = \$\d+ returning/);
     expect(params).toEqual(["[]", person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
   });
 
   it("keeps pre-onboarding availability durable without indexing an incomplete Person", async () => {

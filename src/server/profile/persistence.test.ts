@@ -32,7 +32,7 @@ describe("profile persistence through Drizzle", () => {
   it("only refreshes the GitHub login on conflict, preserving edits and onboarding", async () => {
     await initializeGitHubProfile("101", { ...fixtures[0].profile, login: "renamed-example" }, "test-token");
     const [sql, params] = query.mock.calls[0];
-    expect(sql).toMatch(/on conflict \("id"\) do update set "github_login" = \$\d+$/);
+    expect(sql).toMatch(/on conflict \("id"\) do update set "github_login" = \$\d+, "revision" = "users"\."revision" \+ 1$/);
     expect(params.at(-1)).toBe("renamed-example");
     expect(sql.split("do update set")[1]).not.toMatch(/name"|bio|languages|organisations|filters|free_times/);
   });

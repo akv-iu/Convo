@@ -23,4 +23,19 @@ describe("person updates without replacing evidence", () => {
     await memorySearch.ingestPerson(person);
     expect(await memorySearch.getAvailability([person.id])).toEqual({ [person.id]: person.freeTimes });
   });
+
+  it("ignores older and unversioned writes after a versioned write, including their evidence", async () => {
+    const person = { ...structuredClone(people[0]), id: "versioned-profile-test", bio: "RevisionToken" };
+    const docs = [{ id: "versioned-doc", personId: person.id, kind: "repo" as const, title: "RevisionEvidence", text: "" }];
+    await memorySearch.ingestPerson(person, docs, 2);
+    const stale = { ...person, name: "Stale name" };
+    await memorySearch.ingestPerson(stale, [], 1);
+    await memorySearch.ingestPerson(stale, []);
+    const hits = await memorySearch.searchCandidates("RevisionEvidence", { excludeIds: [] });
+    expect(hits.find((hit) => hit.person.id === person.id)?.person).toEqual(person);
+    await memorySearch.ingestPerson({ ...person, freeTimes: [] }, undefined, 3);
+    expect(await memorySearch.getAvailability([person.id])).toEqual({ [person.id]: [] });
+    await memorySearch.ingestPerson({ ...person, freeTimes: [] }, [], 3);
+    expect(await memorySearch.searchCandidates("RevisionEvidence", { excludeIds: [] })).toEqual([]);
+  });
 });

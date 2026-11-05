@@ -8,6 +8,7 @@ import type { Candidate, SearchService } from "./index";
 
 const people = new Map<string, Person>(fixtures.people.map((p) => [p.id, p]));
 const evidence = new Map<string, EvidenceDoc[]>();
+const revisions = new Map<string, number>();
 for (const e of fixtures.evidence) {
   evidence.set(e.personId, [...(evidence.get(e.personId) ?? []), e]);
 }
@@ -27,9 +28,12 @@ function overlaps(a: TimeBlock[], b: TimeBlock[]): boolean {
 }
 
 export const memorySearch: SearchService = {
-  async ingestPerson(person, docs) {
+  async ingestPerson(person, docs, revision) {
+    const current = revisions.get(person.id);
+    if (current !== undefined && (revision === undefined || revision < current)) return;
     people.set(person.id, person);
     if (docs !== undefined) evidence.set(person.id, docs);
+    if (revision !== undefined) revisions.set(person.id, revision);
   },
 
   async searchCandidates(query, filters, limit = 10) {

@@ -20,8 +20,12 @@ export interface SearchFilters {
 }
 
 export interface SearchService {
-  /** Write a person; omit evidence to preserve it, or pass a list to replace it. */
-  ingestPerson(person: Person, evidence?: EvidenceDoc[]): Promise<void>;
+  /**
+   * Omit evidence to preserve it, or pass a list to replace it.
+   * Atomically ignore older revisions (and unversioned writes after versioned ones).
+   * Equal revisions may retry. Unversioned writes are for fixtures before a real save.
+   */
+  ingestPerson(person: Person, evidence?: EvidenceDoc[], revision?: number): Promise<void>;
   /** Hybrid search over evidence, collapsed to one result per person, with highlights. */
   searchCandidates(query: string, filters: SearchFilters, limit?: number): Promise<Candidate[]>;
   /** Store a user's ask as a percolator query. */
