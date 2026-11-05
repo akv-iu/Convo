@@ -11,11 +11,7 @@ export default function Home() {
         focused conversation.
       </p>
       <div className="flex flex-wrap gap-3">
-        {config.fakeApi ? (
-          <Button href="/dev/routes">Browse the fake API</Button>
-        ) : (
-          <Button href="/api/auth/signin">Sign in with GitHub</Button>
-        )}
+        <Button href="/signin">Get started</Button>
         <Link href="/dev/routes" className="self-center text-sm underline underline-offset-4">
           API contract
         </Link>
