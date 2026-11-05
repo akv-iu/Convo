@@ -5,11 +5,12 @@
 import type { Api } from "@/contracts/routes";
 import { notImplemented } from "@/server/api";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
+import { searchWorkplaces } from "@/server/profile/ror";
 
 export const real: Api = {
   getMe: ({ userId }) => getProfile(userId),
   putMe: ({ userId, body }) => updateProfile(userId, body),
-  searchRor: notImplemented("B2: ROR lookup"),
+  searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),
   getAvailability: ({ userId }) => getAvailability(userId),
   putAvailability: ({ userId, body }) => saveAvailability(userId, body),
   refine: notImplemented("B2: create ask, call ai.refineAsk, search.registerAsk"),
