@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../db";
-import { asks, rejections } from "../../../db/schema";
+import { asks } from "../../../db/schema";
 import { Ask, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
 import { ai } from "@/server/ai";
 import { search } from "@/server/search";
 import { runMatch } from "@/server/pipeline";
-import { config } from "@/server/config";
+import { getExclusions } from "./rejections";
 
 class AskError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -56,20 +56,11 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
   }
 
   const requester = await getProfile(userId);
-  let rejected: { personId: string; rank: number }[];
-  try {
-    const rows = await db().select({ personId: rejections.personId, rank: rejections.rank })
-      .from(rejections).where(eq(rejections.askId, askId));
-    rejected = routes.reject.body.omit({ askId: true }).array().parse(rows);
-  } catch {
-    throw new AskError("Ask exclusions are unavailable. Try again.", 503);
-  }
-  const hiddenBelowRank = rejected.length >= config.batchRejectAfter
-    ? rejected.reduce((highest, rejection) => Math.max(highest, rejection.rank), 0) : null;
+  const { excludeIds, hiddenBelowRank } = await getExclusions(askId);
   try {
     return routes.match.response.parse(await runMatch({
       ask, requester, query,
-      excludeIds: ask.softBlocker ? rejected.map(({ personId }) => personId) : [],
+      excludeIds: ask.softBlocker ? excludeIds : [],
       hiddenBelowRank,
     }));
   } catch {
