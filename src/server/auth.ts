@@ -7,17 +7,28 @@ import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { DEMO_USER_A } from "@/contracts/fixtures";
 import { config } from "@/server/config";
+import { githubUserId } from "@/server/profile/github";
+import { initializeGitHubProfile } from "@/server/profile/persistence";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  providers: [
-    GitHub({
-      // read:user gives the profile; public_repo lists repos for the profile builder
-      authorization: { params: { scope: "read:user user:email public_repo" } },
-    }),
-  ],
+  // Public repository reads do not need public_repo's write permission.
+  providers: [GitHub],
   callbacks: {
+    async signIn({ account, profile }) {
+      if (config.fakeApi) return true;
+      if (account?.provider !== "github" || !account.access_token) return false;
+      try {
+        await initializeGitHubProfile(account.providerAccountId, profile, account.access_token);
+        return true;
+      } catch {
+        // Provider and database errors may contain credentials; do not log them.
+        console.error("[auth] GitHub profile initialization failed");
+        return false;
+      }
+    },
     async jwt({ token, account, profile }) {
+      if (account?.provider === "github") token.sub = githubUserId(account.providerAccountId);
       if (account?.access_token) token.githubToken = account.access_token;
       if (profile && typeof profile.login === "string") token.githubLogin = profile.login;
       return token;
