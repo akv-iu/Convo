@@ -29,7 +29,7 @@ function overlaps(a: TimeBlock[], b: TimeBlock[]): boolean {
 export const memorySearch: SearchService = {
   async ingestPerson(person, docs) {
     people.set(person.id, person);
-    evidence.set(person.id, docs);
+    if (docs !== undefined) evidence.set(person.id, docs);
   },
 
   async searchCandidates(query, filters, limit = 10) {

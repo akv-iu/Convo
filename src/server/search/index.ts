@@ -20,8 +20,8 @@ export interface SearchFilters {
 }
 
 export interface SearchService {
-  /** Write a person and their evidence. A new person is searchable within about a second. */
-  ingestPerson(person: Person, evidence: EvidenceDoc[]): Promise<void>;
+  /** Write a person; omit evidence to preserve it, or pass a list to replace it. */
+  ingestPerson(person: Person, evidence?: EvidenceDoc[]): Promise<void>;
   /** Hybrid search over evidence, collapsed to one result per person, with highlights. */
   searchCandidates(query: string, filters: SearchFilters, limit?: number): Promise<Candidate[]>;
   /** Store a user's ask as a percolator query. */

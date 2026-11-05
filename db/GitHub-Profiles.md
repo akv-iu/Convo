@@ -30,7 +30,8 @@ use. The session response and profile database writes do not contain it.
 - This step builds repository `EvidenceDoc`s but does not persist or index them.
   Search ingestion joins at C2 after onboarding provides the required filters.
 - New rows have `filters = null` and empty free times. No country or workplace is
-  guessed. Real `/api/me` and onboarding handlers are a subsequent B2 step.
+  guessed. Real `/api/me` returns 409 until onboarding answers are saved through
+  `PUT /api/me`; see [Profile API](Profile-API.md) for the sequence and checks.
 
 ## Verification
 
