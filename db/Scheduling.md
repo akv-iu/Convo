@@ -37,6 +37,9 @@ for manual testing: Postgres is real, search and AI remain fake.
   inbox before retrying the same slot. Dependency details/credentials are never
   returned. If the transaction committed but its returned data is invalid, the
   error explicitly says the booking was saved.
+- The booking SQL explicitly names its JSON result `saved`, because direct Neon
+  execution bypasses Drizzle's result mapping. An empty result is a 409 conflict;
+  a returned row with unreadable data is a 503 saved-response error.
 - The existing respond API can change a booked request's status and retains its
   slot. That slot continues to reserve the time. A response is not a cancellation.
 - Postgres profile revisions protect against availability changes between reading

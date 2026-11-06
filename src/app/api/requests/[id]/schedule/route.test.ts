@@ -110,6 +110,15 @@ it("does not allow the real backend to book an unaccepted request", async () => 
   expect(transaction).not.toHaveBeenCalled();
 });
 
+it("reports a committed row with an unreadable response as503, not a booking conflict", async () => {
+  read(); availability();
+  transaction.mockResolvedValueOnce([[{ jsonb_build_object: { ...saved, slot, status: "scheduled" } }]]);
+  const response = await book(req({ slot }), context());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: "Booking saved, but its response is unavailable. Refresh your inbox." });
+  expect(transaction).toHaveBeenCalledOnce();
+});
+
 it("returns503 without leaking real storage failures", async () => {
   query.mockRejectedValue(new Error("secret-db-password"));
   for (const response of [await slots(req(), context()), await book(req({ slot }), context())]) {
