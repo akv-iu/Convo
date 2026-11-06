@@ -69,15 +69,29 @@ export function serializeBadgePrefs(prefs: BadgePrefs): string {
 
 export const badgeCookieOptions = { path: "/", sameSite: "lax" as const, maxAge: ONE_YEAR };
 
-/** Browser-side update, merging into what's already saved. */
-export function writeBadgePrefs(patch: Partial<BadgePrefs>): BadgePrefs {
-  const current = parseBadgePrefs(
+/** Reads the prefs from document.cookie (browser only). */
+export function readBadgePrefs(): BadgePrefs {
+  return parseBadgePrefs(
     document.cookie
       .split("; ")
       .find((c) => c.startsWith(`${BADGE_COOKIE}=`))
       ?.slice(BADGE_COOKIE.length + 1),
   );
-  const next = Prefs.parse({ ...current, ...patch });
+}
+
+/**
+ * A tiny script for the onboarding layout: sets --badge on its parent
+ * element from the cookie before first paint, so a fresh page load never
+ * flashes the default colour. Built from the same colour list.
+ */
+export function badgeColourScript(): string {
+  const hexes = JSON.stringify(Object.fromEntries(badgeColours.map((c) => [c.id, c.hex])));
+  return `(function(){try{var el=document.currentScript&&document.currentScript.parentElement;var m=document.cookie.match(/(?:^|; )${BADGE_COOKIE}=([^;]*)/);if(!el||!m)return;var p=JSON.parse(decodeURIComponent(m[1]));var c=${hexes}[p.colour];if(c)el.style.setProperty("--badge",c)}catch(e){}})();`;
+}
+
+/** Browser-side update, merging into what's already saved. */
+export function writeBadgePrefs(patch: Partial<BadgePrefs>): BadgePrefs {
+  const next = Prefs.parse({ ...readBadgePrefs(), ...patch });
   document.cookie = `${BADGE_COOKIE}=${encodeURIComponent(serializeBadgePrefs(next))}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
   return next;
 }

@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { HardFilters } from "@/contracts/types";
-import { missingAnswers, saveErrorMessage, toFilters, type Answers } from "./answers";
+import { missingAnswers, saveErrorMessage, toFilters, workplaceLabel, type Answers } from "./answers";
+
+describe("workplaceLabel", () => {
+  it("names each kind of answer for the badge", () => {
+    expect(workplaceLabel(null)).toBeNull();
+    expect(workplaceLabel({ kind: "none" })).toBe("Independent");
+    expect(workplaceLabel({ kind: "custom", name: "Acme Robotics" })).toBe("Acme Robotics");
+    expect(workplaceLabel({ kind: "org", org: { id: "x", name: "Stanford University", country: "US" } })).toBe(
+      "Stanford University",
+    );
+  });
+});
 
 const stanford = { id: "https://ror.org/00f54p054", name: "Stanford University", country: "US" };
 const complete: Answers = { workplace: { kind: "org", org: stanford }, country: "US", hiring: true };
@@ -35,6 +46,14 @@ describe("toFilters", () => {
       country: "GB",
       rorId: null,
       hiring: false,
+    });
+  });
+
+  it("sends a null rorId for a typed workplace that isn't in the directory", () => {
+    expect(toFilters({ workplace: { kind: "custom", name: "Acme Robotics" }, country: "US", hiring: true })).toEqual({
+      country: "US",
+      rorId: null,
+      hiring: true,
     });
   });
 

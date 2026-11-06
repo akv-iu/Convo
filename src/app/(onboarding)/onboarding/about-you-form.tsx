@@ -8,12 +8,28 @@
  *
  * It does not read GET /api/me first: in real mode that returns 409 until
  * these answers are saved, so this screen always starts empty.
+ *
+ * The badge takes the colour chosen in step 1 from the onboarding layout
+ * (frontend-only convo_badge cookie). A workplace typed in because the
+ * search had no match is kept in that cookie after a successful save,
+ * since the contract has no field for it yet.
  */
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, BadgeChip } from "../_components/badge";
-import { missingAnswers, missingMessage, questionOrder, saveErrorMessage, toFilters, type Answers, type Missing, type Workplace } from "./answers";
+import { writeBadgePrefs } from "../_components/badge-prefs";
+import {
+  missingAnswers,
+  missingMessage,
+  questionOrder,
+  saveErrorMessage,
+  toFilters,
+  workplaceLabel,
+  type Answers,
+  type Missing,
+  type Workplace,
+} from "./answers";
 import { countries, countryName } from "./countries";
 import { WorkplaceSearch } from "./workplace-search";
 
@@ -72,6 +88,7 @@ export function AboutYouForm() {
         setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
         return;
       }
+      writeBadgePrefs({ workplace: workplace?.kind === "custom" ? workplace.name : undefined });
       router.push(NEXT_STEP);
     } catch {
       setSaveError(saveErrorMessage(0, null));
@@ -84,10 +101,8 @@ export function AboutYouForm() {
     <Badge label={country ? countryName(country) : undefined}>
       <div className="flex flex-col gap-2 pt-4">
         <p className="text-xs text-muted">Works at</p>
-        {workplace?.kind === "org" ? (
-          <p className="font-semibold leading-snug">{workplace.org.name}</p>
-        ) : workplace?.kind === "none" ? (
-          <p className="font-semibold leading-snug">Independent</p>
+        {workplace ? (
+          <p className="font-semibold leading-snug break-words">{workplaceLabel(workplace)}</p>
         ) : (
           <span className="block h-2.5 w-3/5 rounded-full bg-[var(--skeleton)]" />
         )}
@@ -122,7 +137,7 @@ export function AboutYouForm() {
           >
             <legend className={legendClass}>Where do you work?</legend>
             <WorkplaceSearch value={workplace} onChange={chooseWorkplace} invalid={show("workplace")} />
-            {workplace?.kind !== "org" && (
+            {workplace?.kind !== "org" && workplace?.kind !== "custom" && (
               <label className="flex min-h-12 cursor-pointer items-center gap-3 self-start rounded-lg px-1 text-base has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
                 <input
                   type="checkbox"

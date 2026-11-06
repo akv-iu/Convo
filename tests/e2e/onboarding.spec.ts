@@ -19,6 +19,21 @@ function savedFilters(req: Request) {
 
 const isSave = (req: Request) => req.url().endsWith("/api/me") && req.method() === "PUT";
 
+/** A save then a client-side move on a busy test server can take a few seconds. */
+const AFTER_SUBMIT = 15_000;
+
+/** The frontend-only badge preferences cookie, decoded. */
+const badgeCookie = async (page: Page) => {
+  const raw = (await page.context().cookies()).find((c) => c.name === "convo_badge")?.value;
+  return raw ? (JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>) : undefined;
+};
+
+/** Background colour of the badge stripe that's on screen. */
+const stripeColour = (page: Page) =>
+  page
+    .locator("[data-badge-stripe]")
+    .evaluateAll((els) => els.filter((el) => el.checkVisibility()).map((el) => getComputedStyle(el).backgroundColor)[0]);
+
 test.describe("about you (A1 step 2)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/onboarding");
@@ -36,8 +51,38 @@ test.describe("about you (A1 step 2)", () => {
     await continueButton(page).click();
 
     expect(savedFilters(await saving)).toEqual({ country: "US", rorId: "https://ror.org/00f54p054", hiring: false });
-    await expect(page).toHaveURL(/\/onboarding\/profile$/);
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
     await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 3 of 4");
+  });
+
+  test("a workplace not in the directory can be typed in", async ({ page }) => {
+    await search(page).fill("Acme Robotics");
+    await expect(page.getByText("No match in the directory.")).toBeVisible();
+    const useTyped = page.getByRole("option", { name: /Use “Acme Robotics”/ });
+    await expect(useTyped).toHaveAttribute("aria-selected", "true");
+    await useTyped.click();
+
+    await expect(page.getByText("Not in the directory")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change workplace" })).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "Not with an organisation" })).toHaveCount(0);
+
+    await country(page).selectOption("GB");
+    await page.getByText("Yes, I'm hiring", { exact: true }).click();
+    const saving = page.waitForRequest(isSave);
+    await continueButton(page).click();
+
+    expect(savedFilters(await saving)).toEqual({ country: "GB", rorId: null, hiring: true });
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
+    expect(await badgeCookie(page)).toMatchObject({ workplace: "Acme Robotics" });
+  });
+
+  test("the badge keeps the colour chosen in step 1", async ({ page, baseURL }) => {
+    await page.context().addCookies([
+      { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },
+    ]);
+    await page.goto("/onboarding");
+    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 163, 138)");
+    await expect(page.locator("form")).toHaveCount(1);
   });
 
   test("'Not with an organisation' saves no workplace", async ({ page }) => {
