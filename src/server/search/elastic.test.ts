@@ -72,6 +72,31 @@ describe("ingestPerson", () => {
     });
   });
 
+  it("takes back an older save's writes even when part of its bulk write failed", async () => {
+    // Save 1 paused; save 2 kept only A; save 1 resumes: A conflicts, B is written, C fails.
+    const [repoA, repoB, repoC] = ["A", "B", "C"].map((name) => ({ ...repo, id: `p_test:repo:${name}` }));
+    es.bulk.mockResolvedValueOnce({ errors: true, items: [
+      { index: { status: 409 } }, { index: { status: 201 } },
+      { index: { status: 500, error: { reason: "inference failed" } } }, { index: { status: 201 } },
+    ] });
+    es.get.mockResolvedValueOnce({ _source: { revision: 2, evidence_ids: ["p_test:repo:A", "p_test:profile"] } });
+    await expect(elasticSearch.ingestPerson(person, [repoA, repoB, repoC], 1)).rejects.toThrow("inference failed");
+    expect(call(es.bulk, 1).operations).toEqual([
+      { delete: { _index: "evidence", _id: "p_test:repo:B", version: 1, version_type: "external_gte" } },
+      { delete: { _index: "evidence", _id: "p_test:repo:C", version: 1, version_type: "external_gte" } },
+    ]);
+  });
+
+  it("still settles when the bulk request itself fails, and reports that original error", async () => {
+    es.bulk.mockRejectedValueOnce(new Error("socket hang up"));
+    es.get.mockResolvedValueOnce({ _source: { revision: 3, evidence_ids: [] } });
+    await expect(elasticSearch.ingestPerson(person, [repo], 2)).rejects.toThrow("socket hang up");
+    expect(call(es.bulk, 1).operations).toEqual([
+      { delete: { _index: "evidence", _id: "p_test:repo:sched", version: 2, version_type: "external_gte" } },
+      { delete: { _index: "evidence", _id: "p_test:profile", version: 2, version_type: "external_gte" } },
+    ]);
+  });
+
   it("fails the save when cleanup fails or times out, and retries cleanup once on a conflict", async () => {
     es.deleteByQuery.mockResolvedValueOnce({ timed_out: true, failures: [], version_conflicts: 0 });
     await expect(elasticSearch.ingestPerson(person, [repo], 4)).rejects.toThrow("Removing replaced evidence failed");

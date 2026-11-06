@@ -247,18 +247,29 @@ export const elasticSearch: SearchService = {
       throw error;
     }
     const at = { version, version_type: "external_gte" as const };
-    // Resolve only once the change is searchable: callers treat success as "search is in sync".
-    const result = await es.bulk({
-      refresh: "wait_for",
-      operations: [
-        ...indexed.flatMap((doc) => [{ index: { _index: INDEX.evidence, _id: doc.id, ...at } }, evidenceSource(person, doc, version)]),
-        ...(profile ? [] : [{ delete: { _index: INDEX.evidence, _id: profileId, ...at } }]),
-      ],
-    });
-    const failed = failedOp(result.items.flatMap((item) => item.index ?? item.delete ?? []));
-    if (failed) throw new Error(`Evidence indexing failed: ${failed.error?.reason ?? "unknown error"}`);
-    if (evidence) await removeOlderEvidence(es, person.id, version, ids); // a new list replaces the old one
-    await settleIfSuperseded(es, person.id, version, ids);
+    let failure: unknown;
+    try {
+      // Resolve only once the change is searchable: callers treat success as "search is in sync".
+      const result = await es.bulk({
+        refresh: "wait_for",
+        operations: [
+          ...indexed.flatMap((doc) => [{ index: { _index: INDEX.evidence, _id: doc.id, ...at } }, evidenceSource(person, doc, version)]),
+          ...(profile ? [] : [{ delete: { _index: INDEX.evidence, _id: profileId, ...at } }]),
+        ],
+      });
+      const failed = failedOp(result.items.flatMap((item) => item.index ?? item.delete ?? []));
+      if (failed) throw new Error(`Evidence indexing failed: ${failed.error?.reason ?? "unknown error"}`);
+      if (evidence) await removeOlderEvidence(es, person.id, version, ids); // a new list replaces the old one
+    } catch (error) {
+      failure = error;
+    }
+    // Even a failed write may have stored some documents, so a superseded save always takes its writes back.
+    try {
+      await settleIfSuperseded(es, person.id, version, ids);
+    } catch (error) {
+      failure ??= error;
+    }
+    if (failure) throw failure; // report the first failure
   },
 
   async searchCandidates(query, filters, limit = 10) {
