@@ -5,25 +5,8 @@
 import type { HardFilters, RorMatch } from "@/contracts/types";
 import { isCountryCode } from "./countries";
 
-/**
- * No choice yet, a ROR workplace, "not with an organisation", or a name the
- * user typed because the search had no match. A typed name has no ROR ID,
- * so it saves as rorId: null; the name itself is kept only in the browser
- * (badge-prefs) until the contract has a field for it.
- */
-export type Workplace =
-  | null
-  | { kind: "org"; org: RorMatch }
-  | { kind: "none" }
-  | { kind: "custom"; name: string };
-
-/** What the badge shows for a workplace answer. */
-export function workplaceLabel(w: Workplace): string | null {
-  if (!w) return null;
-  if (w.kind === "org") return w.org.name;
-  if (w.kind === "custom") return w.name;
-  return "Independent";
-}
+/** No choice yet, a ROR workplace, or "not with an organisation". */
+export type Workplace = null | { kind: "org"; org: RorMatch } | { kind: "none" };
 
 export interface Answers {
   workplace: Workplace;

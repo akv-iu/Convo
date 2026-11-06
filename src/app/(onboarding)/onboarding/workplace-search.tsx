@@ -6,18 +6,13 @@
  * requests wait 300 ms after typing, replies for older input are dropped,
  * and a 503 shows as an error, never as "no workplaces found".
  *
- * When a search finds nothing, the list offers the typed text itself
- * ("Use 'Acme Labs'"), so people at organisations missing from the
- * directory can still answer. That saves as rorId: null; see answers.ts.
- *
- * ARIA combobox: the input owns a listbox of options, rendered only while
- * there are options; loading, empty and error messages sit outside it.
- * Arrow keys move, Enter picks, Escape closes.
+ * ARIA combobox: the input owns a listbox of results; arrow keys move,
+ * Enter picks, Escape closes.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { RorMatch } from "@/contracts/types";
-import type { Workplace } from "./answers";
 import { countryName } from "./countries";
+import type { Workplace } from "./answers";
 
 const MAX_QUERY = 200;
 const DEBOUNCE_MS = 300;
@@ -27,8 +22,6 @@ type Search =
   | { state: "loading" }
   | { state: "done"; results: RorMatch[] }
   | { state: "error"; message: string };
-
-type Option = { kind: "org"; org: RorMatch } | { kind: "custom"; name: string };
 
 function searchErrorMessage(status: number): string {
   if (status === 401) return "Your sign-in has expired. Sign in again to search workplaces.";
@@ -73,9 +66,10 @@ export function WorkplaceSearch({
         const results = (await res.json()) as RorMatch[];
         if (controller.signal.aborted || ticket !== latest.current) return;
         setSearch({ state: "done", results });
-        setActive(0); // the first result, or the "Use …" option when there are none
-      } catch {
+        setActive(results.length ? 0 : -1);
+      } catch (err) {
         if (controller.signal.aborted || ticket !== latest.current) return;
+        void err;
         setSearch({ state: "error", message: searchErrorMessage(0) });
       }
     }, DEBOUNCE_MS);
@@ -85,15 +79,9 @@ export function WorkplaceSearch({
     };
   }, [trimmed, retry]);
 
-  const noMatches = search.state === "done" && search.results.length === 0;
-  const options: Option[] =
-    search.state !== "done"
-      ? []
-      : noMatches
-        ? [{ kind: "custom", name: trimmed }]
-        : search.results.map((org) => ({ kind: "org", org }));
+  const results = search.state === "done" ? search.results : [];
   const showPanel = open && trimmed.length > 0 && search.state !== "idle";
-  const showList = showPanel && options.length > 0;
+  const showList = showPanel && results.length > 0;
 
   useEffect(() => {
     if (showList && active >= 0) {
@@ -101,24 +89,24 @@ export function WorkplaceSearch({
     }
   }, [showList, active, id]);
 
-  function pick(option: Option) {
-    onChange(option);
+  function pick(org: RorMatch) {
+    onChange({ kind: "org", org });
     setOpen(false);
     setQuery("");
     setSearch({ state: "idle" });
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown" && options.length) {
+    if (e.key === "ArrowDown" && results.length) {
       e.preventDefault();
       setOpen(true);
-      setActive((i) => (i + 1) % options.length);
-    } else if (e.key === "ArrowUp" && options.length) {
+      setActive((i) => (i + 1) % results.length);
+    } else if (e.key === "ArrowUp" && results.length) {
       e.preventDefault();
-      setActive((i) => (i <= 0 ? options.length - 1 : i - 1));
+      setActive((i) => (i <= 0 ? results.length - 1 : i - 1));
     } else if (e.key === "Enter" && open && trimmed) {
       e.preventDefault();
-      if (showList && active >= 0 && options[active]) pick(options[active]);
+      if (showList && active >= 0 && results[active]) pick(results[active]);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -129,22 +117,18 @@ export function WorkplaceSearch({
       ? "Searching workplaces"
       : search.state === "error"
         ? search.message
-        : noMatches
-          ? `No workplaces match. Press Enter to use ${trimmed} as your workplace.`
-          : search.state === "done"
-            ? `${options.length} workplace${options.length === 1 ? "" : "s"} found. Use the arrow keys to choose.`
-            : "";
+        : search.state === "done"
+          ? results.length
+            ? `${results.length} workplace${results.length === 1 ? "" : "s"} found. Use the arrow keys to choose.`
+            : "No workplaces match that. Try another name, or pick Not with an organisation."
+          : "";
 
-  if (value?.kind === "org" || value?.kind === "custom") {
+  if (value?.kind === "org") {
     return (
       <div className="flex min-h-16 items-center gap-3 rounded-xl border-2 border-accent bg-surface px-4 py-3">
-        <span className="min-w-0 flex-1">
-          <span className="block text-lg font-semibold leading-snug break-words">
-            {value.kind === "org" ? value.org.name : value.name}
-          </span>
-          <span className="block text-sm text-muted">
-            {value.kind === "org" ? countryName(value.org.country) : "Not in the directory"}
-          </span>
+        <span className="flex-1">
+          <span className="block text-lg font-semibold leading-snug">{value.org.name}</span>
+          <span className="block text-sm text-muted">{countryName(value.org.country)}</span>
         </span>
         <button
           type="button"
@@ -176,7 +160,7 @@ export function WorkplaceSearch({
         aria-expanded={showList}
         aria-controls={showList ? listId : undefined}
         aria-autocomplete="list"
-        aria-activedescendant={showList && active >= 0 && options[active] ? `${id}-opt-${active}` : undefined}
+        aria-activedescendant={showList && active >= 0 ? `${id}-opt-${active}` : undefined}
         aria-invalid={invalid || undefined}
         aria-describedby={`${id}-status`}
         autoComplete="off"
@@ -221,31 +205,24 @@ export function WorkplaceSearch({
               </button>
             </div>
           )}
-          {noMatches && <p className="px-3 pb-1 pt-2 text-sm text-muted">No match in the directory.</p>}
+          {search.state === "done" && results.length === 0 && (
+            <p className="px-3 py-3 text-muted">No workplaces match that.</p>
+          )}
           {showList && (
             <ul id={listId} role="listbox" aria-label="Workplaces" tabIndex={-1} className="max-h-80 overflow-auto">
-              {options.map((option, i) => (
+              {results.map((org, i) => (
                 <li
-                  key={option.kind === "org" ? option.org.id : `custom:${option.name}`}
+                  key={org.id}
                   id={`${id}-opt-${i}`}
                   role="option"
                   aria-selected={i === active}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(option)}
+                  onClick={() => pick(org)}
                   onMouseEnter={() => setActive(i)}
                   className={`flex min-h-12 cursor-pointer flex-col justify-center rounded-lg px-3 py-2 ${i === active ? "bg-accent/15" : ""}`}
                 >
-                  {option.kind === "org" ? (
-                    <>
-                      <span className="font-semibold">{option.org.name}</span>
-                      <span className="text-sm text-muted">{countryName(option.org.country)}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold break-words">Use “{option.name}”</span>
-                      <span className="text-sm text-muted">Add it as your workplace</span>
-                    </>
-                  )}
+                  <span className="font-semibold">{org.name}</span>
+                  <span className="text-sm text-muted">{countryName(org.country)}</span>
                 </li>
               ))}
             </ul>

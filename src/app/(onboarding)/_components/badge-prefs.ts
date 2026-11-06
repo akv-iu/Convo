@@ -1,11 +1,10 @@
 /**
- * How the user's badge looks: its colour, and a workplace name typed in
- * when the workplace search had no match. Kept in the browser in the
+ * How the user's badge looks: its colour. Kept in the browser in the
  * `convo_badge` cookie.
  *
- * Frontend-only. The backend doesn't read this cookie, and none of it is
- * in the Person contract yet, so other people never see these choices.
- * Showing them to others needs a contract field from B (see PR notes).
+ * Frontend-only. The backend doesn't read this cookie, and the colour isn't
+ * in the Person contract, so other people never see it. Showing it to
+ * others needs a contract field from B.
  */
 import { z } from "zod";
 
@@ -27,7 +26,6 @@ const colourIds = badgeColours.map((c) => c.id) as [BadgeColour, ...BadgeColour[
 
 const Prefs = z.object({
   colour: z.enum(colourIds).catch(DEFAULT_COLOUR).default(DEFAULT_COLOUR),
-  workplace: z.string().trim().min(1).max(200).optional().catch(undefined),
 });
 export type BadgePrefs = z.infer<typeof Prefs>;
 
