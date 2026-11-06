@@ -21,6 +21,11 @@ checklist. This migration has not been applied by the agent.
 
 ## Generate and check
 
+`0003_github_evidence.sql` adds the durable public repository snapshot and its
+pending-search flag. Apply it before deploying the evidence handlers. See
+[GitHub-Evidence.md](GitHub-Evidence.md) for the B1 interface handoff, retry
+behaviour and complete manual checklist. The agent has not applied this migration.
+
 Run from the repository root after installing dependencies:
 
 ```powershell

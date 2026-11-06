@@ -1,9 +1,9 @@
 /**
- * Postgres schema (B2). Transactional records only; everything searchable
- * lives in Elasticsearch. Run `npm run db:generate` after changing this.
+ * Postgres schema (B2). Source records are durable here; Elasticsearch is
+ * the searchable copy. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { BadgeColour, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -19,6 +19,8 @@ export const users = pgTable("users", {
   workplaceName: text("workplace_name"),
   badgeColour: text("badge_colour").$type<BadgeColour>().notNull().default("sunflower"),
   visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
+  githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
+  githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
 });
 
 export const asks = pgTable(

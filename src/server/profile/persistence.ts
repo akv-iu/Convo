@@ -4,16 +4,20 @@ import { users } from "../../../db/schema";
 import { buildProfile } from "./index";
 import { githubUserId, loadGitHubProfile } from "./github";
 import type { GitHubConsent } from "./consent";
+import { syncProfile } from "./service";
 
 export async function initializeGitHubProfile(accountId: string, profile: unknown, accessToken: string, consent: GitHubConsent): Promise<void> {
   const github = await loadGitHubProfile(accountId, profile, accessToken, consent);
-  const { person } = buildProfile(githubUserId(accountId), github);
-  await db().insert(users).values({
+  const { person, evidence } = buildProfile(githubUserId(accountId), github);
+  const [saved] = await db().insert(users).values({
     id: person.id, githubLogin: person.githubLogin, name: person.name, bio: person.bio,
-    languages: person.languages, organisations: person.organisations,
+    languages: person.languages, organisations: person.organisations, githubEvidence: evidence, githubEvidencePending: true,
   }).onConflictDoUpdate({
     target: users.id,
     // Sign-in must not overwrite the user's edits, filters or saved availability.
-    set: { githubLogin: person.githubLogin, revision: sql`${users.revision} + 1` },
-  });
+    // Replace the imported snapshot, including clearing it when repos are not consented.
+    set: { githubLogin: person.githubLogin, githubEvidence: evidence, githubEvidencePending: true, revision: sql`${users.revision} + 1` },
+  }).returning();
+  if (!saved) throw new Error("Profile storage did not confirm the save. Retry sign-in.");
+  if (saved.filters !== null) await syncProfile(saved);
 }

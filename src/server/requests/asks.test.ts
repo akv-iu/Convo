@@ -105,16 +105,35 @@ describe("durable ask creation", () => {
 });
 
 describe("matching a saved ask", () => {
+  it("excludes pending imports before search and explanations even with the soft blocker off", async () => {
+    query.mockResolvedValueOnce(askRows({ ...ask, softBlocker: false }))
+      .mockResolvedValueOnce({ rows: [["rejected", 1]] }).mockResolvedValueOnce({ rows: [["pending-user"]] });
+    await matchAsk(person.id, ask.id);
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["pending-user"] }));
+    expect(query.mock.calls[2][1]).toEqual([true]);
+  });
+  it("withholds stale evidence and explanations until the owner's imported evidence is synchronized", async () => {
+    const pending = { ...person, id: "pending-evidence", synthetic: false };
+    const ready = { ...person, id: "ready-evidence", synthetic: false };
+    const visible = { country: true, workplace: true, hiring: true };
+    runMatch.mockResolvedValueOnce([pending, ready].map((candidate, rank) => ({ person: candidate,
+      badges: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
+      [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
+    ] });
+    const cards = await matchAsk(person.id, ask.id);
+    expect(cards.map(card => card.person.id)).toEqual([ready.id]);
+  });
   it("uses current database visibility even when search contains an older public profile", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
     const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
     runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const [card] = await matchAsk(person.id, ask.id);
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
     expect(card.badges).toEqual([]);
-    expect(query.mock.calls[2][1]).toEqual(["candidate"]);
+    expect(query.mock.calls[3][1]).toEqual(["candidate"]);
     expect(candidate.filters).toEqual(person.filters);
   });
 

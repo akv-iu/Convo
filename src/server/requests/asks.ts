@@ -59,17 +59,20 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
   const requester = await getProfile(userId);
   const { excludeIds, hiddenBelowRank } = await getExclusions(askId);
   try {
+    const pendingUsers = await db().select({ id: users.id }).from(users).where(eq(users.githubEvidencePending, true));
     const matches = await runMatch({
       ask, requester, query,
-      excludeIds: ask.softBlocker ? excludeIds : [],
+      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...pendingUsers.map(user => user.id)],
       hiddenBelowRank,
     });
     if (!matches.length) return [];
     // Read current privacy settings even when search still has an older profile.
-    const saved = await db().select({ id: users.id, visibility: users.visibility }).from(users)
+    const saved = await db().select({ id: users.id, visibility: users.visibility, githubEvidencePending: users.githubEvidencePending }).from(users)
       .where(inArray(users.id, matches.map(match => match.person.id)));
+    // Do not expose old repository highlights or explanations while a refresh/revocation is pending.
+    const pending = new Set(saved.filter(person => person.githubEvidencePending).map(person => person.id));
     const visibility = new Map(saved.map(person => [person.id, ProfileVisibility.parse(person.visibility)]));
-    return routes.match.response.parse(matches.map(match => visibleCard(match,
+    return routes.match.response.parse(matches.filter(match => !pending.has(match.person.id)).map(match => visibleCard(match,
       visibility.get(match.person.id) ?? (match.person.synthetic ? match.person.visibility :
         { country: false, workplace: false, hiring: false }))));
   } catch {
