@@ -3,6 +3,15 @@ import { people } from "@/contracts/fixtures";
 import { memorySearch } from "./memory";
 
 describe("person updates without replacing evidence", () => {
+  it("looks up fixture and newly ingested recipients without inventing unknown people", async () => {
+    expect(await memorySearch.getPerson(people[0].id)).toEqual(people[0]);
+    expect(await memorySearch.getPerson("unknown-recipient")).toBeUndefined();
+    const person = { ...structuredClone(people[0]), id: "recipient-lookup-test", synthetic: false };
+    await memorySearch.ingestPerson(person, [], 2);
+    await memorySearch.ingestPerson({ ...person, name: "Stale" }, [], 1);
+    expect(await memorySearch.getPerson(person.id)).toEqual(person);
+  });
+
   it("preserves repository evidence while updating profile fields and availability", async () => {
     const person = { ...structuredClone(people[0]), id: "evidence-update-test" };
     await memorySearch.ingestPerson(person, [{

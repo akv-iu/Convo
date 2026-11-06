@@ -20,6 +20,8 @@ export interface SearchFilters {
 }
 
 export interface SearchService {
+  /** Look up a recipient, including synthetic profiles; undefined means not found. */
+  getPerson(id: string): Promise<Person | undefined>;
   /**
    * Omit evidence to preserve it, or pass a list to replace it.
    * Atomically ignore older revisions (and unversioned writes after versioned ones).
@@ -41,6 +43,7 @@ function notImplemented(): never {
 }
 
 export const elasticSearch: SearchService = {
+  getPerson: async () => notImplemented(),
   ingestPerson: async () => notImplemented(),
   searchCandidates: async () => notImplemented(),
   registerAsk: async () => notImplemented(),

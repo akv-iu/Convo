@@ -28,6 +28,10 @@ function overlaps(a: TimeBlock[], b: TimeBlock[]): boolean {
 }
 
 export const memorySearch: SearchService = {
+  async getPerson(id) {
+    return getPerson(id);
+  },
+
   async ingestPerson(person, docs, revision) {
     const current = revisions.get(person.id);
     if (current !== undefined && (revision === undefined || revision < current)) return;
