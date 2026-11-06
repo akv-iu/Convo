@@ -4,6 +4,8 @@
  */
 import type { EvidenceDoc, Person } from "@/contracts/types";
 
+export const MAX_REPO_EVIDENCE = 20;
+
 export interface GitHubProfileInput {
   login: string;
   name: string | null;
@@ -16,7 +18,7 @@ export function buildProfile(userId: string, gh: GitHubProfileInput): { person: 
   const languages = [...new Set(gh.repos.map((r) => r.language).filter((l): l is string => !!l))].sort();
   const evidence: EvidenceDoc[] = [...gh.repos]
     .sort((a, b) => b.stargazers_count - a.stargazers_count || a.name.localeCompare(b.name))
-    .slice(0, 20)
+    .slice(0, MAX_REPO_EVIDENCE)
     .map((r) => ({
       id: `${userId}:repo:${r.name}`,
       personId: userId,

@@ -11,13 +11,24 @@ export async function initializeGitHubProfile(accountId: string, profile: unknow
   const { person, evidence } = buildProfile(githubUserId(accountId), github);
   const [saved] = await db().insert(users).values({
     id: person.id, githubLogin: person.githubLogin, name: person.name, bio: person.bio,
-    languages: person.languages, organisations: person.organisations, githubEvidence: evidence, githubEvidencePending: true,
+    languages: person.languages, organisations: person.organisations, githubEvidence: evidence, githubEvidencePending: evidence.length > 0,
   }).onConflictDoUpdate({
     target: users.id,
     // Sign-in must not overwrite the user's edits, filters or saved availability.
     // Replace the imported snapshot, including clearing it when repos are not consented.
-    set: { githubLogin: person.githubLogin, githubEvidence: evidence, githubEvidencePending: true, revision: sql`${users.revision} + 1` },
+    set: {
+      githubLogin: person.githubLogin, githubEvidence: evidence,
+      githubEvidencePending: sql`${users.githubEvidencePending} or ${users.githubEvidence} is distinct from ${JSON.stringify(evidence)}::jsonb`,
+      revision: sql`${users.revision} + 1`,
+    },
   }).returning();
   if (!saved) throw new Error("Profile storage did not confirm the save. Retry sign-in.");
-  if (saved.filters !== null) await syncProfile(saved);
+  if (saved.filters !== null) {
+    try {
+      await syncProfile(saved);
+    } catch {
+      // Search is a copy; its failure must not deny access to the saved profile.
+      console.warn("[profile] Profile saved; search synchronization unconfirmed. Retry a profile save or sign-in.");
+    }
+  }
 }

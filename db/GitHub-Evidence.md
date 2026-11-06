@@ -24,19 +24,22 @@ extraction. Tokens and raw GitHub responses are not stored in this column.
 - Neither evidence storage nor its pending flag is exposed in `GET/PUT /api/me`.
   Clients cannot write these fields through the API.
 
-`users.github_evidence_pending` is set during import. Until search confirms the
+`users.github_evidence_pending` is set when imported evidence changes, or stays
+set when an earlier import is still pending. Unchanged, synchronized evidence
+does not hide a person during sign-in. Until search confirms the
 saved snapshot, matching excludes that person before search/explanations and
 checks the flag again before returning cards. This prevents a failed refresh or
 consent removal from showing old repository highlights. Acknowledgement is
 conditional on the user's revision, so an older response cannot confirm a newer
 import. Changes are ordered by committed database revision.
 
-There is no background retry worker. On failure, the API returns a sanitized 503
-explaining that the profile was saved and the same save/sign-in can be retried.
-Auth.js still displays its generic denied-sign-in page when initialization fails;
-the database save remains durable, and retrying sign-in is safe. An existing
-signed-in session can instead retry `PUT /api/me` with `{}`. Pending profiles stay
-out of match cards until synchronization succeeds.
+There is no background retry worker. Profile and availability APIs return a
+sanitized 503 when search synchronization fails after saving. Sign-in succeeds
+after a confirmed database save even if search synchronization fails; a fixed
+server warning explains how to retry without logging provider error details.
+GitHub loading or database save failures still deny sign-in. A signed-in session
+can retry `PUT /api/me` with `{}`, or sign in again. Pending onboarded profiles
+stay out of match cards until synchronization succeeds.
 
 ## Interface for Claude's Elasticsearch work
 
@@ -265,6 +268,8 @@ database rows. If a test stops early, keep its backups and use step 7 to restore
 
 Mocked tests exercise GitHub/storage/search failures, failed acknowledgements,
 foreign/corrupt evidence, consent removal, replay without GitHub, and an older
-save finishing after evidence was cleared. Do not break live credentials or edit
+save finishing after evidence was cleared. They also check successful sign-in
+during search/acknowledgement failure, credential-free warnings, unchanged
+evidence remaining visible, and concurrent matching reads. Do not break live credentials or edit
 database rows to simulate these failures. Live Elasticsearch correctness and
 latency will be checked separately with Claude's B1 implementation.

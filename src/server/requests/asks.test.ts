@@ -111,6 +111,25 @@ describe("matching a saved ask", () => {
     await matchAsk(person.id, ask.id);
     expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["pending-user"] }));
     expect(query.mock.calls[2][1]).toEqual([true]);
+    expect(query.mock.calls[2][0]).toContain('"users"."filters" is not null');
+  });
+
+  it("starts exclusion and pending reads while the requester profile is still loading", async () => {
+    let releaseProfile: (value: typeof person) => void = () => {};
+    getProfile.mockReturnValueOnce(new Promise(resolve => { releaseProfile = resolve; }));
+    query.mockResolvedValueOnce(askRows());
+    const matching = matchAsk(person.id, ask.id);
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(3));
+    expect(runMatch).not.toHaveBeenCalled();
+    releaseProfile(person);
+    await expect(matching).resolves.toEqual([]);
+  });
+
+  it("preserves the onboarding error when concurrent profile loading fails", async () => {
+    query.mockResolvedValueOnce(askRows());
+    getProfile.mockRejectedValueOnce(Object.assign(new Error("Complete onboarding first"), { status: 409 }));
+    await expect(matchAsk(person.id, ask.id)).rejects.toMatchObject({ status: 409 });
+    expect(runMatch).not.toHaveBeenCalled();
   });
   it("withholds stale evidence and explanations until the owner's imported evidence is synchronized", async () => {
     const pending = { ...person, id: "pending-evidence", synthetic: false };
@@ -145,11 +164,21 @@ describe("matching a saved ask", () => {
 
   it("does not return cards when the current privacy read fails", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(new Error("private-database-token"));
     runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-token");
+  });
+
+  it("does not search when pending imports cannot be loaded", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("private-database-token"));
+    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-database-token");
+    expect(runMatch).not.toHaveBeenCalled();
   });
   it("scopes the ask lookup to its owner and passes saved answers to the pipeline", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });

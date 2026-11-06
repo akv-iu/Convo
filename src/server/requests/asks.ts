@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "../../../db";
 import { asks, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
@@ -56,10 +56,14 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Stored ask is invalid.", 503);
   }
 
-  const requester = await getProfile(userId);
-  const { excludeIds, hiddenBelowRank } = await getExclusions(askId);
+  const [requester, { excludeIds, hiddenBelowRank }, pendingUsers] = await Promise.all([
+    getProfile(userId),
+    getExclusions(askId),
+    Promise.resolve(db().select({ id: users.id }).from(users)
+      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters))))
+      .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
+  ]);
   try {
-    const pendingUsers = await db().select({ id: users.id }).from(users).where(eq(users.githubEvidencePending, true));
     const matches = await runMatch({
       ask, requester, query,
       excludeIds: [...(ask.softBlocker ? excludeIds : []), ...pendingUsers.map(user => user.id)],

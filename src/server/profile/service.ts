@@ -4,6 +4,7 @@ import { users } from "../../../db/schema";
 import { routes, type RouteBody } from "@/contracts/routes";
 import { EvidenceDoc, Person, type TimeBlock } from "@/contracts/types";
 import { search } from "@/server/search";
+import { MAX_REPO_EVIDENCE } from "./index";
 
 type User = typeof users.$inferSelect;
 type ProfilePatch = RouteBody<"putMe">;
@@ -57,7 +58,7 @@ function validateTimes(times: TimeBlock[]): void {
 
 export async function syncProfile(user: User): Promise<Person> {
   const person = toPerson(user);
-  const evidence = EvidenceDoc.array().max(20).safeParse(user.githubEvidence);
+  const evidence = EvidenceDoc.array().max(MAX_REPO_EVIDENCE).safeParse(user.githubEvidence);
   if (!evidence.success || evidence.data.some(doc => doc.personId !== user.id || doc.kind !== "repo")) {
     throw new ProfileError("Saved repository evidence is invalid. Sign in again to refresh it.", 503);
   }
