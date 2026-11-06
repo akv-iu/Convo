@@ -30,7 +30,8 @@ beforeEach(() => {
   for (const fn of Object.values(es)) fn.mockReset();
   es.index.mockResolvedValue({});
   es.bulk.mockResolvedValue({ errors: false, items: [] });
-  es.deleteByQuery.mockResolvedValue({});
+  es.deleteByQuery.mockResolvedValue({ timed_out: false, failures: [], version_conflicts: 0 });
+  es.get.mockResolvedValue({ _source: { revision: 0, evidence_ids: [] } }); // no newer save landed
   es.search.mockResolvedValue({ hits: { hits: [] } });
   es.mget.mockResolvedValue({ docs: [] });
 });
@@ -40,6 +41,8 @@ describe("ingestPerson", () => {
     await elasticSearch.ingestPerson(person, [repo], 7);
     expect(call(es.index)).toMatchObject({ index: "people", id: "p_test", version: 7, version_type: "external_gte" });
     expect(call(es.index).document.profile).toContain("sched. Scheduler preemption.");
+    expect(call(es.index).document.evidence_ids).toEqual(["p_test:repo:sched", "p_test:profile"]);
+    expect(call(es.bulk).refresh).toBe("wait_for");
     const ops = call(es.bulk).operations;
     expect(ops[0]).toEqual({ index: { _index: "evidence", _id: "p_test:repo:sched", version: 7, version_type: "external_gte" } });
     expect(ops[1]).toMatchObject({
@@ -48,10 +51,39 @@ describe("ingestPerson", () => {
     });
     expect(ops[2]).toMatchObject({ index: { _id: "p_test:profile" } });
     expect(ops[3]).toMatchObject({ kind: "profile", title: person.name });
-    expect(call(es.deleteByQuery).query.bool).toEqual({
-      filter: [{ term: { person_id: "p_test" } }, { range: { revision: { lte: 7 } } }],
-      must_not: [{ ids: { values: ["p_test:repo:sched", "p_test:profile"] } }],
+    expect(call(es.deleteByQuery)).toMatchObject({
+      refresh: true, conflicts: "proceed",
+      query: { bool: { filter: [{ term: { person_id: "p_test" } }, { range: { revision: { lt: 7 } } }] } },
     });
+  });
+
+  it("takes back what an older save wrote when a newer save landed meanwhile", async () => {
+    // Save 1 paused after its version check; save 2 removed repo B; save 1 then resumes.
+    const repoA = { ...repo, id: "p_test:repo:A" };
+    const repoB = { ...repo, id: "p_test:repo:B" };
+    es.get.mockResolvedValueOnce({ _source: { revision: 2, evidence_ids: ["p_test:repo:A", "p_test:profile"] } });
+    await elasticSearch.ingestPerson(person, [repoA, repoB], 1);
+    expect(call(es.bulk, 1)).toEqual({
+      refresh: "wait_for",
+      operations: [{ delete: { _index: "evidence", _id: "p_test:repo:B", version: 1, version_type: "external_gte" } }],
+    });
+  });
+
+  it("fails the save when cleanup fails or times out, and retries cleanup once on a conflict", async () => {
+    es.deleteByQuery.mockResolvedValueOnce({ timed_out: true, failures: [], version_conflicts: 0 });
+    await expect(elasticSearch.ingestPerson(person, [repo], 4)).rejects.toThrow("Removing replaced evidence failed");
+    es.deleteByQuery.mockResolvedValueOnce({ timed_out: false, failures: [{ cause: { reason: "shard" } }], version_conflicts: 0 });
+    await expect(elasticSearch.ingestPerson(person, [repo], 4)).rejects.toThrow("Removing replaced evidence failed");
+
+    es.deleteByQuery.mockClear();
+    es.deleteByQuery.mockResolvedValueOnce({ timed_out: false, failures: [], version_conflicts: 1 });
+    await expect(elasticSearch.ingestPerson(person, [repo], 4)).resolves.toBeUndefined();
+    expect(es.deleteByQuery).toHaveBeenCalledTimes(2);
+
+    es.deleteByQuery
+      .mockResolvedValueOnce({ timed_out: false, failures: [], version_conflicts: 1 })
+      .mockResolvedValueOnce({ timed_out: false, failures: [], version_conflicts: 1 });
+    await expect(elasticSearch.ingestPerson(person, [repo], 4)).rejects.toThrow("kept conflicting");
   });
 
   it("gives a name-only profile no document, and removes one indexed before", async () => {
@@ -61,7 +93,7 @@ describe("ingestPerson", () => {
     const ops = call(es.bulk).operations;
     expect(ops).toHaveLength(3);
     expect(ops[2]).toEqual({ delete: { _index: "evidence", _id: "p_test:profile", version: 9, version_type: "external_gte" } });
-    expect(call(es.deleteByQuery).query.bool.must_not).toEqual([{ ids: { values: ["p_test:repo:sched"] } }]);
+    expect(call(es.index).document.evidence_ids).toEqual(["p_test:repo:sched"]);
   });
 
   it("ignores a save older than the one already indexed", async () => {
@@ -151,7 +183,7 @@ describe("asks and reverse search", () => {
 
   it("resolves an ask by leaving a tombstone that can never match", async () => {
     await elasticSearch.removeAsk("ask-1");
-    expect(call(es.index)).toEqual({ index: "asks", id: "ask-1", document: { ask_id: "ask-1", active: false, query: { match_none: {} } } });
+    expect(call(es.index)).toEqual({ index: "asks", id: "ask-1", refresh: "wait_for", document: { ask_id: "ask-1", active: false, query: { match_none: {} } } });
   });
 
   it("finds distinct askers by percolating the person's indexed profile", async () => {
@@ -188,5 +220,14 @@ describe("lookups", () => {
     expect(es.mget).toHaveBeenCalledTimes(1);
     expect(await elasticSearch.getAvailability([])).toEqual({});
     expect(es.mget).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a failed lookup as an error, never as 'no such person'", async () => {
+    const shardError = { _id: "p_test", _index: "people", error: { type: "shard_failure", reason: "no shard available" } };
+    es.mget.mockResolvedValueOnce({ docs: [shardError] });
+    await expect(elasticSearch.getAvailability(["p_test"])).rejects.toThrow("no shard available");
+    es.search.mockResolvedValueOnce({ hits: { hits: [{ _score: 1, _source: { person_id: "p_test", kind: "repo", title: "t", text: "x" } }] } });
+    es.mget.mockResolvedValueOnce({ docs: [shardError] });
+    await expect(elasticSearch.searchCandidates("x", { excludeIds: [] })).rejects.toThrow("no shard available");
   });
 });

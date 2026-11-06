@@ -4,6 +4,7 @@
     "properties": {
       "person": { "type": "object", "enabled": false },
       "profile": { "type": "text", "index": false },
+      "evidence_ids": { "type": "keyword", "index": false },
       "revision": { "type": "long" }
     }
   }
