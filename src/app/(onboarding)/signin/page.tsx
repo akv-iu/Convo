@@ -19,11 +19,11 @@ export default function SignInPage() {
 
       <form action={continueWithGitHub} className="mt-8 flex flex-col gap-6">
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-3 font-medium">What Convo may read from GitHub</legend>
+          <legend className="mb-3 font-medium">What Convo may import from GitHub</legend>
 
           <div className="rounded-lg border border-border bg-surface p-4">
             <p className="font-medium">Your name, username and avatar</p>
-            <p className="mt-1 text-sm text-muted">Always used, so people can recognise you.</p>
+            <p className="mt-1 text-sm text-muted">Always imported, so people can recognise you.</p>
           </div>
 
           {consentSources.map((source) => (
@@ -48,7 +48,10 @@ export default function SignInPage() {
           ))}
         </fieldset>
 
-        <p className="text-sm text-muted">We only read public data, and we never post anything to GitHub.</p>
+        <p className="text-sm text-muted">
+          We only import public data and never post anything to GitHub. Unticking a source skips it when you sign in;
+          it doesn&apos;t remove anything already on your profile.
+        </p>
 
         <Button type="submit" className="w-full sm:w-auto sm:self-start">
           Continue with GitHub

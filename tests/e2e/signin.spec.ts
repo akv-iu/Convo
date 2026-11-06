@@ -11,7 +11,7 @@ test.describe("sign-in and consent (A1 step 1)", () => {
 
   test("every source is offered and ticked to start with", async ({ page }) => {
     await page.goto("/signin");
-    const sources = page.getByRole("group", { name: "What Convo may read from GitHub" }).getByRole("checkbox");
+    const sources = page.getByRole("group", { name: "What Convo may import from GitHub" }).getByRole("checkbox");
     await expect(sources).toHaveCount(3);
     for (const box of await sources.all()) await expect(box).toBeChecked();
     await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 1 of 4");
@@ -27,6 +27,19 @@ test.describe("sign-in and consent (A1 step 1)", () => {
     const consent = (await context.cookies()).find((c) => c.name === "convo_consent");
     expect(decodeURIComponent(consent?.value ?? "")).toBe("profile,repos");
     expect(consent?.httpOnly).toBe(true);
+    expect(consent?.sameSite).toBe("Lax");
+    expect(consent?.path).toBe("/");
+  });
+
+  test("unticking everything saves an empty consent (identity only)", async ({ page, context }) => {
+    await page.goto("/signin");
+    for (const box of await page.getByRole("checkbox").all()) await box.uncheck();
+    await page.getByRole("button", { name: "Continue with GitHub" }).click();
+
+    await expect(page).toHaveURL(/\/onboarding$/);
+    const consent = (await context.cookies()).find((c) => c.name === "convo_consent");
+    expect(consent).toBeDefined();
+    expect(consent?.value).toBe("");
   });
 
   test("works with the keyboard alone", async ({ page, context, isMobile }) => {

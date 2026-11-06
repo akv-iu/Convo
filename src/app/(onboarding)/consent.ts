@@ -1,35 +1,38 @@
 /**
- * What the user agreed Convo may read from GitHub, chosen on the sign-in
- * screen before GitHub is ever contacted. Stored in a cookie so the profile
- * builder (B2) can read it after the GitHub redirect and skip any source
- * the user left out.
+ * The optional GitHub sources the sign-in screen asks about, with their
+ * on-screen wording.
+ *
+ * Integration with B2 (see db/Consent.md):
+ * - The screen saves the choice in the `convo_consent` cookie before the
+ *   GitHub redirect: httpOnly, SameSite=Lax, path /, secure in production.
+ * - The value is a comma-separated list of `profile`, `repos` and `orgs`;
+ *   empty means every optional source was declined.
+ * - B2 reads it during GitHub profile import and skips declined sources.
+ *   The cookie name and the IDs come from B2's module so the two sides
+ *   cannot drift apart.
+ *
+ * Verified here with the fake API only. Real GitHub sign-in with B2's
+ * enforcement is covered by B2's tests and manual check, not by A1's.
  */
-export const CONSENT_COOKIE = "convo_consent";
+import { CONSENT_COOKIE, consentSources as consentIds } from "@/server/profile/consent";
 
-export const consentSources = [
-  {
-    id: "profile",
+export { CONSENT_COOKIE };
+
+export type ConsentSource = (typeof consentIds)[number];
+
+const wording: Record<ConsentSource, { label: string; hint: string }> = {
+  profile: {
     label: "Your bio and public profile",
     hint: "Shown on your profile card. You can edit it on the next screens.",
   },
-  {
-    id: "repos",
+  repos: {
     label: "Your public repositories and their languages",
     hint: "The evidence that shows people what you can help with.",
   },
-  {
-    id: "orgs",
+  orgs: {
     label: "Organisations you publicly belong to",
     hint: "Helps match you with people from the same projects.",
   },
-] as const;
+};
 
-export type ConsentSource = (typeof consentSources)[number]["id"];
-
-const ids = new Set<string>(consentSources.map((s) => s.id));
-
-/** Parse the cookie value ("profile,repos") into the sources it names. */
-export function parseConsent(value: string | undefined): ConsentSource[] {
-  if (!value) return [];
-  return value.split(",").filter((v): v is ConsentSource => ids.has(v));
-}
+export const consentSources = consentIds.map((id) => ({ id, ...wording[id] }));

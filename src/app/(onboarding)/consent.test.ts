@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { parseConsent } from "./consent";
+import { consentSources as backendIds } from "@/server/profile/consent";
+import { CONSENT_COOKIE, consentSources } from "./consent";
 
-describe("parseConsent", () => {
-  it("reads the sources the user agreed to", () => {
-    expect(parseConsent("profile,repos")).toEqual(["profile", "repos"]);
+describe("sign-in consent wording", () => {
+  it("offers exactly the sources the backend enforces, in the same order", () => {
+    expect(consentSources.map((s) => s.id)).toEqual([...backendIds]);
   });
 
-  it("treats a missing or empty cookie as no optional sources", () => {
-    expect(parseConsent(undefined)).toEqual([]);
-    expect(parseConsent("")).toEqual([]);
+  it("uses the cookie the backend reads", () => {
+    expect(CONSENT_COOKIE).toBe("convo_consent");
   });
 
-  it("ignores anything that is not a known source", () => {
-    expect(parseConsent("orgs,email,../etc")).toEqual(["orgs"]);
+  it("gives every source a label and a hint", () => {
+    for (const s of consentSources) {
+      expect(s.label.length).toBeGreaterThan(0);
+      expect(s.hint.length).toBeGreaterThan(0);
+    }
   });
 });
