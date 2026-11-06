@@ -205,7 +205,7 @@ export function WorkplaceSearch({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        className="min-h-14 w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none disabled:opacity-60 aria-invalid:border-[#c2410c]"
+        className="min-h-14 w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none disabled:opacity-60 aria-invalid:border-[var(--danger-border)]"
       />
 
       <p id={`${id}-status`} role="status" aria-live="polite" className="sr-only">

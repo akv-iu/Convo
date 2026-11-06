@@ -39,9 +39,9 @@ const sources = [
 ] as const;
 
 const legendClass = "mb-3 text-xl font-bold leading-snug tracking-tight";
-const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
+const errorClass = "text-sm font-medium text-[var(--danger)]";
 const inputClass =
-  "min-h-14 w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[#c2410c]";
+  "min-h-14 w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]";
 
 export function StartForm({ action, demo }: { action: (formData: FormData) => Promise<void>; demo: boolean }) {
   const [name, setName] = useState("");
@@ -187,20 +187,18 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
             {sources.map((s) => (
               <label
                 key={s.id}
-                className={`flex min-h-16 items-center gap-4 rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none ${s.ready ? "cursor-pointer" : "cursor-not-allowed"}`}
+                className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none ${s.ready ? "cursor-pointer" : "cursor-not-allowed"}`}
               >
-                <span className="flex-1">
-                  <span className="flex flex-wrap items-center gap-2 text-lg font-semibold leading-snug">
-                    {s.label}
-                    {!s.ready && (
-                      <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted">
-                        Coming soon
-                      </span>
-                    )}
-                  </span>
-                  <span id={`source-${s.id}-hint`} className="block text-sm text-muted">
-                    {s.hint}
-                  </span>
+                <span className="col-start-1 row-start-1 flex flex-wrap items-center gap-2 text-lg font-semibold leading-snug">
+                  {s.label}
+                  {!s.ready && (
+                    <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted">
+                      Coming soon
+                    </span>
+                  )}
+                </span>
+                <span id={`source-${s.id}-hint`} className="col-start-1 row-start-2 block text-sm text-muted">
+                  {s.hint}
                 </span>
                 <input
                   type="checkbox"
@@ -213,7 +211,7 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
                 />
                 <span
                   aria-hidden="true"
-                  className="relative h-7 w-12 shrink-0 rounded-full bg-border transition-colors peer-checked:bg-accent peer-disabled:opacity-50 motion-reduce:transition-none after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
+                  className="relative col-start-2 row-span-2 row-start-1 h-7 w-12 shrink-0 rounded-full bg-border transition-colors peer-checked:bg-accent peer-disabled:opacity-50 motion-reduce:transition-none after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
                 />
               </label>
             ))}

@@ -33,8 +33,8 @@ const FIELD = {
 type Field = (typeof FIELD)[keyof typeof FIELD];
 
 const inputClass =
-  "w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[#c2410c]";
-const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
+  "w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]";
+const errorClass = "text-sm font-medium text-[var(--danger)]";
 const headingClass =
   "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 const HEADING = "Are these the correct details?";
@@ -87,7 +87,7 @@ export function ProfileForm() {
 
   useEffect(() => {
     let live = true;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/me", { cache: "no-store" });
         if (!live) return;

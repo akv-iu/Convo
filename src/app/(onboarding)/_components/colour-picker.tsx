@@ -38,10 +38,4 @@ export function ColourPicker({ defaultColour = DEFAULT_COLOUR }: { defaultColour
  * from whichever swatch is checked. Written out in full so Tailwind
  * generates them.
  */
-export const colourFollowsPicker = [
-  "has-[#colour-sunflower:checked]:[--badge:#ffd23f]",
-  "has-[#colour-mint:checked]:[--badge:#5ee6b4]",
-  "has-[#colour-sky:checked]:[--badge:#7dd3fc]",
-  "has-[#colour-lilac:checked]:[--badge:#c4b5fd]",
-  "has-[#colour-coral:checked]:[--badge:#ffa38a]",
-].join(" ");
+export const colourFollowsPicker = "badge-follows-picker"; // rules in onboarding.css

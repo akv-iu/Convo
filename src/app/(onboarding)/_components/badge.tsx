@@ -32,7 +32,7 @@ export function Badge({
       <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] ring-1 ring-border lg:rotate-[-2.5deg]">
         <div
           data-badge-stripe
-          className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[#14213d] transition-colors duration-200 motion-reduce:transition-none"
+          className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[var(--badge-ink)] transition-colors duration-200 motion-reduce:transition-none"
         >
           <span>Convo</span>
           <span className="font-normal">{label ?? "Salt Lake City"}</span>

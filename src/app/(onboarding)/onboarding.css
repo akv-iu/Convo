@@ -14,7 +14,10 @@
   --accent-hover: #1f45d6;
   --on-accent: #ffffff;
   --badge: #ffd23f; /* badge stripe only */
+  --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
   --skeleton: #dfe4ee;
+  --danger: #c2410c; /* error text, 5.2:1 on surface */
+  --danger-border: #c2410c;
 
   background: var(--background);
   color: var(--foreground);
@@ -32,5 +35,17 @@
     --accent-hover: #a3b9ff;
     --on-accent: #0d1630;
     --skeleton: #2a3756;
+    --danger: #fdba74;
+    --danger-border: #fb923c;
   }
 }
+
+/*
+ * The badge colour follows the checked swatch of a ColourPicker inside
+ * this element. Same colours as badgeColours in _components/badge-prefs.ts.
+ */
+.badge-follows-picker:has(#colour-sunflower:checked) { --badge: #ffd23f; }
+.badge-follows-picker:has(#colour-mint:checked) { --badge: #5ee6b4; }
+.badge-follows-picker:has(#colour-sky:checked) { --badge: #7dd3fc; }
+.badge-follows-picker:has(#colour-lilac:checked) { --badge: #c4b5fd; }
+.badge-follows-picker:has(#colour-coral:checked) { --badge: #ffa38a; }

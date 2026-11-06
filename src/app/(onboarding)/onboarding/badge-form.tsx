@@ -44,7 +44,7 @@ export const NEXT_STEP = "/onboarding/free-time";
 const headingClass =
   "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 const legendClass = "mb-3 text-xl font-bold leading-snug tracking-tight";
-const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
+const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Load =
   | { state: "loading" }
@@ -75,7 +75,7 @@ export function BadgeForm() {
 
   useEffect(() => {
     let live = true;
-    (async () => {
+    void (async () => {
       const draft = readDraft();
       let profile: Person | null = null;
       let status = 0;

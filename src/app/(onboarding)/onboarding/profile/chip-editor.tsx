@@ -91,7 +91,7 @@ export function ChipEditor({
             setProblem(null);
           }}
           onKeyDown={onKeyDown}
-          className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[#c2410c]"
+          className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]"
         />
         <button
           type="button"
@@ -102,7 +102,7 @@ export function ChipEditor({
         </button>
       </div>
       {problem && (
-        <p id={`${id}-problem`} className="text-sm font-medium text-[#c2410c] dark:text-[#fdba74]">
+        <p id={`${id}-problem`} className="text-sm font-medium text-[var(--danger)]">
           {problem}
         </p>
       )}

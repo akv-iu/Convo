@@ -40,7 +40,7 @@ const hours = Array.from(new Set(blocks.map((b) => Math.floor(b.from / 60))));
 
 const headingClass =
   "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
-const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
+const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Load = { state: "loading" } | { state: "failed"; status: number } | { state: "ready" };
 
@@ -81,7 +81,7 @@ export function FreeTimeForm() {
 
   useEffect(() => {
     let live = true;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/availability", { cache: "no-store" });
         if (!live) return;
