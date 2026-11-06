@@ -159,6 +159,9 @@ test.describe("sign-in and consent (A1 step 1)", () => {
       await scan("/signin");
       await page.locator("summary", { hasText: "Your data" }).click();
       await page.getByText("Repos and languages", { exact: true }).click(); // a stub showing
+      // Scan once the row has finished folding: mid-fade text is briefly low-contrast by design.
+      await expect.poll(() => badgeRowHeight(page, "Can help with")).toBe(0);
+      await page.waitForTimeout(350);
       await scan("/signin with the data note open and a source off");
       await page.goto("/onboarding");
       await scan("/onboarding");
