@@ -49,40 +49,11 @@ They catch different things, so we use both.
 - A stacked PR was retargeted to `main`? Push a commit so the Sonar check runs.
 - Emergency: you are the repo admin, so GitHub lets you merge anyway. Use it rarely and say why in the PR.
 
-## Not done yet: switch on when keys or plans arrive
+## What to add next
 
-| When we get | It unlocks | Do this |
-| --- | --- | --- |
-| **SonarQube Cloud Team plan** (14-day trial or a hackathon code) | AI Code Assurance (a stricter built-in gate for AI-written code, which is all of ours), Sonar on stacked PRs, custom gates | In the Sonar project's Administration, turn on AI Code Assurance. In `.github/workflows/ci.yml`, remove the `github.base_ref == 'main'` condition so stacked PRs are scanned too. |
-| **A Sonar user token** (free: avatar → My Account → Security → Generate token) | The SonarQube MCP server: Claude Code can ask Sonar for open issues before pushing | See "SonarQube MCP" below. Needs Docker. |
-| **Gitar Enterprise** | Functional validation (Gitar checks that a PR does what its linked GitHub issue asked), unlimited rules, custom MCP tools | Turn on *Validate PRs against linked issues*. Open one GitHub issue per Build-Plan step with its "done when" list, and write "Implements #N" in PR descriptions. Add the two spare rules below. |
-| **Nothing; this is a deadline** | Gitar's Pro trial ends about **20 November**. On the free tier Gitar stops reviewing, so the required `Gitar` check never arrives and every PR is stuck. | Before then, do one of these: pay for Core or Pro; ask Gitar (support@gitar.ai) for the free Open Source plan, since the repo is public; or remove `Gitar` from the required checks (GitHub → Settings → Branches → `main`). |
+Everything we can still add for the Sonar track (and for Elasticsearch and Dash0), with its value and effort, is in [Sponsor-Tracks.md](Sponsor-Tracks.md). That page also covers the SonarQube MCP server, the free open-source plans and where new keys go.
 
-**Two more Gitar rules, ready to add** once the plan allows more than five (Pro's limit):
-
-- A screen PR must include a Playwright test with the axe scan (the accessibility prize track).
-- A new OpenAI call must be cached, batched and inside a `match.*` span (cost per ask and the 2-second target).
-
-**SonarQube MCP** (PowerShell, once `docker` works):
-
-```powershell
-$env:SONARQUBE_TOKEN = "<paste your Sonar user token>"
-claude mcp add sonarqube --env SONARQUBE_TOKEN=$env:SONARQUBE_TOKEN --env SONARQUBE_ORG=akv-iu '--' docker run -i --rm --init --pull=always -e SONARQUBE_TOKEN -e SONARQUBE_ORG sonarsource/sonarqube-mcp
-claude mcp list   # expect: sonarqube listed
-```
-
-Keep the quotes around `'--'`: PowerShell can drop a bare `--`. The token is saved in Claude Code's settings on your machine, never in the repo. Restart Claude Code to load the server.
-
-**SonarQube for IDE** (free VS Code extension): connect it to the `akv-iu` organization to see Sonar's findings while you edit.
-
-## Where a new key goes
-
-| Place | For |
-| --- | --- |
-| `.env.local` | Your machine. Never committed. |
-| Vercel → Settings → Environment Variables (Production and Preview) | The deployed app |
-| GitHub → Settings → Secrets and variables → Actions | CI (today: `SONAR_TOKEN`) |
-| `claude mcp add … --env` | Tools for Claude Code |
+**One deadline:** Gitar's Pro trial ends about **20 November**. After that, Gitar stops reviewing and every PR gets stuck waiting for the `Gitar` check. The fixes are in the "Keys and trials" table on that page.
 
 ## Still to prove (and the Sonar-track demo)
 
