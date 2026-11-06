@@ -248,3 +248,45 @@ sessionStorage.removeItem("convo.schedule-test");
 ```
 
 Session storage cleanup alone does not delete database rows or restore availability.
+
+## Recovery from the two-409 response bug
+
+The original booking SQL returned `jsonb_build_object` without the SQL alias
+`saved`. Executing that SQL directly through Neon bypasses Drizzle's result
+mapping. The database could commit a booking while the API failed to find the
+expected field and incorrectly returned 409. The fix adds the SQL alias and
+distinguishes a genuinely empty result from a committed row with invalid data.
+Regression tests verify the generated alias and the committed-row error path.
+
+After restarting this checkout, stay signed in as the original user, paste the
+helper from step 2, then run this preparation block once. It preserves the
+original availability backup and the same test ask. It records two additional
+requests, so cleanup can delete five requests instead of the original three.
+
+```js
+var test = JSON.parse(sessionStorage.getItem("convo.schedule-test"));
+check(test?.askId && test?.original && test?.ids?.length >= 2, "Missing original test state; stop here.");
+check(!test.recoveryIds?.length, "Recovery pair already exists; do not create it twice.");
+var me = await api("me");
+check(me.id === test.owner, "Sign in as the original test account.");
+var inbox = await api("inbox");
+console.table(inbox.filter(r => test.ids.includes(r.id)).map(r => ({ id: r.id, status: r.status, slot: r.slot })));
+test.recoveryIds = []; saveTest(test);
+for (var i = 0; i < 2; i++) {
+  var sent = await api("requests", { askId: test.askId, toPersonId: test.owner });
+  test.recoveryIds.push(sent.id); saveTest(test);
+  await api(`requests/${sent.id}/respond`, { action: "accept" });
+}
+var available = await api(`requests/${test.recoveryIds[0]}/slots`);
+check(available.length > 0, "No slots remain; stop and report this without clearing the backup.");
+test.ids = [...test.recoveryIds, ...test.ids];
+test.slot = available[0];
+delete test.winner; delete test.loser; delete test.secondSlot;
+saveTest(test);
+console.log("RECOVERY PAIR READY");
+```
+
+Now run step 5 once. Expect one 200 and one 409, then successful identical retry
+and nonoverlapping booking. Continue steps 6-8. The cleanup SQL is scoped to the
+same ask, so it removes both the old requests and the recovery pair. Do not rerun
+the full setup: it would overwrite or lose the original availability backup.
