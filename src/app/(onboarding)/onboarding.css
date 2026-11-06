@@ -1,0 +1,36 @@
+/*
+ * Onboarding look. Scoped to .onb so it restyles only A1's screens: the
+ * shared token names (background, accent, ...) are redefined here, so the
+ * Tailwind classes and src/components/ui pick them up without any change
+ * to the global stylesheet.
+ */
+.onb {
+  --background: #eef1f7; /* mist */
+  --surface: #ffffff;
+  --foreground: #14213d; /* ink */
+  --muted: #4f5a72;
+  --border: #cfd6e4;
+  --accent: #2b59ff; /* lanyard cobalt */
+  --accent-hover: #1f45d6;
+  --on-accent: #ffffff;
+  --badge: #ffd23f; /* badge stripe only */
+  --skeleton: #dfe4ee;
+
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-onb), system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .onb {
+    --background: #0d1630;
+    --surface: #17223f;
+    --foreground: #eef2ff;
+    --muted: #b6c0d8;
+    --border: #2d3b5f;
+    --accent: #7c9bff;
+    --accent-hover: #a3b9ff;
+    --on-accent: #0d1630;
+    --skeleton: #2a3756;
+  }
+}

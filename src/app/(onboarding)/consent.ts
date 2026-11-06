@@ -21,18 +21,9 @@ export { CONSENT_COOKIE };
 export type ConsentSource = (typeof consentIds)[number];
 
 const wording: Record<ConsentSource, { label: string; hint: string }> = {
-  profile: {
-    label: "Your bio and public profile",
-    hint: "Shown on your profile card. You can edit it on the next screens.",
-  },
-  repos: {
-    label: "Your public repositories and their languages",
-    hint: "The evidence that shows people what you can help with.",
-  },
-  orgs: {
-    label: "Organisations you publicly belong to",
-    hint: "Helps match you with people from the same projects.",
-  },
+  profile: { label: "Bio", hint: "Your GitHub bio, as a starting point you can edit." },
+  repos: { label: "Repos and languages", hint: "Your public work: the evidence people see." },
+  orgs: { label: "Organisations", hint: "Projects you publicly belong to." },
 };
 
 export const consentSources = consentIds.map((id) => ({ id, ...wording[id] }));
