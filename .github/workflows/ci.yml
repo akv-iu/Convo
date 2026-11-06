@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Sonar needs full history to tell new code from old
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -19,6 +21,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test -- --coverage
+      # Skip the scan until the SONAR_TOKEN secret exists (and on fork PRs, which get no secrets).
+      - id: sonar
+        run: echo "enabled=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      - name: SonarQube Cloud scan
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8
+        env:
+          # Scoped to this step so dependency install scripts never see it.
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
