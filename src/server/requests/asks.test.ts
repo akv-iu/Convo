@@ -105,16 +105,54 @@ describe("durable ask creation", () => {
 });
 
 describe("matching a saved ask", () => {
+  it("excludes pending imports before search and explanations even with the soft blocker off", async () => {
+    query.mockResolvedValueOnce(askRows({ ...ask, softBlocker: false }))
+      .mockResolvedValueOnce({ rows: [["rejected", 1]] }).mockResolvedValueOnce({ rows: [["pending-user"]] });
+    await matchAsk(person.id, ask.id);
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["pending-user"] }));
+    expect(query.mock.calls[2][1]).toEqual([true]);
+    expect(query.mock.calls[2][0]).toContain('"users"."filters" is not null');
+  });
+
+  it("starts exclusion and pending reads while the requester profile is still loading", async () => {
+    let releaseProfile: (value: typeof person) => void = () => {};
+    getProfile.mockReturnValueOnce(new Promise(resolve => { releaseProfile = resolve; }));
+    query.mockResolvedValueOnce(askRows());
+    const matching = matchAsk(person.id, ask.id);
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(3));
+    expect(runMatch).not.toHaveBeenCalled();
+    releaseProfile(person);
+    await expect(matching).resolves.toEqual([]);
+  });
+
+  it("preserves the onboarding error when concurrent profile loading fails", async () => {
+    query.mockResolvedValueOnce(askRows());
+    getProfile.mockRejectedValueOnce(Object.assign(new Error("Complete onboarding first"), { status: 409 }));
+    await expect(matchAsk(person.id, ask.id)).rejects.toMatchObject({ status: 409 });
+    expect(runMatch).not.toHaveBeenCalled();
+  });
+  it("withholds stale evidence and explanations until the owner's imported evidence is synchronized", async () => {
+    const pending = { ...person, id: "pending-evidence", synthetic: false };
+    const ready = { ...person, id: "ready-evidence", synthetic: false };
+    const visible = { country: true, workplace: true, hiring: true };
+    runMatch.mockResolvedValueOnce([pending, ready].map((candidate, rank) => ({ person: candidate,
+      badges: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
+      [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
+    ] });
+    const cards = await matchAsk(person.id, ask.id);
+    expect(cards.map(card => card.person.id)).toEqual([ready.id]);
+  });
   it("uses current database visibility even when search contains an older public profile", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
     const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
     runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const [card] = await matchAsk(person.id, ask.id);
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
     expect(card.badges).toEqual([]);
-    expect(query.mock.calls[2][1]).toEqual(["candidate"]);
+    expect(query.mock.calls[3][1]).toEqual(["candidate"]);
     expect(candidate.filters).toEqual(person.filters);
   });
 
@@ -126,11 +164,21 @@ describe("matching a saved ask", () => {
 
   it("does not return cards when the current privacy read fails", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(new Error("private-database-token"));
     runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-token");
+  });
+
+  it("does not search when pending imports cannot be loaded", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("private-database-token"));
+    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-database-token");
+    expect(runMatch).not.toHaveBeenCalled();
   });
   it("scopes the ask lookup to its owner and passes saved answers to the pipeline", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });

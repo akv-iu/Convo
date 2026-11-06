@@ -29,7 +29,7 @@ function result(value: Person = person, filters: Person["filters"] | null = valu
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations), filters === null ? null : JSON.stringify(filters),
     JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", 1,
-    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true })]] };
+    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), "[]", false]] };
 }
 beforeEach(() => {
   runtime.fakeApi = false;
@@ -71,7 +71,8 @@ describe.each(["fake", "real"] as const)("%s profile/availability HTTP contract"
   it("saves an edit without accepting caller-supplied identity or synthetic flags", async () => {
     const updated = { ...person, name: "Edited name" };
     query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
-    const response = await PUT(request("me", { name: updated.name, id: "another-user", synthetic: true }), context());
+    const response = await PUT(request("me", { name: updated.name, id: "another-user", synthetic: true,
+      githubEvidence: [{ personId: "another-user", title: "Forged repository" }], githubEvidencePending: false }), context());
     expect(response.status).toBe(200);
     expect(routes.putMe.response.parse(await response.json())).toEqual(updated);
     if (mode === "real") expect(query.mock.calls[1][1]).toEqual(["Edited name", DEMO_USER_A]);
