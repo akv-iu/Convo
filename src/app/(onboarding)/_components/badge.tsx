@@ -1,18 +1,24 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /**
  * The conference badge that runs through onboarding: lanyard (laptop only),
- * yellow stripe, avatar and name, then whatever rows the current step adds.
- * Decorative for screen readers; each screen's form carries the meaning.
+ * coloured stripe, avatar and name, then whatever rows the current step adds.
+ * The stripe uses --badge, so a colour can come from a prop or from CSS on a
+ * surrounding element (step 1's picker). Decorative for screen readers; each
+ * screen's form carries the meaning.
  */
-export function Badge({ children, label }: { children?: ReactNode; label?: string }) {
+export function Badge({ children, label, colour }: { children?: ReactNode; label?: string; colour?: string }) {
+  const style = colour ? ({ "--badge": colour } as CSSProperties) : undefined;
   return (
-    <div aria-hidden="true" className="relative mx-auto w-full max-w-[19rem] lg:mt-16">
+    <div aria-hidden="true" style={style} className="relative mx-auto w-full max-w-[19rem] lg:mt-16">
       <div className="absolute -top-16 left-1/2 hidden h-20 w-6 -translate-x-1/2 rounded-b-sm bg-accent lg:block" />
       <div className="absolute -top-2 left-1/2 hidden h-5 w-10 -translate-x-1/2 rounded-md border-4 border-foreground/70 lg:block" />
 
       <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] ring-1 ring-border lg:rotate-[-2.5deg]">
-        <div className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[#14213d]">
+        <div
+          data-badge-stripe
+          className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[#14213d] transition-colors duration-200 motion-reduce:transition-none"
+        >
           <span>Convo</span>
           <span className="font-normal">{label ?? "Salt Lake City"}</span>
         </div>
