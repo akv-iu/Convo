@@ -46,10 +46,8 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
     }),
   );
 
-  const mutual = await step("mutual", async () => {
-    const flags = await Promise.all(candidates.map(async (c) => (await search.whoIsLookingFor(c.person)).includes(input.requester.id)));
-    return new Set(candidates.filter((_, i) => flags[i]).map((c) => c.person.id));
-  });
+  // Mutual: the candidate's own asks match the requester. One reverse search covers every candidate.
+  const mutual = await step("mutual", async () => new Set(await search.whoIsLookingFor(input.requester)));
 
   const ranked = candidates
     .map((c) => ({ ...c, score: c.score + (mutual.has(c.person.id) ? 1 : 0) }))

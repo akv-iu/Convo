@@ -3,12 +3,14 @@
  * in-memory version is used by the fake API and when FAKES includes "search".
  */
 import { config } from "@/server/config";
-import type { EvidenceDoc, Person, TimeBlock } from "@/contracts/types";
+import type { EvidenceDoc, HardFilters, Person, TimeBlock } from "@/contracts/types";
+import { elasticSearch } from "./elastic";
 import { memorySearch } from "./memory";
 
 export interface Candidate {
   person: Person;
   highlights: string[];
+  /** Higher is better. Elasticsearch scales it to 0 to 5; the pipeline adds 1 for mutual interest. */
   score: number;
 }
 
@@ -17,6 +19,8 @@ export interface SearchFilters {
   excludeIds: string[];
   /** Boost people whose free times overlap these. */
   freeTimes?: TimeBlock[];
+  /** Hard filters: only people matching every given value. No screen sends these yet. */
+  hard?: Partial<HardFilters>;
 }
 
 export interface SearchService {
@@ -39,19 +43,5 @@ export interface SearchService {
   /** Free times for several people. */
   getAvailability(personIds: string[]): Promise<Record<string, TimeBlock[]>>;
 }
-
-function notImplemented(): never {
-  throw new Error("Elasticsearch search is not implemented yet (B1). Set FAKES=search to use the in-memory version.");
-}
-
-export const elasticSearch: SearchService = {
-  getPerson: async () => notImplemented(),
-  ingestPerson: async () => notImplemented(),
-  searchCandidates: async () => notImplemented(),
-  registerAsk: async () => notImplemented(),
-  removeAsk: async () => notImplemented(),
-  whoIsLookingFor: async () => notImplemented(),
-  getAvailability: async () => notImplemented(),
-};
 
 export const search: SearchService = config.fakeSearch || config.fakeApi ? memorySearch : elasticSearch;

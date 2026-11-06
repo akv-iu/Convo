@@ -1,17 +1,58 @@
 {
+  "settings": {
+    "analysis": {
+      "filter": {
+        "english_stop": { "type": "stop", "stopwords": "_english_" },
+        "english_stemmer": { "type": "stemmer", "language": "english" },
+        "question_words": {
+          "type": "stop",
+          "stopwords": [
+            "i", "me", "my", "we", "our", "you", "your", "someone", "somebody", "anyone", "people", "person",
+            "how", "what", "why", "when", "where", "who", "which", "does", "do", "did", "can", "could", "would", "should",
+            "want", "need", "understand", "learn", "know", "explain", "walk", "through", "help", "about", "like",
+            "work", "works", "working", "get", "thing", "things", "way", "mechanism", "usually", "wrong", "right",
+            "good", "best", "one", "really", "actually", "specifically", "talk", "chat", "minutes", "short", "conversation"
+          ]
+        },
+        "tech_synonyms": {
+          "type": "synonym_graph",
+          "synonyms": [
+            "k8s, kubernetes",
+            "pdb, pod disruption budget",
+            "ml, machine learning",
+            "llm, large language model",
+            "otel, opentelemetry",
+            "o11y, observability",
+            "sre, site reliability engineering",
+            "rag, retrieval augmented generation",
+            "postgres, postgresql",
+            "js, javascript",
+            "ts, typescript",
+            "gitops, git ops"
+          ]
+        }
+      },
+      "analyzer": {
+        "tech_index": { "tokenizer": "standard", "filter": ["lowercase", "english_stop", "english_stemmer"] },
+        "tech_search": { "tokenizer": "standard", "filter": ["lowercase", "tech_synonyms", "english_stop", "question_words", "english_stemmer"] }
+      }
+    }
+  },
   "mappings": {
+    "dynamic": "strict",
     "properties": {
-      "id": { "type": "keyword" },
       "person_id": { "type": "keyword" },
       "kind": { "type": "keyword" },
-      "title": { "type": "text" },
-      "text": { "type": "text" },
-      "url": { "type": "keyword" },
+      "title": { "type": "text", "analyzer": "tech_index", "search_analyzer": "tech_search" },
+      "text": { "type": "text", "analyzer": "tech_index", "search_analyzer": "tech_search" },
+      "url": { "type": "keyword", "index": false },
+      "content": { "type": "semantic_text", "inference_id": ".elser-2-elastic" },
       "country": { "type": "keyword" },
       "ror_id": { "type": "keyword" },
       "hiring": { "type": "boolean" },
-      "free_times": { "type": "date_range", "format": "strict_date_optional_time" },
-      "content": { "type": "semantic_text", "inference_id": ".elser-2-elasticsearch" }
+      "synthetic": { "type": "boolean" },
+      "free_times": { "type": "date_range" },
+      "revision": { "type": "long" }
     }
   }
 }

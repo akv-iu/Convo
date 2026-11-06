@@ -4,7 +4,7 @@
  */
 import * as fixtures from "@/contracts/fixtures";
 import type { EvidenceDoc, Person, TimeBlock } from "@/contracts/types";
-import type { Candidate, SearchService } from "./index";
+import type { Candidate, SearchFilters, SearchService } from "./index";
 
 const people = new Map<string, Person>(fixtures.people.map((p) => [p.id, p]));
 const evidence = new Map<string, EvidenceDoc[]>();
@@ -22,6 +22,12 @@ export function tokens(text: string): string[] {
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length > 1 && !STOP.has(t));
+}
+
+function meetsHardFilters(person: Person, hard: SearchFilters["hard"] = {}): boolean {
+  return (!hard.country || person.filters.country === hard.country)
+    && (!hard.rorId || person.filters.rorId === hard.rorId)
+    && (hard.hiring === undefined || person.filters.hiring === hard.hiring);
 }
 
 function overlaps(a: TimeBlock[], b: TimeBlock[]): boolean {
@@ -46,7 +52,7 @@ export const memorySearch: SearchService = {
     const exclude = new Set(filters.excludeIds);
     const out: Candidate[] = [];
     for (const person of people.values()) {
-      if (exclude.has(person.id)) continue;
+      if (exclude.has(person.id) || !meetsHardFilters(person, filters.hard)) continue;
       const highlights: string[] = [];
       let score = 0;
       for (const doc of evidence.get(person.id) ?? []) {
@@ -75,9 +81,8 @@ export const memorySearch: SearchService = {
   },
 
   async whoIsLookingFor(person) {
-    const fromFixtures = Object.entries(fixtures.lookingFor)
-      .filter(([, ids]) => ids.includes(person.id))
-      .map(([userId]) => userId);
+    // fixtures.lookingFor[user] lists the people looking for someone like that user.
+    const fromFixtures = fixtures.lookingFor[person.id] ?? [];
     const profile = new Set(tokens(`${person.bio} ${(evidence.get(person.id) ?? []).map((e) => e.title).join(" ")}`));
     const fromAsks = [...asks.values()]
       .filter(({ userId, text }) => userId !== person.id && tokens(text).some(w => profile.has(w)))
