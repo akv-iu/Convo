@@ -9,6 +9,22 @@ const at = (hhmm: string) => new Date(`2026-11-09T${hhmm}:00-07:00`);
 const base = { minutes: 15, lockoutMinutes: 60, max: 3 };
 
 describe("findSlots", () => {
+  it("merges duplicated, overlapping and adjacent availability before finding slots", () => {
+    const a = [day("13:10", "13:20"), day("13:00", "13:10"), day("13:00", "13:10")];
+    const b = [day("13:00", "13:15"), day("13:05", "13:30")];
+    const original = structuredClone(a);
+    expect(findSlots(a, b, { ...base, now: at("08:00") })).toEqual([
+      { start: at("13:00").toISOString(), end: at("13:15").toISOString() },
+    ]);
+    expect(a).toEqual(original);
+  });
+
+  it("allows bookings that touch a free interval boundary without overlapping", () => {
+    expect(findSlots([day("13:00", "13:15")], [day("13:00", "13:15")], {
+      ...base, now: at("08:00"), booked: [day("12:45", "13:00"), day("13:15", "13:30")],
+    })).toEqual([{ start: at("13:00").toISOString(), end: at("13:15").toISOString() }]);
+  });
+
   it("returns the overlap of both people's free times", () => {
     const slots = findSlots([day("13:00", "14:30")], [day("13:30", "15:00")], { ...base, now: at("08:00") });
     expect(slots).toEqual([{ start: at("13:30").toISOString(), end: at("13:45").toISOString() }]);

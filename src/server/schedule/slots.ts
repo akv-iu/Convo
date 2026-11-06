@@ -18,6 +18,16 @@ const toInterval = (b: TimeBlock): Interval => ({
   end: Date.parse(b.end),
 });
 
+function merge(blocks: TimeBlock[]): Interval[] {
+  const merged: Interval[] = [];
+  for (const block of blocks.map(toInterval).sort((a, b) => a.start - b.start)) {
+    const previous = merged.at(-1);
+    if (previous && block.start <= previous.end) previous.end = Math.max(previous.end, block.end);
+    else merged.push({ ...block });
+  }
+  return merged;
+}
+
 function intersect(a: Interval[], b: Interval[]): Interval[] {
   const out: Interval[] = [];
   for (const x of a) {
@@ -55,7 +65,7 @@ function subtract(free: Interval[], booked: Interval[]): Interval[] {
 export function findSlots(a: TimeBlock[], b: TimeBlock[], opts: FindSlotsOptions): Slot[] {
   const earliest = opts.now.getTime() + opts.lockoutMinutes * 60_000;
   const length = opts.minutes * 60_000;
-  const overlap = subtract(intersect(a.map(toInterval), b.map(toInterval)), (opts.booked ?? []).map(toInterval));
+  const overlap = subtract(intersect(merge(a), merge(b)), (opts.booked ?? []).map(toInterval));
   const slots: Slot[] = [];
   for (const o of overlap) {
     const start = Math.max(o.start, earliest);
