@@ -3,9 +3,10 @@ import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { buildProfile } from "./index";
 import { githubUserId, loadGitHubProfile } from "./github";
+import type { GitHubConsent } from "./consent";
 
-export async function initializeGitHubProfile(accountId: string, profile: unknown, accessToken: string): Promise<void> {
-  const github = await loadGitHubProfile(accountId, profile, accessToken);
+export async function initializeGitHubProfile(accountId: string, profile: unknown, accessToken: string, consent: GitHubConsent): Promise<void> {
+  const github = await loadGitHubProfile(accountId, profile, accessToken, consent);
   const { person } = buildProfile(githubUserId(accountId), github);
   await db().insert(users).values({
     id: person.id, githubLogin: person.githubLogin, name: person.name, bio: person.bio,
