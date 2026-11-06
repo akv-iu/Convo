@@ -47,6 +47,7 @@ They catch different things, so we use both.
 - Gitar flagged something? Fix it, or reply on its comment with the reason.
 - Sonar failed? Open the CI run and read *Why the quality gate failed*.
 - A stacked PR was retargeted to `main`? Push a commit so the Sonar check runs.
+- Stuck on "waiting for Gitar" right after a Gitar auto-fix? Gitar doesn't review its own commits. Review its fix, then push an empty commit (`git commit --allow-empty -m "Request Gitar review"`) so it reviews the final code.
 - Emergency: you are the repo admin, so GitHub lets you merge anyway. Use it rarely and say why in the PR.
 
 ## What to add next
