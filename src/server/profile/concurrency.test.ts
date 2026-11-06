@@ -13,7 +13,8 @@ import { getPerson } from "@/server/search/memory";
 function row(person: Person, revision: number) {
   return { rows: [[person.id, person.githubLogin, person.name, person.bio,
     JSON.stringify(person.languages), JSON.stringify(person.organisations), JSON.stringify(person.filters),
-    JSON.stringify(person.freeTimes), "2026-11-05T00:00:00Z", revision]] };
+    JSON.stringify(person.freeTimes), "2026-11-05T00:00:00Z", revision,
+    person.workplaceName ?? null, person.badgeColour ?? "sunflower", JSON.stringify(person.visibility)]] };
 }
 afterEach(() => vi.unstubAllEnvs());
 

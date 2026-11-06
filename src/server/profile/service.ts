@@ -26,7 +26,14 @@ async function readUser(userId: string): Promise<User> {
 async function writeUser(userId: string, changes: ProfilePatch): Promise<User> {
   let rows: User[];
   try {
-    rows = await db().update(users).set({ ...changes, revision: sql`${users.revision} + 1` })
+    rows = await db().update(users).set({
+      ...changes,
+      // Older clients changing the ROR ID must not retain the previous workplace's label.
+      ...(changes.filters && changes.workplaceName === undefined ? {
+        workplaceName: sql`case when ${users.filters}->>'rorId' is distinct from ${changes.filters.rorId}::text then null else ${users.workplaceName} end`,
+      } : {}),
+      revision: sql`${users.revision} + 1`,
+    })
       .where(eq(users.id, userId)).returning();
   } catch {
     throw new ProfileError("Profile storage is unavailable. Try again.", 503);

@@ -12,7 +12,8 @@ const revisions = new Map<string, number>();
 for (const e of fixtures.evidence) {
   evidence.set(e.personId, [...(evidence.get(e.personId) ?? []), e]);
 }
-const asks = new Map<string, string[]>(); // userId -> ask texts
+const asks = new Map<string, { userId: string; text: string }>();
+const resolved = new Set<string>();
 
 const STOP = new Set(["i", "a", "an", "the", "to", "at", "in", "on", "of", "how", "want", "works", "work", "does", "do", "with", "and", "for", "is", "it", "my", "me", "get", "specifically", "what", "about"]);
 
@@ -64,8 +65,13 @@ export const memorySearch: SearchService = {
     return out.sort((a, b) => b.score - a.score).slice(0, limit);
   },
 
-  async registerAsk(userId, askText) {
-    asks.set(userId, [...(asks.get(userId) ?? []), askText]);
+  async registerAsk(askId, userId, askText) {
+    if (!resolved.has(askId)) asks.set(askId, { userId, text: askText });
+  },
+
+  async removeAsk(askId) {
+    resolved.add(askId);
+    asks.delete(askId);
   },
 
   async whoIsLookingFor(person) {
@@ -73,9 +79,9 @@ export const memorySearch: SearchService = {
       .filter(([, ids]) => ids.includes(person.id))
       .map(([userId]) => userId);
     const profile = new Set(tokens(`${person.bio} ${(evidence.get(person.id) ?? []).map((e) => e.title).join(" ")}`));
-    const fromAsks = [...asks.entries()]
-      .filter(([userId, texts]) => userId !== person.id && texts.some((t) => tokens(t).some((w) => profile.has(w))))
-      .map(([userId]) => userId);
+    const fromAsks = [...asks.values()]
+      .filter(({ userId, text }) => userId !== person.id && tokens(text).some(w => profile.has(w)))
+      .map(({ userId }) => userId);
     return [...new Set([...fromFixtures, ...fromAsks])];
   },
 

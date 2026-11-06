@@ -4,13 +4,14 @@
  * same checks against these and, once built, against the real handlers.
  */
 import * as fixtures from "@/contracts/fixtures";
-import type { Api } from "@/contracts/routes";
+import { routes, type Api } from "@/contracts/routes";
 import { ai } from "@/server/ai";
 import { config } from "@/server/config";
 import { runMatch } from "@/server/pipeline";
 import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
+import { visibleCard } from "@/server/profile/visibility";
 
 const now = () => new Date().toISOString();
 
@@ -21,7 +22,11 @@ export const fake: Api = {
 
   async putMe({ userId, body }) {
     const me = store.person(userId);
-    const updated = { ...me, ...body, id: me.id, synthetic: me.synthetic };
+    const patch = routes.putMe.body.parse(body);
+    const updated = {
+      ...me, ...patch, id: me.id, synthetic: me.synthetic,
+      ...(patch.filters && patch.workplaceName === undefined && patch.filters.rorId !== me.filters.rorId ? { workplaceName: null } : {}),
+    };
     store.get().people.set(userId, updated);
     await search.ingestPerson(updated, fixtures.evidence.filter((e) => e.personId === userId));
     return updated;
@@ -46,7 +51,7 @@ export const fake: Api = {
   async refine({ userId, body }) {
     const me = store.person(userId);
     const refined = await ai.refineAsk(body.text, me);
-    const id = store.nextId("ask");
+    const id = crypto.randomUUID();
     store.get().asks.set(id, {
       id,
       userId,
@@ -56,7 +61,7 @@ export const fake: Api = {
       softBlocker: true,
       createdAt: now(),
     });
-    await search.registerAsk(userId, refined.text);
+    await search.registerAsk(id, userId, refined.text);
     return { askId: id, refined };
   },
 
@@ -65,13 +70,14 @@ export const fake: Api = {
     const rejected = store.get().rejections.get(ask.id) ?? [];
     const hiddenBelowRank =
       rejected.length >= config.batchRejectAfter ? Math.max(...rejected.map((r) => r.rank)) : null;
-    return runMatch({
+    const matches = await runMatch({
       ask,
       requester: store.person(userId),
       excludeIds: ask.softBlocker ? rejected.map((r) => r.personId) : [],
       query: body.query,
       hiddenBelowRank,
     });
+    return matches.map(match => visibleCard(match, store.person(match.person.id).visibility));
   },
 
   async reject({ userId, body }) {
@@ -148,6 +154,7 @@ export const fake: Api = {
   async resolve({ userId, params }) {
     const ask = store.ask(params.id, userId);
     ask.status = "resolved";
+    await search.removeAsk(ask.id);
     return ask;
   },
 

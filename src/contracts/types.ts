@@ -27,6 +27,16 @@ export type TimeBlock = z.infer<typeof TimeBlock>;
 export const Slot = TimeBlock;
 export type Slot = TimeBlock;
 
+export const BadgeColour = z.enum(["sunflower", "mint", "sky", "lilac", "coral"]);
+export type BadgeColour = z.infer<typeof BadgeColour>;
+
+export const ProfileVisibility = z.object({
+  country: z.boolean(),
+  workplace: z.boolean(),
+  hiring: z.boolean(),
+});
+export type ProfileVisibility = z.infer<typeof ProfileVisibility>;
+
 export const Person = z.object({
   id: z.string(),
   name: z.string(),
@@ -35,11 +45,21 @@ export const Person = z.object({
   languages: z.array(z.string()),
   organisations: z.array(z.string()),
   filters: HardFilters,
+  /** Display name for either a listed or unlisted workplace; null clears it. */
+  workplaceName: z.string().trim().min(1).max(200).nullable().optional(),
+  /** Optional for older profiles/clients; display sunflower when absent. */
+  badgeColour: BadgeColour.optional(),
+  /** Card display only; hidden values remain available for matching. */
+  visibility: ProfileVisibility.optional(),
   /** Shown as a label in the UI. Demo profiles are synthetic; real sign-ups are not. */
   synthetic: z.boolean(),
   freeTimes: z.array(TimeBlock),
 });
 export type Person = z.infer<typeof Person>;
+
+export const CardPerson = Person.extend({
+  filters: HardFilters.extend({ country: z.string().length(2).nullable(), hiring: z.boolean().nullable() }),
+});
 
 export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract"]);
 
@@ -73,7 +93,7 @@ export const Ask = z.object({
 export type Ask = z.infer<typeof Ask>;
 
 export const MatchResult = z.object({
-  person: Person,
+  person: CardPerson,
   /** Exact evidence snippets behind the match, for the card. */
   highlights: z.array(z.string()),
   /** Hard-filter badges, e.g. "not hiring". */

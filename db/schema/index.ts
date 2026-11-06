@@ -3,7 +3,7 @@
  * lives in Elasticsearch. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { HardFilters, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { BadgeColour, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -16,6 +16,9 @@ export const users = pgTable("users", {
   freeTimes: jsonb("free_times").$type<TimeBlock[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revision: integer("revision").notNull().default(0),
+  workplaceName: text("workplace_name"),
+  badgeColour: text("badge_colour").$type<BadgeColour>().notNull().default("sunflower"),
+  visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
 });
 
 export const asks = pgTable(
