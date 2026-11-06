@@ -1,0 +1,142 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { people } from "@/contracts/fixtures";
+import type { RefinedAsk } from "@/contracts/types";
+import type { Candidate } from "@/server/search";
+
+const { create, query } = vi.hoisted(() => ({ create: vi.fn(), query: vi.fn() }));
+vi.mock("openai", () => ({ default: class { responses = { create }; } }));
+vi.mock("@neondatabase/serverless", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
+}));
+
+import { openAi } from "./openai";
+
+const requester = people[0];
+const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 10 };
+const reply = (value: unknown, extra: object = {}) => ({
+  id: "resp_1", model: "gpt-5.4-mini-2026-03-17", status: "completed", output_text: JSON.stringify(value),
+  usage: { input_tokens: 120, output_tokens: 30 }, ...extra,
+});
+const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, score: 1 });
+const statements = (verb: "select" | "insert") =>
+  query.mock.calls.filter(([text]) => String(text).toLowerCase().startsWith(verb));
+/** The cache holds these values for the first keys a lookup asks for, in order. */
+const cacheHolds = (...values: unknown[]) =>
+  query.mockImplementation(async (text: string, params: string[]) =>
+    ({ rows: text.toLowerCase().startsWith("select") ? values.map((value, i) => [params[i], value]) : [] }));
+const sentPeople = () => JSON.parse(create.mock.calls[0][0].input).people;
+
+beforeEach(() => {
+  create.mockReset();
+  query.mockReset().mockResolvedValue({ rows: [] });
+  vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+describe("refineAsk", () => {
+  it("asks the model once with a strict schema, then caches the reply", async () => {
+    create.mockResolvedValueOnce(reply(ask));
+
+    await expect(openAi.refineAsk("  k8s preemption?  ", requester)).resolves.toEqual(ask);
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0][0]).toMatchObject({
+      model: "gpt-5.4-mini", input: "k8s preemption?", store: false, reasoning: { effort: "none" },
+      text: { format: { type: "json_schema", name: "refined_ask", strict: true } },
+    });
+    expect(statements("insert")).toHaveLength(1);
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify(ask)]));
+  });
+
+  it("answers a repeat from the cache without calling the model", async () => {
+    cacheHolds(ask);
+
+    await expect(openAi.refineAsk("k8s preemption?", requester)).resolves.toEqual(ask);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("rejects a reply that is blank or cut off, and caches neither", async () => {
+    create.mockResolvedValueOnce(reply({ ...ask, text: "   " }));
+    await expect(openAi.refineAsk("k8s?", requester)).rejects.toThrow();
+
+    create.mockResolvedValueOnce(reply(ask, { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }));
+    await expect(openAi.refineAsk("k8s?", requester)).rejects.toThrow("incomplete: max_output_tokens");
+
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("still refines when the cache is down", async () => {
+    query.mockRejectedValue(new Error("Neon is down"));
+    create.mockResolvedValueOnce(reply(ask));
+
+    await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);
+  });
+});
+
+describe("explain", () => {
+  it("explains every uncached card in one call, in card order, and caches each line", async () => {
+    const cards = [card("a", ["kube-scheduler: preemption"]), card("b", []), card("c", ["sched-sim: a simulator"])];
+    create.mockResolvedValueOnce(reply({ lines: [
+      { ref: 2, why: "Built a scheduler simulator." },
+      { ref: 1, why: "Maintains kube-scheduler preemption." },
+    ] }));
+
+    await expect(openAi.explain(ask, cards)).resolves.toEqual([
+      "Maintains kube-scheduler preemption.", "Profile mentions what you're asking about.", "Built a scheduler simulator.",
+    ]);
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(JSON.parse(create.mock.calls[0][0].input)).toEqual({
+      question: ask.text,
+      people: [{ ref: 1, evidence: ["kube-scheduler: preemption"] }, { ref: 2, evidence: ["sched-sim: a simulator"] }],
+    });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 4000, maxRetries: 0 });
+    expect(statements("insert")).toHaveLength(1);
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining([
+      JSON.stringify("Maintains kube-scheduler preemption."), JSON.stringify("Built a scheduler simulator."),
+    ]));
+  });
+
+  it("sends only cache misses, once per distinct evidence", async () => {
+    cacheHolds("Cached line for a.");
+    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "Line for y." }] }));
+
+    await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"]), card("c", ["y"])]))
+      .resolves.toEqual(["Cached line for a.", "Line for y.", "Line for y."]);
+
+    expect(statements("select")).toHaveLength(1);
+    expect(sentPeople()).toEqual([{ ref: 1, evidence: ["y"] }]);
+  });
+
+  it("never fails a match: on a model error every card keeps its evidence line", async () => {
+    create.mockRejectedValueOnce(new Error("Request timed out."));
+
+    await expect(openAi.explain(ask, [card("a", ["kube-scheduler: preemption"])]))
+      .resolves.toEqual(["Evidence: kube-scheduler: preemption."]);
+
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("keeps the evidence line for a card the model skipped or answered badly", async () => {
+    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "   " }, { ref: 2, why: "x".repeat(201) }, { ref: 9, why: "Stray." }] }));
+
+    await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"])]))
+      .resolves.toEqual(["Evidence: x.", "Evidence: y."]);
+
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("calls nothing for an empty list or cards without evidence", async () => {
+    await expect(openAi.explain(ask, [])).resolves.toEqual([]);
+    await expect(openAi.explain(ask, [card("b", [])])).resolves.toEqual(["Profile mentions what you're asking about."]);
+
+    expect(query).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+});
