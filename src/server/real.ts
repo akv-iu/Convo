@@ -3,13 +3,13 @@
  * step by step; the contract tests say when it matches the fake.
  */
 import type { Api } from "@/contracts/routes";
-import { notImplemented } from "@/server/api";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 import { searchWorkplaces } from "@/server/profile/ror";
 import { createAsk, matchAsk } from "@/server/requests/asks";
 import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
+import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
 
 export const real: Api = {
   getMe: ({ userId }) => getProfile(userId),
@@ -26,6 +26,6 @@ export const real: Api = {
   respond: ({ userId, params, body }) => respondToRequest(userId, params.id, body),
   slots: ({ userId, params }) => getSlots(userId, params.id),
   schedule: ({ userId, params, body }) => bookSlot(userId, params.id, body.slot),
-  resolve: notImplemented("B2: mark the ask resolved"),
-  lookingForMe: notImplemented("B2: search.whoIsLookingFor count"),
+  resolve: ({ userId, params }) => resolveAsk(userId, params.id),
+  lookingForMe: ({ userId }) => lookingForMe(userId),
 };

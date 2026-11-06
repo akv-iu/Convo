@@ -33,7 +33,7 @@ describe("profile persistence through Drizzle", () => {
   it("preserves existing profile edits even when signing in with no optional consent", async () => {
     await initializeGitHubProfile("101", fixtures[0].profile, "test-token", []);
     const [statement] = query.mock.calls[0];
-    expect(statement.split("do update set")[1]).not.toMatch(/name"|bio|languages|organisations|filters|free_times/);
+    expect(statement.split("do update set")[1]).not.toMatch(/name"|bio|languages|organisations|filters|free_times|workplace_name|badge_colour|visibility/);
     expect(fetch).not.toHaveBeenCalled();
   });
   it("inserts public profile fields under the immutable account ID", async () => {
@@ -52,7 +52,7 @@ describe("profile persistence through Drizzle", () => {
     const [sql, params] = query.mock.calls[0];
     expect(sql).toMatch(/on conflict \("id"\) do update set "github_login" = \$\d+, "revision" = "users"\."revision" \+ 1$/);
     expect(params.at(-1)).toBe("renamed-example");
-    expect(sql.split("do update set")[1]).not.toMatch(/name"|bio|languages|organisations|filters|free_times/);
+    expect(sql.split("do update set")[1]).not.toMatch(/name"|bio|languages|organisations|filters|free_times|workplace_name|badge_colour|visibility/);
   });
 
   it("does not write an incomplete profile when GitHub fails", async () => {

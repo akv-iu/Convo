@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { DEMO_USER_A, DEMO_USER_B, sampleAsks } from "@/contracts/fixtures";
+import { search } from "@/server/search";
 import { routes, type Api, type Ctx, type RouteName } from "@/contracts/routes";
 import { fake } from "./handlers";
 import { store } from "./store";
@@ -19,6 +20,59 @@ function ctx<N extends RouteName>(userId: string, body?: unknown, params: Record
 
 describe.each(implementations)("$name API", ({ api, reset }) => {
   beforeEach(reset);
+
+  it("hides card fields while retaining owner data and matching results", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const before = await api.match(ctx(DEMO_USER_A, { askId }));
+    const target = before[0].person.id;
+    const original = await api.getMe(ctx(target));
+    await api.putMe(ctx(target, { workplaceName: "Acme", visibility: { country: false, workplace: false, hiring: false } }));
+    const after = await api.match(ctx(DEMO_USER_A, { askId }));
+    expect(after.map(card => card.person.id)).toEqual(before.map(card => card.person.id));
+    expect(after[0].person).toMatchObject({ workplaceName: null, filters: { country: null, rorId: null, hiring: null } });
+    expect(await api.getMe(ctx(target))).toMatchObject({ workplaceName: "Acme", filters: original.filters });
+    expect((await search.getPerson(target))?.filters).toEqual(original.filters);
+    await api.putMe(ctx(target, { visibility: { country: true, workplace: true, hiring: true } }));
+    expect((await api.match(ctx(DEMO_USER_A, { askId })))[0].person).toMatchObject({ workplaceName: "Acme", filters: original.filters });
+  });
+
+  it.each([{ visibility: { country: false } }, { visibility: { country: "false", workplace: true, hiring: true } }])(
+    "rejects invalid visibility %j", body => expect(routes.putMe.body.safeParse(body).success).toBe(false),
+  );
+
+  it("resolves one ask at a time and removes it from reverse search", async () => {
+    const first = await api.refine(ctx(DEMO_USER_A, { text: "UniqueLifecycleTopic" }));
+    const second = await api.refine(ctx(DEMO_USER_A, { text: "UniqueLifecycleTopic" }));
+    const target = { ...await api.getMe(ctx(DEMO_USER_B)), id: "lifecycle-contract-target", bio: "UniqueLifecycleTopic" };
+    expect(await search.whoIsLookingFor(target)).toContain(DEMO_USER_A);
+    await expect(api.resolve(ctx(DEMO_USER_B, undefined, { id: first.askId }))).rejects.toMatchObject({ status: 404 });
+    await api.resolve(ctx(DEMO_USER_A, undefined, { id: first.askId }));
+    expect(await search.whoIsLookingFor(target)).toContain(DEMO_USER_A);
+    expect(await api.resolve(ctx(DEMO_USER_A, undefined, { id: second.askId }))).toMatchObject({ status: "resolved" });
+    await api.resolve(ctx(DEMO_USER_A, undefined, { id: second.askId }));
+    expect(await search.whoIsLookingFor(target)).not.toContain(DEMO_USER_A);
+  });
+
+  it("saves a workplace name and badge colour, preserves them on unrelated edits and clears the workplace", async () => {
+    const body = routes.putMe.body.parse({ workplaceName: "  Acme Robotics  ", badgeColour: "lilac" });
+    const saved = await api.putMe(ctx(DEMO_USER_A, body));
+    expect(saved).toMatchObject({ workplaceName: "Acme Robotics", badgeColour: "lilac" });
+    await api.putMe(ctx(DEMO_USER_A, { bio: "Updated biography" }));
+    expect(await api.getMe(ctx(DEMO_USER_A))).toMatchObject({ workplaceName: "Acme Robotics", badgeColour: "lilac" });
+    expect(await api.putMe(ctx(DEMO_USER_A, { workplaceName: null }))).toMatchObject({ workplaceName: null, badgeColour: "lilac" });
+  });
+
+  it.each([{ workplaceName: " " }, { workplaceName: "x".repeat(201) }, { badgeColour: "neon" }])(
+    "rejects invalid profile presentation %j", (body) => {
+      expect(routes.putMe.body.safeParse(body).success).toBe(false);
+    },
+  );
+
+  it("clears a stale workplace label when an older client changes its ROR ID", async () => {
+    const me = await api.putMe(ctx(DEMO_USER_A, { workplaceName: "Original workplace" }));
+    expect(await api.putMe(ctx(DEMO_USER_A, { filters: { ...me.filters, country: "GB" } }))).toMatchObject({ workplaceName: "Original workplace" });
+    expect(await api.putMe(ctx(DEMO_USER_A, { filters: { ...me.filters, rorId: null } }))).toMatchObject({ workplaceName: null });
+  });
 
   it("every response matches the contract", async () => {
     const me = await api.getMe(ctx(DEMO_USER_A));

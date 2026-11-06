@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../../db";
-import { asks } from "../../../db/schema";
-import { Ask, RefinedAsk, type MatchResult } from "@/contracts/types";
+import { asks, users } from "../../../db/schema";
+import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
+import { visibleCard } from "@/server/profile/visibility";
 import { ai } from "@/server/ai";
 import { search } from "@/server/search";
 import { runMatch } from "@/server/pipeline";
@@ -32,7 +33,7 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }
   try {
-    await search.registerAsk(userId, refined.text);
+    await search.registerAsk(askId, userId, refined.text);
   } catch {
     // shortcut: no durable search retry; add an outbox before C2 needs reliable registration.
     throw new AskError(`Ask saved with ID ${askId}, but search registration failed. Keep this ID; do not resubmit the question.`, 503);
@@ -58,11 +59,19 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
   const requester = await getProfile(userId);
   const { excludeIds, hiddenBelowRank } = await getExclusions(askId);
   try {
-    return routes.match.response.parse(await runMatch({
+    const matches = await runMatch({
       ask, requester, query,
       excludeIds: ask.softBlocker ? excludeIds : [],
       hiddenBelowRank,
-    }));
+    });
+    if (!matches.length) return [];
+    // Read current privacy settings even when search still has an older profile.
+    const saved = await db().select({ id: users.id, visibility: users.visibility }).from(users)
+      .where(inArray(users.id, matches.map(match => match.person.id)));
+    const visibility = new Map(saved.map(person => [person.id, ProfileVisibility.parse(person.visibility)]));
+    return routes.match.response.parse(matches.map(match => visibleCard(match,
+      visibility.get(match.person.id) ?? (match.person.synthetic ? match.person.visibility :
+        { country: false, workplace: false, hiring: false }))));
   } catch {
     throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503);
   }

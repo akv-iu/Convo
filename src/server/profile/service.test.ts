@@ -14,7 +14,8 @@ const person = structuredClone(people[0]);
 function result(value: Person = person, filters: Person["filters"] | null = value.filters, revision = 1) {
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations),
-    filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision]] };
+    filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision,
+    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true })]] };
 }
 beforeEach(() => {
   query.mockReset().mockResolvedValue(result());
@@ -24,6 +25,36 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("real profile and availability services", () => {
+  it("persists visibility while keeping hidden fields available to the owner and search", async () => {
+    const visibility = { country: false, workplace: false, hiring: false };
+    const updated = { ...person, visibility };
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
+    expect(await updateProfile(person.id, { visibility })).toEqual(updated);
+    expect(query.mock.calls[1][1]).toEqual([JSON.stringify(visibility), person.id]);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    query.mockResolvedValueOnce(result(updated));
+    expect(await getProfile(person.id)).toEqual(updated);
+  });
+  it("persists workplace and colour in Postgres and passes them to search", async () => {
+    const updated = { ...person, workplaceName: "Acme Robotics", badgeColour: "lilac" as const };
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
+    expect(await updateProfile(person.id, { workplaceName: updated.workplaceName, badgeColour: updated.badgeColour })).toEqual(updated);
+    expect(query.mock.calls[1][0]).toContain('"workplace_name" =');
+    expect(query.mock.calls[1][0]).toContain('"badge_colour" =');
+    expect(query.mock.calls[1][1]).toEqual(["Acme Robotics", "lilac", person.id]);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    query.mockResolvedValueOnce(result(updated));
+    expect(await getProfile(person.id)).toEqual(updated);
+  });
+
+  it("clears a previous workplace label atomically when a legacy client changes ROR ID", async () => {
+    const original = { ...person, workplaceName: "Original workplace" };
+    const updated = { ...original, workplaceName: null, filters: { ...person.filters, rorId: null } };
+    query.mockResolvedValueOnce(result(original)).mockResolvedValueOnce(result(updated));
+    expect(await updateProfile(person.id, { filters: updated.filters })).toEqual(updated);
+    expect(query.mock.calls[1][0]).toContain('case when "users"."filters"->>\'rorId\' is distinct from');
+    expect(query.mock.calls[1][0]).toContain('then null else "users"."workplace_name" end');
+  });
   it("reads only the signed-in user's profile and conforms to the shared response", async () => {
     const actual = await getProfile(person.id);
     expect(actual).toEqual(person);

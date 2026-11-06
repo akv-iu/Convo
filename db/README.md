@@ -13,6 +13,12 @@ Profile/availability writes and GitHub login refreshes increment it atomically;
 search uses it to ignore out-of-order snapshots. Apply it before enabling the
 real profile API on this version. It is additive and preserves existing rows.
 
+`0002_profile_display.sql` adds nullable `users.workplace_name`,
+`users.badge_colour` (default `sunflower`) and `users.visibility` (all shown by
+default). Apply it before running this version's real handlers. See
+[Frontend-Support.md](Frontend-Support.md) for payloads and the complete manual
+checklist. This migration has not been applied by the agent.
+
 ## Generate and check
 
 Run from the repository root after installing dependencies:

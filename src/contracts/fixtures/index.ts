@@ -130,6 +130,13 @@ export const people: Person[] = [
   },
 ];
 
+// Older callers may omit these fields; fixture profiles expose the database defaults.
+for (const person of people) {
+  person.workplaceName = null;
+  person.badgeColour = "sunflower";
+  person.visibility = { country: true, workplace: true, hiring: true };
+}
+
 export const evidence: EvidenceDoc[] = [
   {
     id: "e_b_1",
