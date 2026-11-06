@@ -14,20 +14,38 @@ import { asks, users } from "../db/schema";
 
 async function seedUsers(): Promise<number> {
   const rows = await db().select({ id: users.id, revision: users.revision }).from(users);
-  const loaded = await Promise.all(rows.map(async ({ id, revision }) => {
+  let loaded = 0;
+  for (const { id, revision } of rows) {
     const person = await getProfile(id).catch((error: { status?: number }) => {
       if (error.status === 409) return undefined; // onboarding not finished yet: nothing to search
       throw error;
     });
-    if (person) await elasticSearch.ingestPerson(person, undefined, revision);
-    return person ? 1 : 0;
-  }));
-  return loaded.reduce<number>((sum, n) => sum + n, 0);
+    if (person) {
+      await elasticSearch.ingestPerson(person, undefined, revision);
+      loaded += 1;
+    }
+  }
+  return loaded;
 }
 
 async function seedAsks(): Promise<number> {
   const open = await db().select({ id: asks.id, userId: asks.userId, refined: asks.refined }).from(asks).where(eq(asks.status, "open"));
-  await Promise.all(open.flatMap((ask) => ask.refined ? [elasticSearch.registerAsk(ask.id, ask.userId, ask.refined.text)] : []));
+  const operations = open.flatMap((ask) => {
+    if (!ask.refined) return [];
+    return [{
+      create: { _index: INDEX.asks, _id: ask.id },
+    }, {
+      ask_id: ask.id,
+      user_id: ask.userId,
+      active: true,
+      query: { match: { profile: { query: ask.refined.text, minimum_should_match: "2<60%" } } },
+    }];
+  });
+  if (operations.length) {
+    const result = await client().bulk({ operations });
+    const failed = result.items.map((item) => item.create).find((item) => item && item.status >= 300 && item.status !== 409);
+    if (failed) throw new Error(`Ask indexing failed: ${failed.error?.reason ?? "unknown error"}`);
+  }
   return open.filter((ask) => ask.refined).length;
 }
 
