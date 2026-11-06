@@ -39,3 +39,7 @@ Every change reaches `main` through a pull request that must pass four checks:
 ## Stack
 
 Next.js (App Router), TypeScript, Tailwind. Auth.js with GitHub. Neon Postgres with Drizzle. Elastic Cloud for search and matching. OpenAI for ask refinement and explanations. OpenTelemetry to Dash0. Deployed on Vercel. The reasons are in the plan's Architecture section.
+
+## AI disclosure
+
+We build Convo with AI coding assistants (Claude Code and Codex) working under the rules in [AGENTS.md](AGENTS.md), and AI review (Gitar) on every pull request. The two of us direct the work, review it and merge every change.
