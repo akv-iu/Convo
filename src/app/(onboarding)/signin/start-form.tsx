@@ -123,7 +123,7 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
         >
           <legend className={legendClass}>Where do you work?</legend>
           <WorkplaceSearch value={workplace} onChange={chooseWorkplace} invalid={show("workplace")} />
-          {workplace?.kind !== "org" && (
+          {(workplace === null || workplace.kind === "none") && (
             <label className="flex min-h-12 cursor-pointer items-center gap-3 self-start rounded-lg px-1 text-base has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
               <input
                 type="checkbox"

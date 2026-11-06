@@ -16,6 +16,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
+import { showSavedColour } from "../../_components/badge-prefs";
 import { saveErrorMessage } from "../answers";
 import { countryName } from "../countries";
 import { ChipEditor } from "./chip-editor";
@@ -93,6 +94,7 @@ export function ProfileForm() {
         if (!res.ok) return setLoad({ state: "failed", status: res.status });
         const person = (await res.json()) as Person;
         if (!live) return;
+        showSavedColour(person.badgeColour); // the saved colour wins over this browser's preview cookie
         setOriginal(draftFrom(person));
         setDraft(draftFrom(person));
         setLoad({ state: "ready", person });

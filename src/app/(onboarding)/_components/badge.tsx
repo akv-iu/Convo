@@ -16,7 +16,7 @@ export function Badge({
   nameFor,
 }: {
   children?: ReactNode;
-  label?: string;
+  label?: ReactNode;
   colour?: string;
   name?: string;
   handle?: string;

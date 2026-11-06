@@ -42,6 +42,14 @@ describe("onboarding draft", () => {
     expect(readDraft()).toBeNull();
   });
 
+  it("keeps a typed workplace and refuses an empty one", () => {
+    const draft = { name: "Ada", country: "GB", workplace: { kind: "custom" as const, name: "Acme Robotics" } };
+    saveDraft(draft);
+    expect(readDraft()).toEqual(draft);
+    sessionStorage.setItem("convo_onboarding_draft", JSON.stringify({ ...draft, workplace: { kind: "custom", name: " " } }));
+    expect(readDraft()).toBeNull();
+  });
+
   it("copes with storage being unavailable", () => {
     delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
     expect(() => saveDraft({ name: "A", country: "GB", workplace: { kind: "none" } })).not.toThrow();

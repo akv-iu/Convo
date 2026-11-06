@@ -4,11 +4,22 @@
  * because B2's API needs country, workplace and hiring in one complete
  * `filters` object (db/Profile-API.md).
  */
-import type { HardFilters, RorMatch } from "@/contracts/types";
+import type { BadgeColour, HardFilters, ProfileVisibility, RorMatch } from "@/contracts/types";
 import { isCountryCode } from "./countries";
 
-/** No choice yet, a ROR workplace, or "not with an organisation". */
-export type Workplace = null | { kind: "org"; org: RorMatch } | { kind: "none" };
+/**
+ * No choice yet, a workplace from the directory (ROR), one the user typed
+ * because it isn't listed, or "not with an organisation".
+ */
+export type Workplace =
+  | null
+  /** `unnamed`: restored from an older profile that kept only the ROR ID, so org.name is a placeholder. */
+  | { kind: "org"; org: RorMatch; unnamed?: true }
+  | { kind: "custom"; name: string }
+  | { kind: "none" };
+
+/** A typed workplace name is stored as Person.workplaceName: trimmed, 1 to 200 characters. */
+export const WORKPLACE_NAME_MAX = 200;
 
 export interface AboutYou {
   name: string;
@@ -36,7 +47,7 @@ export function aboutYouMissing(a: AboutYou): Missing[] {
   const missing: Missing[] = [];
   const name = a.name.trim();
   if (!name || name.length > NAME_MAX) missing.push("name");
-  if (!a.workplace) missing.push("workplace");
+  if (!a.workplace || (a.workplace.kind === "custom" && !validWorkplaceName(a.workplace.name))) missing.push("workplace");
   if (!isCountryCode(a.country)) missing.push("country");
   return missing;
 }
@@ -58,10 +69,62 @@ export function toFilters(a: Answers): HardFilters {
   };
 }
 
+function validWorkplaceName(name: string): boolean {
+  const t = name.trim();
+  return t.length > 0 && t.length <= WORKPLACE_NAME_MAX;
+}
+
+/** Person.workplaceName for a workplace answer: the label people see on the card. */
+export function workplaceName(w: Workplace): string | null {
+  if (!w || w.kind === "none") return null;
+  if (w.kind === "custom") return w.name.trim();
+  return w.unnamed ? null : w.org.name; // never save the placeholder as a real name
+}
+
+/** Everything visible by default (true = shown on other people's cards). */
+export const SHOW_ALL: ProfileVisibility = { country: true, workplace: true, hiring: true };
+
+/**
+ * The whole PUT /api/me body for step 2 (db/Frontend-Support.md): name,
+ * complete filters, the workplace label, badge colour and the complete
+ * visibility object. Only call once nothing is missing.
+ */
+export function toProfileBody(a: Answers, badgeColour: BadgeColour, visibility: ProfileVisibility) {
+  return {
+    name: a.name.trim(),
+    filters: toFilters(a),
+    workplaceName: workplaceName(a.workplace),
+    badgeColour,
+    visibility,
+  };
+}
+
+/** Step 1's answers rebuilt from a saved profile. */
+export function aboutFromProfile(p: {
+  name: string;
+  filters: HardFilters;
+  workplaceName?: string | null;
+}): AboutYou {
+  const label = p.workplaceName ?? null;
+  let workplace: Workplace;
+  if (p.filters.rorId) {
+    // Older profiles kept only the directory ID.
+    workplace = label
+      ? { kind: "org", org: { id: p.filters.rorId, name: label, country: p.filters.country } }
+      : { kind: "org", org: { id: p.filters.rorId, name: "Your saved workplace", country: p.filters.country }, unnamed: true };
+  } else if (label) {
+    workplace = { kind: "custom", name: label };
+  } else {
+    workplace = { kind: "none" };
+  }
+  return { name: p.name, country: p.filters.country, workplace };
+}
+
 /** What the badge shows for a workplace answer. */
 export function workplaceLabel(w: Workplace): string | null {
   if (!w) return null;
-  return w.kind === "org" ? w.org.name : "Independent";
+  if (w.kind === "none") return "Independent";
+  return w.kind === "org" ? w.org.name : w.name.trim();
 }
 
 /** What a failed save should tell the user, from the API's status and `{ error }` body. */

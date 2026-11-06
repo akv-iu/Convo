@@ -15,6 +15,7 @@ const KEY = "convo_onboarding_draft";
 
 export const Workplace = z.union([
   z.object({ kind: z.literal("org"), org: RorMatch }),
+  z.object({ kind: z.literal("custom"), name: z.string().trim().min(1).max(200) }),
   z.object({ kind: z.literal("none") }),
 ]);
 export type Workplace = z.infer<typeof Workplace> | null;

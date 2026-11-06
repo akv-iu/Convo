@@ -106,6 +106,19 @@ test.describe("about you (step 1)", () => {
     expect(JSON.parse((await draft(page)) ?? "null")).toMatchObject({ workplace: { kind: "none" }, country: "US" });
   });
 
+  test("a workplace that isn't listed can be used as typed", async ({ page }) => {
+    await nameField(page).fill("Grace Hopper");
+    await search(page).fill("Acme Robotics");
+    await page.getByRole("option", { name: /Use .Acme Robotics./ }).click({ timeout: 10_000 });
+    await expect(page.getByText("Added by you")).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "Not with an organisation" })).toHaveCount(0);
+    await country(page).selectOption("US");
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
+    expect(JSON.parse((await draft(page)) ?? "null")).toMatchObject({ workplace: { kind: "custom", name: "Acme Robotics" } });
+    await expect(page.getByText("Acme Robotics").locator("visible=true").first()).toBeVisible(); // the badge on step 2
+  });
+
   test("the data note stays tucked behind Your data until asked for", async ({ page }) => {
     const note = page.getByText(/We only use public info and anything you upload/);
     await expect(note).toBeHidden();

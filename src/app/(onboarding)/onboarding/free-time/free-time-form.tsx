@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
+import { showSavedColour } from "../../_components/badge-prefs";
 import { countryName } from "../countries";
 import { loadProblem } from "../profile/edits";
 import {
@@ -67,7 +68,11 @@ export function FreeTimeForm() {
     let live = true;
     fetch("/api/me", { cache: "no-store" })
       .then((r) => (r.ok ? (r.json() as Promise<Person>) : null))
-      .then((p) => live && p && setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country }))
+      .then((p) => {
+        if (!live || !p) return;
+        showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
+        setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country });
+      })
       .catch(() => {});
     return () => {
       live = false;

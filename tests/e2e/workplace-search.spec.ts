@@ -55,7 +55,27 @@ test.describe("workplace search (step 1)", () => {
   test("a signed-out search (real API before sign-in) explains what to do", async ({ page }) => {
     await page.route("**/api/ror?**", (route) => route.fulfill({ status: 401, json: { error: "sign in first" } }));
     await search(page).fill("stan");
-    await expect(page.getByRole("status")).toContainText("Workplace search isn't available yet. Pick Not with an organisation");
+    await expect(page.getByRole("status")).toContainText("Workplace search isn't available yet. Use the name as you typed it");
+    await page.getByRole("button", { name: /Use .stan./ }).click();
+    await expect(page.getByText("Added by you")).toBeVisible();
+  });
+
+  test("no matches offers the name as typed, and Enter uses it", async ({ page }) => {
+    await page.route("**/api/ror?**", (route) => route.fulfill({ json: [] }));
+    await search(page).fill("Tiny Startup");
+    await expect(page.getByRole("status")).toContainText("No workplaces match");
+    await expect(page.getByRole("option", { name: /Use .Tiny Startup./ })).toHaveAttribute("aria-selected", "true");
+    await search(page).press("Enter");
+    await expect(page.getByText("Tiny Startup", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Change workplace" }).click();
+    await expect(search(page)).toBeFocused();
+  });
+
+  test("the name as typed is the last option after real matches", async ({ page }) => {
+    await search(page).fill("oxford");
+    const options = page.getByRole("listbox", { name: "Workplaces" }).getByRole("option");
+    await expect(options.first()).toContainText("University of Oxford");
+    await expect(options.last()).toContainText("Use “oxford”");
   });
 
   test("changing a completed search cannot select its old result during debounce", async ({ page }) => {

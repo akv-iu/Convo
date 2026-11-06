@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Browser, type Page, type Request } from "@playwright/test";
 
 /**
  * Step 2, "Your badge". Runs on the fake API, whose profiles are shared by
@@ -21,6 +21,11 @@ const stripeColour = (page: Page) =>
     .evaluateAll((els) => els.filter((el) => el.checkVisibility()).map((el) => getComputedStyle(el).backgroundColor)[0]);
 
 const OXFORD = { id: "https://ror.org/052gg0110", name: "University of Oxford", country: "GB" };
+const SHOW_ALL = { country: true, workplace: true, hiring: true };
+const LILAC = "rgb(196, 181, 253)";
+const CORAL = "rgb(255, 163, 138)";
+const visibilitySwitch = (page: Page, name: string) =>
+  page.getByRole("group", { name: "Show on your badge" }).getByRole("switch", { name });
 
 /** Leave step 1's answers in this tab, as step 1 would, then open step 2. */
 async function openWithDraft(page: Page, person: string, draft: object = { name: "Ada Lovelace", country: "GB", workplace: { kind: "org", org: OXFORD } }) {
@@ -35,6 +40,12 @@ async function stored(page: Page, person: string) {
   const res = await page.request.get("/api/me", { headers: { "x-demo-user": person } });
   expect(res.ok()).toBe(true);
   return res.json();
+}
+
+/** A second, separate browser (no cookies or session storage), as another device would be. */
+async function freshBrowser(browser: Browser, person: string) {
+  const context = await browser.newContext({ extraHTTPHeaders: { "x-demo-user": person } });
+  return context.newPage();
 }
 
 test.describe("your badge (step 2)", () => {
@@ -53,22 +64,92 @@ test.describe("your badge (step 2)", () => {
     await page.getByText("Yes, I'm hiring", { exact: true }).click();
     await expect(visibleBadge(page)).toContainText("Hiring");
     await page.getByRole("radio", { name: "Lilac" }).check({ force: true });
-    await expect.poll(() => stripeColour(page)).toBe("rgb(196, 181, 253)");
+    await expect.poll(() => stripeColour(page)).toBe(LILAC);
 
     const saving = page.waitForRequest(isSave);
     await continueButton(page).click();
     expect((await saving).postDataJSON()).toEqual({
       name: "Ada Lovelace",
       filters: { country: "GB", rorId: OXFORD.id, hiring: true },
+      workplaceName: "University of Oxford",
+      badgeColour: "lilac",
+      visibility: SHOW_ALL,
     });
     await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
 
     const me = await stored(page, "p_004");
-    expect(me.name).toBe("Ada Lovelace");
-    expect(me.filters).toEqual({ country: "GB", rorId: OXFORD.id, hiring: true });
+    expect(me).toMatchObject({
+      name: "Ada Lovelace",
+      filters: { country: "GB", rorId: OXFORD.id, hiring: true },
+      workplaceName: "University of Oxford",
+      badgeColour: "lilac",
+      visibility: SHOW_ALL,
+    });
     expect(await page.evaluate(() => sessionStorage.getItem("convo_onboarding_draft"))).toBeNull();
     // The colour carries on to step 3's badge.
-    await expect.poll(() => stripeColour(page)).toBe("rgb(196, 181, 253)");
+    await expect.poll(() => stripeColour(page)).toBe(LILAC);
+  });
+
+  test("a typed workplace and colour survive a reload and another browser", async ({ page, browser, isMobile }, testInfo) => {
+    // One fixture person per project, so the phone and laptop runs can't overwrite each other.
+    const person = isMobile ? "p_006" : "p_001";
+    const acme = `Acme Robotics ${testInfo.project.name}`;
+    await openWithDraft(page, person, { name: "Grace Hopper", country: "US", workplace: { kind: "custom", name: acme } });
+    await expect(visibleBadge(page)).toContainText(acme);
+    await page.getByText("Not right now", { exact: true }).click();
+    await page.getByRole("radio", { name: "Coral" }).check({ force: true });
+    const saving = page.waitForRequest(isSave);
+    await continueButton(page).click();
+    expect((await saving).postDataJSON()).toMatchObject({ filters: { rorId: null }, workplaceName: acme, badgeColour: "coral" });
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
+    expect(await stored(page, person)).toMatchObject({ name: "Grace Hopper", workplaceName: acme, badgeColour: "coral" });
+
+    // Same browser, fresh load of step 2 (the draft is gone, so this is the saved profile).
+    await page.goto("/onboarding");
+    await expect(visibleBadge(page)).toContainText(acme);
+    await expect(page.getByRole("radio", { name: "Coral" })).toBeChecked();
+
+    // Another browser: no draft and no colour cookie, only the saved profile.
+    const other = await freshBrowser(browser, person);
+    await other.goto("/onboarding");
+    await expect(visibleBadge(other)).toContainText(acme);
+    await expect(visibleBadge(other)).toContainText("Grace Hopper");
+    await expect(other.getByRole("radio", { name: "Coral" })).toBeChecked();
+    await expect.poll(() => stripeColour(other)).toBe(CORAL);
+    await other.goto("/onboarding/profile");
+    await expect.poll(() => stripeColour(other)).toBe(CORAL);
+    await other.context().close();
+  });
+
+  test("hiding sections saves the whole visibility object, and it's restored", async ({ page, isMobile }) => {
+    // A returning user (no draft), so the save writes back their own details and only visibility changes.
+    const person = isMobile ? "p_005" : "p_003";
+    const reset = () => page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: SHOW_ALL } });
+    expect((await reset()).ok()).toBe(true);
+    await page.setExtraHTTPHeaders({ "x-demo-user": person });
+    await page.goto("/onboarding");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
+    const before = await stored(page, person);
+    await expect(visibilitySwitch(page, "Country")).toBeChecked();
+    await visibilitySwitch(page, "Country").uncheck({ force: true });
+    await visibilitySwitch(page, "Hiring status").uncheck({ force: true });
+    await expect(page.getByRole("group", { name: "Show on your badge" })).toContainText("Hidden");
+
+    const saving = page.waitForRequest(isSave);
+    await continueButton(page).click();
+    const hidden = { country: false, workplace: true, hiring: false };
+    expect((await saving).postDataJSON().visibility).toEqual(hidden);
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
+    const after = await stored(page, person);
+    expect(after.visibility).toEqual(hidden);
+    // Nothing else about them changed (an older profile's missing workplace name stays missing).
+    for (const key of ["name", "filters", "workplaceName", "badgeColour"]) expect(after[key], key).toEqual(before[key]);
+
+    await page.goto("/onboarding");
+    await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
+    await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    await expect(visibilitySwitch(page, "Hiring status")).not.toBeChecked();
+    expect((await reset()).ok()).toBe(true);
   });
 
   test("Continue without a hiring answer explains it and sends nothing", async ({ page }) => {
@@ -143,20 +224,34 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
-  test("show/hide on the card is marked coming soon, not offered as working", async ({ page }) => {
-    await openWithDraft(page, "p_003");
-    const group = page.getByRole("group", { name: "Show on your badge" });
-    await expect(group).toContainText("Coming soon");
-    for (const box of await group.getByRole("checkbox").all()) await expect(box).toBeDisabled();
-  });
-
-  test("a fresh load shows the saved colour, with one form on the page", async ({ page, baseURL }) => {
+  test("the saved profile's colour wins over this browser's preview cookie", async ({ page, baseURL }) => {
     await page.context().addCookies([
       { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },
     ]);
+    // A saved lilac profile, without changing the shared fake.
+    await page.route("**/api/me", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      const res = await route.fetch();
+      return route.fulfill({ response: res, json: { ...(await res.json()), badgeColour: "lilac" } });
+    });
     await openWithDraft(page, "p_003");
-    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 163, 138)");
+    await expect(page.getByRole("radio", { name: "Lilac" })).toBeChecked();
+    await expect.poll(() => stripeColour(page)).toBe(LILAC);
     await expect(page.locator("form:visible")).toHaveCount(1);
+    const cookie = (await page.context().cookies()).find((c) => c.name === "convo_badge");
+    expect(JSON.parse(decodeURIComponent(cookie?.value ?? "{}"))).toEqual({ colour: "lilac" });
+  });
+
+  test("before there is a saved profile, the preview cookie's colour is used", async ({ page, baseURL }) => {
+    await page.context().addCookies([
+      { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },
+    ]);
+    await page.route("**/api/me", (route) =>
+      route.request().method() === "GET" ? route.fulfill({ status: 409, json: { error: "Complete onboarding first." } }) : route.fallback(),
+    );
+    await openWithDraft(page, "p_003");
+    await expect(page.getByRole("radio", { name: "Coral" })).toBeChecked();
+    await expect.poll(() => stripeColour(page)).toBe(CORAL);
   });
 
   for (const scheme of ["light", "dark"] as const) {

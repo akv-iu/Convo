@@ -93,3 +93,15 @@ export function writeBadgePrefs(patch: Partial<BadgePrefs>): BadgePrefs {
   document.cookie = `${BADGE_COOKIE}=${encodeURIComponent(serializeBadgePrefs(next))}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
   return next;
 }
+
+/**
+ * Shows a saved profile's colour on this page and keeps it for the next
+ * steps. The profile (GET /api/me badgeColour) is the source of truth;
+ * the cookie is only how the colour reaches the first paint of each step.
+ */
+export function showSavedColour(colour: BadgeColour | undefined): BadgeColour {
+  const next = colour ?? DEFAULT_COLOUR;
+  writeBadgePrefs({ colour: next });
+  document.querySelector<HTMLElement>(".onb")?.style.setProperty("--badge", colourHex(next));
+  return next;
+}

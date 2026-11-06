@@ -14,19 +14,29 @@
  * Nothing is shown until loading finishes, so a late load can't overwrite
  * what the user has already chosen.
  *
- * Show/hide on the card and saving the colour to the profile wait for B's
- * contract update; until then the colour lives in the convo_badge cookie
- * and the show/hide switches are marked coming soon.
+ * The save also carries the workplace label, badge colour and the
+ * complete visibility object (db/Frontend-Support.md). The saved profile's
+ * colour wins over the convo_badge cookie, which is only a preview for
+ * the first paint. Visibility affects other people's cards only.
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import type { Person } from "@/contracts/types";
+import type { Person, ProfileVisibility } from "@/contracts/types";
 import { Badge, BadgeChip } from "../_components/badge";
-import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
+import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
 import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
 import { clearDraft, readDraft } from "../_components/draft";
-import { missingAnswers, missingMessage, saveErrorMessage, toFilters, workplaceLabel, type AboutYou } from "./answers";
+import {
+  aboutFromProfile,
+  missingAnswers,
+  missingMessage,
+  saveErrorMessage,
+  SHOW_ALL,
+  toProfileBody,
+  workplaceLabel,
+  type AboutYou,
+} from "./answers";
 import { countryName } from "./countries";
 
 export const NEXT_STEP = "/onboarding/free-time";
@@ -42,22 +52,14 @@ type Load =
   | { state: "start" } // no step 1 answers anywhere: begin at step 1
   | { state: "failed"; status: number };
 
-/** Step 1's answers rebuilt from a saved profile (the workplace name isn't stored, only its ROR ID). */
-function aboutFromProfile(p: Person): AboutYou {
-  return {
-    name: p.name,
-    country: p.filters.country,
-    workplace: p.filters.rorId
-      ? { kind: "org", org: { id: p.filters.rorId, name: "Your saved workplace", country: p.filters.country } }
-      : { kind: "none" },
-  };
-}
-
-const visibility = [
+const sections = [
   { id: "country", label: "Country" },
   { id: "workplace", label: "Workplace" },
   { id: "hiring", label: "Hiring status" },
 ] as const;
+
+/** Faded on your own preview when hidden from other people. */
+const hiddenClass = (shown: boolean) => (shown ? "" : "opacity-35");
 
 export function BadgeForm() {
   const router = useRouter();
@@ -65,6 +67,7 @@ export function BadgeForm() {
   const [attempt, setAttempt] = useState(0);
   const [hiring, setHiring] = useState<boolean | null>(null);
   const [colour, setColour] = useState<BadgeColour>(DEFAULT_COLOUR);
+  const [visibility, setVisibility] = useState<ProfileVisibility>(SHOW_ALL);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -84,7 +87,9 @@ export function BadgeForm() {
         status = 0;
       }
       if (!live) return;
-      setColour(readBadgePrefs().colour);
+      // The saved profile's colour is the truth; before there is one, the cookie preview is all we have.
+      setColour(profile ? showSavedColour(profile.badgeColour) : readBadgePrefs().colour);
+      setVisibility(profile?.visibility ?? SHOW_ALL);
 
       if (draft) {
         // Step 1 just ran in this tab; the profile only adds the GitHub handle and any saved hiring answer.
@@ -156,18 +161,20 @@ export function BadgeForm() {
       return;
     }
     const picked = new FormData(e.currentTarget).get("colour");
+    const badgeColour = isBadgeColour(picked) ? picked : colour;
     setSaving(true);
     try {
       const res = await fetch("/api/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: about.name.trim(), filters: toFilters(answers) }),
+        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility)),
       });
       if (!res.ok) {
         setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
         return;
       }
-      if (isBadgeColour(picked)) writeBadgePrefs({ colour: picked });
+      const saved = (await res.json().catch(() => null)) as Person | null;
+      writeBadgePrefs({ colour: saved?.badgeColour ?? badgeColour });
       clearDraft();
       router.push(NEXT_STEP);
     } catch {
@@ -178,12 +185,16 @@ export function BadgeForm() {
   }
 
   const badge = (
-    <Badge name={about.name} handle={handle ?? "your-github"} label={countryName(about.country)}>
-      <span className="mt-4 block">
+    <Badge
+      name={about.name}
+      handle={handle ?? "your-github"}
+      label={<span className={hiddenClass(visibility.country)}>{countryName(about.country)}</span>}
+    >
+      <span className={`mt-4 block ${hiddenClass(visibility.workplace)}`}>
         <span className="block text-xs text-muted">Works at</span>
         <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
       </span>
-      <span className="flex flex-wrap gap-1.5 pt-3">
+      <span className={`flex flex-wrap gap-1.5 pt-3 ${hiddenClass(visibility.hiring)}`}>
         {hiring === null ? (
           <BadgeChip className="w-20" />
         ) : (
@@ -238,16 +249,28 @@ export function BadgeForm() {
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className={legendClass}>Show on your badge</legend>
             <p id="visibility-note" className="-mt-1 mb-3 text-sm text-muted">
-              Coming soon: choose what other people see on your card.
+              What other people see on your card. Your name and GitHub are always shown.
             </p>
             <div className="flex flex-col gap-2">
-              {visibility.map((v) => (
-                <label key={v.id} className="flex min-h-12 cursor-not-allowed items-center gap-4 rounded-xl border-2 border-border bg-surface px-4 py-2">
+              {sections.map((v) => (
+                <label
+                  key={v.id}
+                  className="flex min-h-12 cursor-pointer items-center gap-4 rounded-xl border-2 border-border bg-surface px-4 py-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
+                >
                   <span className="flex-1 font-semibold">{v.label}</span>
-                  <input type="checkbox" checked readOnly disabled className="peer sr-only" />
+                  <span className="text-sm text-muted" aria-hidden="true">
+                    {visibility[v.id] ? "Shown" : "Hidden"}
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={visibility[v.id]}
+                    onChange={(e) => setVisibility((cur) => ({ ...cur, [v.id]: e.target.checked }))}
+                    className="peer sr-only"
+                  />
                   <span
                     aria-hidden="true"
-                    className="relative h-7 w-12 shrink-0 rounded-full bg-accent opacity-50 after:absolute after:left-6 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow"
+                    className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
                   />
                 </label>
               ))}
