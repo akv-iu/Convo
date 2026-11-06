@@ -35,6 +35,15 @@ npm run lint && npm run typecheck && npm test
 
 Playwright (`npm run test:e2e`) for anything that changes a screen. Tests come with the code: a PR for a step includes the tests that prove it. Tests never call OpenAI, Elasticsearch or Postgres; use the fakes or recorded replies.
 
+## Quality gates
+
+`main` is protected: changes arrive by PR, and four checks must pass: `Lint, types, tests`, `Click-through (fake API)`, `SonarCloud Code Analysis` and `Gitar`.
+
+- **SonarQube Cloud** applies the default "Sonar way" gate to new code: at least 80% test coverage, at most 3% duplication, no new bugs or vulnerabilities, a maintainability rating of A (fix-up effort under 5% of the new code), and every security hotspot reviewed. Coverage and duplication count once a PR has 20 or more new lines. Screens are excluded from coverage because Playwright tests them. When the gate fails, the `Why the quality gate failed` CI step lists the conditions, issues and files with untested lines.
+- **Gitar** reviews every PR against this file and `.gitar/review/`, runs the rules in `.gitar/rules/`, and explains CI failures. Fix blocking findings or reply to them with the reason. Comment `gitar auto-apply:on` to let it push fixes within `.gitar/config/apply.md`. Never use the `gitar-skip` label to get past a review.
+- Never silence a gate to get a merge: see `.gitar/instructions/keep-the-gates-honest.md`.
+- Stacked PRs (based on another branch) get CI and Gitar but no Sonar scan. After one is retargeted to `main`, push a commit so the Sonar check runs.
+
 ## Review and handoff
 
 - When reviewing Person A's PR, inspect the code, contracts and feature behaviour. Use the contributor's checks and current CI results; do not rerun lint or build locally just for that review.
