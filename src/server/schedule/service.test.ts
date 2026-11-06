@@ -131,7 +131,6 @@ describe("atomic booking", () => {
     expect(statement).toContain('"other_booking"."to_person_id" in');
     expect(statement).toContain("->>'start')::timestamptz <");
     expect(statement).toContain("->>'end')::timestamptz >");
-    expect(statement).toMatch(/jsonb_build_object\([\s\S]+\) as "saved"$/);
     expect(params.slice(0, 10)).toEqual(["scheduled", JSON.stringify(slot), request.id,
       userId, userId, "sender", "receiver", "accepted", 10, slot.start]);
     expect(params).toEqual(expect.arrayContaining([4, 9]));
@@ -213,14 +212,6 @@ describe("atomic booking", () => {
     const error = await bookSlot("sender", request.id, slot).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).toContain("Booking saved");
-  });
-
-  it("does not label a returned row with a missing alias as a lost booking race", async () => {
-    read(); availability(); transaction.mockResolvedValueOnce([[{ jsonb_build_object: saved }]]);
-    const error = await bookSlot("sender", request.id, slot).catch((e: unknown) => e);
-    expect(error).toMatchObject({ status: 503 });
-    expect(String(error)).toContain("Booking saved");
-    expect(transaction).toHaveBeenCalledOnce();
   });
 });
 

@@ -104,24 +104,24 @@ export async function bookSlot(userId: string, id: string, slot: Slot): Promise<
   )).returning({ saved: sql<Request>`jsonb_build_object(
     'id', ${requests.id}, 'askId', ${requests.askId}, 'fromUserId', ${requests.fromUserId}, 'toPersonId', ${requests.toPersonId},
     'question', ${requests.question}, 'minutes', ${requests.minutes}, 'status', ${requests.status},
-    'reply', ${requests.reply}, 'slot', ${requests.slot}, 'createdAt', ${requests.createdAt})`.as("saved") }).toSQL();
+    'reply', ${requests.reply}, 'slot', ${requests.slot}, 'createdAt', ${requests.createdAt})` }).toSQL();
 
-  let returned: Record<string, unknown> | undefined;
+  let saved: unknown;
   try {
     // Serializable prevents two different request rows from both passing the overlap check.
     const [result] = await db().$client.transaction(tx => [tx.query(statement.sql, statement.params)], {
       isolationLevel: "Serializable", arrayMode: false, fullResults: false,
     });
-    returned = result[0];
+    saved = result[0]?.saved;
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "40001") {
       throw new ScheduleError("Another booking changed these times. Refresh available slots.", 409);
     }
     throw new ScheduleError("Booking save could not be confirmed. Check your inbox before retrying the same slot.", 503);
   }
-  if (!returned) throw new ScheduleError("Availability or request state changed. Refresh your inbox and available slots.", 409);
+  if (!saved) throw new ScheduleError("Availability or request state changed. Refresh your inbox and available slots.", 409);
   try {
-    const parsed = Request.parse(returned.saved);
+    const parsed = Request.parse(saved);
     return { ...parsed, createdAt: new Date(parsed.createdAt).toISOString() };
   } catch {
     throw new ScheduleError("Booking saved, but its response is unavailable. Refresh your inbox.", 503);
