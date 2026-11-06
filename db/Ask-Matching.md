@@ -198,9 +198,12 @@ result differs. Keep the browser tab open until cleanup.
    ```
 
 10. Open `http://localhost:3000/api/auth/signout` and confirm. In its console,
-    paste the helper again if necessary, then run:
+    paste the helper again if necessary. Stay signed out for this entire step.
+    The guard below stops the write checks if your session is still active:
 
     ```javascript
+    var signedOut = await api("me");
+    if (signedOut.status !== 401) throw new Error("Stop: you are still signed in");
     await api("refine", { text: "scheduler preemption" });
     await api("match", { askId: "signed-out-test" });
     ```
