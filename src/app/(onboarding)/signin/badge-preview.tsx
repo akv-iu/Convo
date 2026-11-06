@@ -1,82 +1,82 @@
 /**
- * A conference badge that previews what each consent choice adds. It has
- * no state of its own: each optional row opens or closes with CSS `:has()`
- * on the surrounding form's checkboxes (group/consent), so it reacts
- * instantly and works without JavaScript. Decorative for screen readers;
- * the checkboxes carry the meaning.
+ * Step 1's badge: previews what each consent choice adds, in the chosen
+ * colour. It has no state of its own. Everything reacts with CSS `:has()`
+ * on the surrounding form (group/consent), so it is instant and works
+ * without JavaScript:
+ * - each optional row opens when its switch is on; when off, a small
+ *   "+ Bio" stub stays so it can be brought back;
+ * - each row is a <label> for its switch, so tapping the badge turns that
+ *   source on or off, exactly like the switch;
+ * - the stripe colour follows the colour picker (see the form's classes).
  */
+import type { ReactNode } from "react";
+import { Badge, BadgeBar, BadgeChip } from "../_components/badge";
+import type { ConsentSource } from "../consent";
 
-/** Opens when the named checkbox in the consent form is ticked. */
-const row: Record<"profile" | "repos" | "orgs", string> = {
-  profile: "group-has-[input[name=profile]:checked]/consent:grid-rows-[1fr] group-has-[input[name=profile]:checked]/consent:opacity-100",
-  repos: "group-has-[input[name=repos]:checked]/consent:grid-rows-[1fr] group-has-[input[name=repos]:checked]/consent:opacity-100",
-  orgs: "group-has-[input[name=orgs]:checked]/consent:grid-rows-[1fr] group-has-[input[name=orgs]:checked]/consent:opacity-100",
+/** Classes keyed by the switch they follow. Written out in full so Tailwind generates them. */
+const on: Record<ConsentSource, string> = {
+  profile: "group-has-[#consent-profile:checked]/consent:grid-rows-[1fr] group-has-[#consent-profile:checked]/consent:opacity-100",
+  repos: "group-has-[#consent-repos:checked]/consent:grid-rows-[1fr] group-has-[#consent-repos:checked]/consent:opacity-100",
+  orgs: "group-has-[#consent-orgs:checked]/consent:grid-rows-[1fr] group-has-[#consent-orgs:checked]/consent:opacity-100",
+};
+const stubOff: Record<ConsentSource, string> = {
+  profile: "group-has-[#consent-profile:checked]/consent:hidden",
+  repos: "group-has-[#consent-repos:checked]/consent:hidden",
+  orgs: "group-has-[#consent-orgs:checked]/consent:hidden",
 };
 
-const closed =
+const folding =
   "grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none";
 
-function Bar({ className = "" }: { className?: string }) {
-  return <span className={`block h-2.5 rounded-full bg-[var(--skeleton)] ${className}`} />;
-}
-
-function Chip({ className = "" }: { className?: string }) {
-  return <span className={`inline-block h-6 rounded-md bg-[var(--skeleton)] ${className}`} />;
+function Row({ source, stub, children }: { source: ConsentSource; stub: string; children: ReactNode }) {
+  return (
+    <label htmlFor={`consent-${source}`} className="group/row block cursor-pointer">
+      <span className={`${folding} ${on[source]}`}>
+        <span className="block overflow-hidden">
+          <span className="-mx-2 block rounded-lg px-2 transition-colors group-hover/row:bg-accent/10 motion-reduce:transition-none">
+            {children}
+          </span>
+        </span>
+      </span>
+      <span
+        className={`mt-3 inline-flex h-7 items-center rounded-full border border-dashed border-border px-3 text-xs text-muted group-hover/row:border-accent group-hover/row:text-foreground ${stubOff[source]}`}
+      >
+        {stub}
+      </span>
+    </label>
+  );
 }
 
 export function BadgePreview() {
   return (
-    <div aria-hidden="true" className="relative mx-auto w-full max-w-[19rem] lg:mt-16">
-      {/* lanyard */}
-      <div className="absolute -top-16 left-1/2 hidden h-20 w-6 -translate-x-1/2 rounded-b-sm bg-accent lg:block" />
-      <div className="absolute -top-2 left-1/2 hidden h-5 w-10 -translate-x-1/2 rounded-md border-4 border-foreground/70 lg:block" />
+    <Badge>
+      <Row source="profile" stub="+ Bio">
+        <span className="flex flex-col gap-1.5 pb-1 pt-4">
+          <BadgeBar className="w-full" />
+          <BadgeBar className="w-4/5" />
+        </span>
+      </Row>
 
-      <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] ring-1 ring-border lg:rotate-[-2.5deg]">
-        <div className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[#14213d]">
-          <span>Convo</span>
-          <span className="font-normal">Salt Lake City</span>
-        </div>
+      <Row source="repos" stub="+ Repos">
+        <span className="block pb-1">
+          <span className="block pt-4 text-xs text-muted">Can help with</span>
+          <span className="flex flex-wrap gap-1.5 pt-1.5">
+            <BadgeChip className="w-12 bg-accent/25" />
+            <BadgeChip className="w-20 bg-accent/25" />
+            <BadgeChip className="w-14 bg-accent/25" />
+          </span>
+        </span>
+      </Row>
 
-        <div className="px-5 pb-5 pt-4">
-          <div className="flex items-center gap-3">
-            <span className="size-14 shrink-0 rounded-full bg-accent/80" />
-            <div className="min-w-0 flex-1">
-              <p className="text-2xl font-extrabold leading-tight tracking-tight [font-stretch:85%]">Your name</p>
-              <p className="text-sm text-muted">@your-github</p>
-            </div>
-          </div>
-
-          <div className={`${closed} ${row.profile}`}>
-            <div className="overflow-hidden">
-              <div className="flex flex-col gap-1.5 pt-4">
-                <Bar className="w-full" />
-                <Bar className="w-4/5" />
-              </div>
-            </div>
-          </div>
-
-          <div className={`${closed} ${row.repos}`}>
-            <div className="overflow-hidden">
-              <p className="pt-4 text-xs text-muted">Can help with</p>
-              <div className="flex flex-wrap gap-1.5 pt-1.5">
-                <Chip className="w-12 bg-accent/25" />
-                <Chip className="w-20 bg-accent/25" />
-                <Chip className="w-14 bg-accent/25" />
-              </div>
-            </div>
-          </div>
-
-          <div className={`${closed} ${row.orgs}`}>
-            <div className="overflow-hidden">
-              <p className="pt-4 text-xs text-muted">Part of</p>
-              <div className="flex flex-wrap gap-1.5 pt-1.5">
-                <Chip className="w-16" />
-                <Chip className="w-24" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <Row source="orgs" stub="+ Orgs">
+        <span className="block pb-1">
+          <span className="block pt-4 text-xs text-muted">Part of</span>
+          <span className="flex flex-wrap gap-1.5 pt-1.5">
+            <BadgeChip className="w-16" />
+            <BadgeChip className="w-24" />
+          </span>
+        </span>
+      </Row>
+    </Badge>
   );
 }
