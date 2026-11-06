@@ -53,7 +53,10 @@ describe("ingestPerson", () => {
     expect(ops[3]).toMatchObject({ kind: "profile", title: person.name });
     expect(call(es.deleteByQuery)).toMatchObject({
       refresh: true, conflicts: "proceed",
-      query: { bool: { filter: [{ term: { person_id: "p_test" } }, { range: { revision: { lt: 7 } } }] } },
+      query: { bool: {
+        filter: [{ term: { person_id: "p_test" } }, { range: { revision: { lte: 7 } } }],
+        must_not: [{ ids: { values: ["p_test:repo:sched", "p_test:profile"] } }],
+      } },
     });
   });
 

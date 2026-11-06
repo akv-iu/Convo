@@ -94,11 +94,14 @@ const failedOp = (items: estypes.BulkResponseItem[]) =>
   items.find((op) => op.status >= 300 && op.status !== 409 && op.status !== 404);
 
 /** After a save replaces the evidence list: remove this person's documents from older saves. */
-async function removeOlderEvidence(es: Client, personId: string, version: number): Promise<void> {
+async function removeOlderEvidence(es: Client, personId: string, version: number, keep: string[]): Promise<void> {
   for (const attempt of [1, 2]) {
     const result = await es.deleteByQuery({
       index: INDEX.evidence, conflicts: "proceed", refresh: true,
-      query: { bool: { filter: [{ term: { person_id: personId } }, { range: { revision: { lt: version } } }] } },
+      query: { bool: {
+        filter: [{ term: { person_id: personId } }, { range: { revision: { lte: version } } }],
+        must_not: [{ ids: { values: keep } }],
+      } },
     });
     if (result.timed_out || result.failures?.length) throw new Error("Removing replaced evidence failed. Retry the same save.");
     if (!result.version_conflicts) return;
@@ -254,7 +257,7 @@ export const elasticSearch: SearchService = {
     });
     const failed = failedOp(result.items.flatMap((item) => item.index ?? item.delete ?? []));
     if (failed) throw new Error(`Evidence indexing failed: ${failed.error?.reason ?? "unknown error"}`);
-    if (evidence) await removeOlderEvidence(es, person.id, version); // a new list replaces the old one
+    if (evidence) await removeOlderEvidence(es, person.id, version, ids); // a new list replaces the old one
     await settleIfSuperseded(es, person.id, version, ids);
   },
 
