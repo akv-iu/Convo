@@ -15,12 +15,15 @@ describe("card visibility", () => {
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
     expect(card.badges).toEqual(["synthetic"]);
+    expect(card.person).not.toHaveProperty("visibility");
     expect(routes.match.response.parse([card])).toEqual([card]);
     expect(match).toEqual(before);
   });
   it("hides fields independently and preserves ranking, evidence and visible fields", () => {
     const card = visibleCard(match, { country: false, workplace: true, hiring: true });
-    expect(card).toMatchObject({ ...match, person: { ...match.person, visibility: { country: false, workplace: true, hiring: true }, filters: { ...match.person.filters, country: null } }, badges: ["hiring", "synthetic"] });
+    const { visibility: _settings, ...person } = match.person; // eslint-disable-line @typescript-eslint/no-unused-vars
+    expect(card.person).not.toHaveProperty("visibility");
+    expect(card).toMatchObject({ ...match, person: { ...person, filters: { ...match.person.filters, country: null } }, badges: ["hiring", "synthetic"] });
   });
   it("keeps older profiles visible by default", () => {
     expect(visibleCard({ ...match, person: { ...match.person, visibility: undefined } }).person.filters).toEqual(match.person.filters);

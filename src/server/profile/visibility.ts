@@ -2,11 +2,13 @@ import { ProfileVisibility, type MatchResult } from "@/contracts/types";
 
 export function visibleCard(match: MatchResult, visibility = match.person.visibility): MatchResult {
   const shown = ProfileVisibility.parse(visibility ?? { country: true, workplace: true, hiring: true });
+  // The owner's settings stay private: a card must not reveal which sections were hidden.
+  const person = { ...match.person };
+  delete person.visibility;
   return {
     ...match,
     person: {
-      ...match.person,
-      visibility: shown,
+      ...person,
       workplaceName: shown.workplace ? match.person.workplaceName : null,
       filters: {
         country: shown.country ? match.person.filters.country : null,
