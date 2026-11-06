@@ -38,8 +38,10 @@ afterEach(() => {
 });
 
 describe("refineAsk", () => {
+  const modelReply = { text: ask.text, type: ask.type };
+
   it("asks the model once with a strict schema, then caches the reply", async () => {
-    create.mockResolvedValueOnce(reply(ask));
+    create.mockResolvedValueOnce(reply(modelReply));
 
     await expect(openAi.refineAsk("  k8s preemption?  ", requester)).resolves.toEqual(ask);
 
@@ -49,11 +51,11 @@ describe("refineAsk", () => {
       text: { format: { type: "json_schema", name: "refined_ask", strict: true } },
     });
     expect(statements("insert")).toHaveLength(1);
-    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify(ask)]));
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify(modelReply)]));
   });
 
   it("answers a repeat from the cache without calling the model", async () => {
-    cacheHolds(ask);
+    cacheHolds(modelReply);
 
     await expect(openAi.refineAsk("k8s preemption?", requester)).resolves.toEqual(ask);
 
@@ -61,11 +63,19 @@ describe("refineAsk", () => {
     expect(statements("insert")).toHaveLength(0);
   });
 
+  it("sets the meeting length from the kind of ask", async () => {
+    create.mockResolvedValueOnce(reply({ text: "Would you be open to an SRE role working with Argo?", type: "hiring" }));
+    create.mockResolvedValueOnce(reply({ text: "What does Grafana Labs look for in candidates?", type: "career" }));
+
+    await expect(openAi.refineAsk("hiring SREs who know argo", requester)).resolves.toMatchObject({ type: "hiring", minutes: 20 });
+    await expect(openAi.refineAsk("I want a job at Grafana Labs", requester)).resolves.toMatchObject({ type: "career", minutes: 15 });
+  });
+
   it("rejects a reply that is blank or cut off, and caches neither", async () => {
-    create.mockResolvedValueOnce(reply({ ...ask, text: "   " }));
+    create.mockResolvedValueOnce(reply({ ...modelReply, text: "   " }));
     await expect(openAi.refineAsk("k8s?", requester)).rejects.toThrow();
 
-    create.mockResolvedValueOnce(reply(ask, { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }));
+    create.mockResolvedValueOnce(reply(modelReply, { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }));
     await expect(openAi.refineAsk("k8s?", requester)).rejects.toThrow("incomplete: max_output_tokens");
 
     expect(statements("insert")).toHaveLength(0);
@@ -73,7 +83,7 @@ describe("refineAsk", () => {
 
   it("still refines when the cache is down", async () => {
     query.mockRejectedValue(new Error("Neon is down"));
-    create.mockResolvedValueOnce(reply(ask));
+    create.mockResolvedValueOnce(reply(modelReply));
 
     await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);
   });
