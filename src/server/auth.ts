@@ -3,23 +3,32 @@
  * user is demo user A, or whoever the x-demo-user header names, so two
  * browser windows can play both sides.
  */
-import NextAuth from "next-auth";
+import NextAuth, { type Profile } from "next-auth";
 import GitHub from "next-auth/providers/github";
+import { cookies } from "next/headers";
 import { DEMO_USER_A } from "@/contracts/fixtures";
 import { config } from "@/server/config";
-import { githubUserId } from "@/server/profile/github";
+import { githubUserId, loadGitHubIdentity } from "@/server/profile/github";
 import { initializeGitHubProfile } from "@/server/profile/persistence";
+import { CONSENT_COOKIE, parseConsent } from "@/server/profile/consent";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  // Public repository reads do not need public_repo's write permission.
-  providers: [GitHub],
+  providers: [GitHub({
+    authorization: { params: { scope: "" } }, // Public information needs no extra OAuth scopes.
+    userinfo: {
+      // GitHub's raw numeric ID differs from Auth.js's generic Profile type.
+      request: async ({ tokens }: { tokens: { access_token?: string } }) => await loadGitHubIdentity(tokens.access_token) as unknown as Profile,
+    },
+    profile: (profile) => ({ id: String(profile.id), name: profile.name ?? profile.login, image: profile.avatar_url }),
+  })],
   callbacks: {
     async signIn({ account, profile }) {
       if (config.fakeApi) return true;
       if (account?.provider !== "github" || !account.access_token) return false;
       try {
-        await initializeGitHubProfile(account.providerAccountId, profile, account.access_token);
+        const consent = parseConsent((await cookies()).get(CONSENT_COOKIE)?.value);
+        await initializeGitHubProfile(account.providerAccountId, profile, account.access_token, consent);
         return true;
       } catch {
         // Provider and database errors may contain credentials; do not log them.
@@ -28,6 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     },
     async jwt({ token, account, profile }) {
+      delete token.email; // Remove email retained by sessions created with the old provider defaults.
       if (account?.provider === "github") token.sub = githubUserId(account.providerAccountId);
       if (account?.access_token) token.githubToken = account.access_token;
       if (profile && typeof profile.login === "string") token.githubLogin = profile.login;
