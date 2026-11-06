@@ -115,12 +115,14 @@ test.describe("about you (A1 step 2)", () => {
     test.skip(isMobile, "keyboard path is checked on the laptop project");
     await search(page).focus();
     await page.keyboard.type("univ");
-    await expect(page.getByRole("option").first()).toBeVisible();
-    await expect(page.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+    // Scoped to the workplace list: the country <select>'s options also have role "option".
+    const options = page.getByRole("listbox", { name: "Workplaces" }).getByRole("option");
+    await expect(options.first()).toBeVisible({ timeout: 10_000 });
+    await expect(options.first()).toHaveAttribute("aria-selected", "true");
 
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("option").nth(1)).toHaveAttribute("aria-selected", "true");
-    const second = (await page.getByRole("option").nth(1).locator("span").first().textContent()) ?? "";
+    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
+    const second = (await options.nth(1).locator("span").first().textContent()) ?? "";
     await page.keyboard.press("Enter");
     await expect(page.getByText(second, { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("listbox")).toHaveCount(0);
@@ -301,11 +303,14 @@ test.describe("about you (A1 step 2)", () => {
       expect((await scan()).violations, "with errors").toEqual([]);
 
       await search(page).fill("univ"); // list open
-      await expect(page.getByRole("option").first()).toBeVisible();
+      // Scope to the workplace list: the country <select>'s hidden options also have role "option".
+      await expect(page.getByRole("listbox", { name: "Workplaces" }).getByRole("option").first()).toBeVisible({
+        timeout: 10_000,
+      });
       expect((await scan()).violations, "with results").toEqual([]);
 
       await page.goto("/onboarding/profile");
-      expect((await scan()).violations, "step 3 placeholder").toEqual([]);
+      expect((await scan()).violations, "step 3").toEqual([]);
     });
   }
 });
