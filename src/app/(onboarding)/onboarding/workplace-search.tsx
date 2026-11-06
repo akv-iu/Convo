@@ -24,7 +24,8 @@ type Search =
   | { state: "error"; message: string };
 
 function searchErrorMessage(status: number): string {
-  if (status === 401) return "Your sign-in has expired. Sign in again to search workplaces.";
+  // Step 1 runs before sign-in; real /api/ror needs a session until B allows signed-out lookups.
+  if (status === 401) return "Workplace search isn't available yet. Pick Not with an organisation, or try again later.";
   if (status === 400) return "That search is too long. Shorten it and try again.";
   return "Workplace search isn't responding right now. Try again in a moment.";
 }

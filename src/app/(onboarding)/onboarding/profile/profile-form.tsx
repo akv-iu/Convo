@@ -1,25 +1,27 @@
 "use client";
 
 /**
- * A1 step 3: "Here's what we learned about you". Loads the profile with
- * GET /api/me, lets the user edit name, bio, skills (languages) and
- * organisations, and saves only what changed with PUT /api/me (B2's
- * handoff, db/Profile-API.md). The badge updates live; tapping a part of
- * it jumps to that field. The badge colour can be changed here too
- * (frontend-only convo_badge cookie, saved on continue).
+ * Step 4, "Your details": shows what was found about the user (the profile
+ * from GET /api/me, as their badge) and asks "Are these the correct
+ * details?".
+ * - Yes finishes onboarding without saving anything.
+ * - No (or tapping a part of the badge) opens the editor: name, bio,
+ *   skills and organisations, plus adding more by upload (coming soon,
+ *   needs Person B's upload route). Saving sends only what changed with
+ *   PUT /api/me (db/Profile-API.md).
+ * The colour is chosen on step 2; this step's badge inherits it.
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
-import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, writeBadgePrefs, type BadgeColour } from "../../_components/badge-prefs";
-import { colourFollowsPicker, ColourPicker } from "../../_components/colour-picker";
 import { saveErrorMessage } from "../answers";
+import { countryName } from "../countries";
 import { ChipEditor } from "./chip-editor";
 import { changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
-export const NEXT_STEP = "/onboarding/free-time";
+export const NEXT_STEP = "/ask";
 
 const FIELD = {
   name: "profile-name",
@@ -27,22 +29,46 @@ const FIELD = {
   skills: "profile-skill",
   orgs: "profile-org",
 } as const;
+type Field = (typeof FIELD)[keyof typeof FIELD];
 
 const inputClass =
   "w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[#c2410c]";
 const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
 const headingClass =
   "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
+const HEADING = "Are these the correct details?";
 
 type Load = { state: "loading" } | { state: "failed"; status: number } | { state: "ready"; person: Person };
 
-/** A badge row that jumps to its field when tapped. */
-function BadgeRow({ field, caption, children }: { field: string; caption: string; children: ReactNode }) {
-  return (
-    <label htmlFor={field} className="-mx-2 mt-3 block cursor-pointer rounded-lg px-2 py-1 hover:bg-accent/10">
+/** A badge row: in the editor it's a label for its field; in review, tapping it opens the editor there. */
+function BadgeRow({
+  field,
+  caption,
+  editing,
+  onOpen,
+  children,
+}: {
+  field: Field;
+  caption: string;
+  editing: boolean;
+  onOpen: (field: Field) => void;
+  children: ReactNode;
+}) {
+  const className = "-mx-2 mt-3 block w-[calc(100%+1rem)] cursor-pointer rounded-lg px-2 py-1 text-left hover:bg-accent/10";
+  const inner = (
+    <>
       <span className="block text-xs text-muted">{caption}</span>
       {children}
+    </>
+  );
+  return editing ? (
+    <label htmlFor={field} className={className}>
+      {inner}
     </label>
+  ) : (
+    <span role="presentation" onClick={() => onOpen(field)} className={className}>
+      {inner}
+    </span>
   );
 }
 
@@ -52,7 +78,7 @@ export function ProfileForm() {
   const [attempt, setAttempt] = useState(0);
   const [original, setOriginal] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [colour, setColour] = useState<BadgeColour>(DEFAULT_COLOUR);
+  const [mode, setMode] = useState<"review" | "edit">("review");
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -67,7 +93,6 @@ export function ProfileForm() {
         if (!res.ok) return setLoad({ state: "failed", status: res.status });
         const person = (await res.json()) as Person;
         if (!live) return;
-        setColour(readBadgePrefs().colour);
         setOriginal(draftFrom(person));
         setDraft(draftFrom(person));
         setLoad({ state: "ready", person });
@@ -84,9 +109,9 @@ export function ProfileForm() {
     return (
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16" aria-busy="true">
         <div>
-          <h1 className={headingClass}>Here&apos;s what we learned</h1>
+          <h1 className={headingClass}>{HEADING}</h1>
           <p role="status" className="mt-3 text-lg text-muted">
-            Loading your profile…
+            Loading what we found…
           </p>
         </div>
         <div className="hidden lg:block motion-safe:animate-pulse">
@@ -105,7 +130,7 @@ export function ProfileForm() {
     const problem = loadProblem(load.status);
     return (
       <div className="max-w-md">
-        <h1 className={headingClass}>Here&apos;s what we learned</h1>
+        <h1 className={headingClass}>{HEADING}</h1>
         <p role="alert" className="mt-4 text-lg">
           {problem.message}
         </p>
@@ -124,8 +149,15 @@ export function ProfileForm() {
   const person = load.person;
   const d = draft!;
   const o = original!;
+  const editing = mode === "edit";
   const nameIssue = tried ? nameProblem(d) : null;
   const update = (patch: Partial<Draft>) => setDraft({ ...d, ...patch });
+
+  /** Open the editor and put the cursor where the user tapped (after React has rendered the editor). */
+  function startEditing(field: Field) {
+    setMode("edit");
+    setTimeout(() => document.getElementById(field)?.focus(), 0);
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -135,7 +167,6 @@ export function ProfileForm() {
       nameRef.current?.focus();
       return;
     }
-    const picked = new FormData(e.currentTarget).get("colour");
     const changes = changesFrom(o, d);
     setSaving(true);
     try {
@@ -150,7 +181,6 @@ export function ProfileForm() {
           return;
         }
       }
-      if (isBadgeColour(picked)) writeBadgePrefs({ colour: picked });
       router.push(NEXT_STEP);
     } catch {
       setSaveError(saveErrorMessage(0, null));
@@ -159,16 +189,22 @@ export function ProfileForm() {
     }
   }
 
+  const row = { editing, onOpen: startEditing };
   const badge = (
-    <Badge name={d.name.trim() || "Your name"} handle={person.githubLogin} nameFor={FIELD.name}>
-      <BadgeRow field={FIELD.bio} caption="Bio">
+    <Badge
+      name={d.name.trim() || "Your name"}
+      handle={person.githubLogin}
+      label={countryName(person.filters.country)}
+      nameFor={editing ? FIELD.name : undefined}
+    >
+      <BadgeRow {...row} field={FIELD.bio} caption="Bio">
         {d.bio.trim() ? (
           <span className="block text-sm leading-snug break-words">{d.bio.trim()}</span>
         ) : (
           <span className="block text-sm text-muted">+ Add a bio</span>
         )}
       </BadgeRow>
-      <BadgeRow field={FIELD.skills} caption="Can help with">
+      <BadgeRow {...row} field={FIELD.skills} caption="Can help with">
         <span className="flex flex-wrap gap-1.5 pt-1">
           {d.languages.length ? (
             d.languages.map((l) => (
@@ -181,10 +217,10 @@ export function ProfileForm() {
           )}
         </span>
       </BadgeRow>
-      <BadgeRow field={FIELD.orgs} caption="Part of">
+      <BadgeRow {...row} field={FIELD.orgs} caption="Part of">
         <span className="flex flex-wrap gap-1.5 pt-1">
           {d.organisations.length ? (
-            d.organisations.map((o) => <BadgeChip key={o}>{o}</BadgeChip>)
+            d.organisations.map((org) => <BadgeChip key={org}>{org}</BadgeChip>)
           ) : (
             <span className="text-sm text-muted">+ Add organisations</span>
           )}
@@ -193,15 +229,34 @@ export function ProfileForm() {
     </Badge>
   );
 
+  if (!editing) {
+    return (
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
+        <div className="flex flex-col">
+          <h1 className={headingClass}>{HEADING}</h1>
+          <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
+          <div className="mt-8 lg:hidden">{badge}</div>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Button onClick={() => router.push(NEXT_STEP)} className="text-lg sm:px-8">
+              Yes, that&apos;s me
+            </Button>
+            <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">
+              No, let me fix it
+            </Button>
+          </div>
+        </div>
+        <div className="hidden lg:block">
+          <div className="lg:sticky lg:top-6">{badge}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <form
-      onSubmit={submit}
-      noValidate
-      className={`grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16 ${colourFollowsPicker}`}
-    >
+    <form onSubmit={submit} noValidate className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
       <div className="flex flex-col">
-        <h1 className={headingClass}>Here&apos;s what we learned</h1>
-        <p className="mt-3 max-w-md text-lg text-muted">From your public GitHub. Change anything before you go on.</p>
+        <h1 className={headingClass}>Fix your details</h1>
+        <p className="mt-3 max-w-md text-lg text-muted">Change anything that&apos;s wrong, or add what we missed.</p>
 
         <div className="mt-8 flex flex-col gap-9">
           <div className="flex flex-col gap-2">
@@ -249,12 +304,12 @@ export function ProfileForm() {
           <ChipEditor
             id={FIELD.skills}
             legend="Can help with"
-            hint="From your repositories' languages. Add what people can ask you about."
+            hint="Add what people can ask you about."
             values={d.languages}
             onChange={(languages) => update({ languages })}
             placeholder="e.g. Kubernetes"
             addLabel="Add a skill"
-            empty="Nothing imported yet. Add what you can help with."
+            empty="Nothing found yet. Add what you can help with."
           />
 
           <ChipEditor
@@ -265,10 +320,23 @@ export function ProfileForm() {
             onChange={(organisations) => update({ organisations })}
             placeholder="e.g. cncf"
             addLabel="Add an organisation"
-            empty="None imported. Add projects you belong to."
+            empty="None found. Add projects you belong to."
           />
 
-          <ColourPicker defaultColour={colour} />
+          <div className="flex flex-col gap-2">
+            <p className="text-xl font-bold leading-snug tracking-tight">Add more</p>
+            <button
+              type="button"
+              disabled
+              aria-describedby="upload-soon"
+              className="flex min-h-14 items-center justify-between gap-3 rounded-xl border-2 border-dashed border-border px-4 text-left font-semibold text-muted"
+            >
+              Upload a CV or LinkedIn export
+              <span id="upload-soon" className="rounded-full border border-border px-2 py-0.5 text-xs font-medium">
+                Coming soon
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-8 lg:hidden">{badge}</div>
@@ -288,7 +356,7 @@ export function ProfileForm() {
             </p>
           )}
           <Button type="submit" disabled={saving} className="w-full text-lg sm:w-auto sm:px-8">
-            {saving ? "Saving…" : "Save and continue"}
+            {saving ? "Saving…" : "Save and finish"}
           </Button>
         </div>
       </div>

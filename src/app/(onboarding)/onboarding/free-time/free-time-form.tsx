@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A1 step 4: tap the half-hour blocks you're free for on the conference
+ * Step 3: tap the half-hour blocks you're free for on the conference
  * day. Loads GET /api/availability and saves with PUT /api/availability,
  * which replaces the whole list (B2's handoff, db/Profile-API.md and
  * db/Scheduling.md); neighbouring blocks are sent as one interval.
@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
+import { countryName } from "../countries";
 import { loadProblem } from "../profile/edits";
 import {
   blocksForDay,
@@ -31,7 +32,7 @@ import {
   VENUE_LABEL,
 } from "./blocks";
 
-export const NEXT_STEP = "/ask";
+export const NEXT_STEP = "/onboarding/profile";
 
 const blocks = blocksForDay();
 const hours = Array.from(new Set(blocks.map((b) => Math.floor(b.from / 60))));
@@ -59,14 +60,14 @@ export function FreeTimeForm() {
   const [original, setOriginal] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [who, setWho] = useState<{ name: string; handle: string } | null>(null);
+  const [who, setWho] = useState<{ name: string; handle: string; country: string } | null>(null);
 
   // The badge shows the real name when the profile loads; it's not needed for this step, so failures are ignored.
   useEffect(() => {
     let live = true;
     fetch("/api/me", { cache: "no-store" })
       .then((r) => (r.ok ? (r.json() as Promise<Person>) : null))
-      .then((p) => live && p && setWho({ name: p.name, handle: p.githubLogin }))
+      .then((p) => live && p && setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country }))
       .catch(() => {});
     return () => {
       live = false;
@@ -170,7 +171,7 @@ export function FreeTimeForm() {
 
   const labels = runLabels(blocks, picked);
   const badge = (
-    <Badge name={who?.name} handle={who?.handle}>
+    <Badge name={who?.name} handle={who?.handle} label={who ? countryName(who.country) : undefined}>
       <span className="mt-4 block">
         <span className="block text-xs text-muted">Free to meet</span>
         <span className="flex flex-wrap gap-1.5 pt-1.5">
@@ -280,7 +281,7 @@ export function FreeTimeForm() {
             </p>
           )}
           <Button onClick={finish} disabled={saving} className="w-full text-lg sm:w-auto sm:px-8">
-            {saving ? "Saving…" : "Finish"}
+            {saving ? "Saving…" : "Continue"}
           </Button>
         </div>
       </div>

@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { Steps } from "../_components/steps";
-import { AboutYouForm } from "./about-you-form";
+import { BadgeForm } from "./badge-form";
 
-export const metadata: Metadata = { title: "About you" };
+export const metadata: Metadata = { title: "Your badge" };
 
-/** A1 step 2: workplace, country and hiring, saved as the profile's filters. */
-export default function AboutYouPage() {
+/** Step 2: the badge card, hiring, colour and what to show. Saves steps 1 and 2 together. */
+export default function BadgePage() {
   return (
     <>
       <Steps current={2} />
-      <AboutYouForm />
+      <BadgeForm />
     </>
   );
 }

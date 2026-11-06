@@ -1,0 +1,291 @@
+"use client";
+
+/**
+ * Step 2, "Your badge": the badge card (name, workplace and country from
+ * step 1), the hiring question, the badge colour, and what to show on the
+ * card. Continue saves steps 1 and 2 together with PUT /api/me: name plus a
+ * complete filters object, as B2's API requires (db/Profile-API.md).
+ *
+ * Where step 1's answers come from:
+ * - the draft step 1 left in this tab (normal path);
+ * - otherwise the saved profile from GET /api/me (returning user, other
+ *   device). A 409 there means first-time onboarding isn't done, so the
+ *   user is sent back to step 1. Other failures are errors, not "empty".
+ * Nothing is shown until loading finishes, so a late load can't overwrite
+ * what the user has already chosen.
+ *
+ * Show/hide on the card and saving the colour to the profile wait for B's
+ * contract update; until then the colour lives in the convo_badge cookie
+ * and the show/hide switches are marked coming soon.
+ */
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import type { Person } from "@/contracts/types";
+import { Badge, BadgeChip } from "../_components/badge";
+import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
+import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
+import { clearDraft, readDraft } from "../_components/draft";
+import { missingAnswers, missingMessage, saveErrorMessage, toFilters, workplaceLabel, type AboutYou } from "./answers";
+import { countryName } from "./countries";
+
+export const NEXT_STEP = "/onboarding/free-time";
+
+const headingClass =
+  "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
+const legendClass = "mb-3 text-xl font-bold leading-snug tracking-tight";
+const errorClass = "text-sm font-medium text-[#c2410c] dark:text-[#fdba74]";
+
+type Load =
+  | { state: "loading" }
+  | { state: "ready"; about: AboutYou; handle: string | null; hiring: boolean | null }
+  | { state: "start" } // no step 1 answers anywhere: begin at step 1
+  | { state: "failed"; status: number };
+
+/** Step 1's answers rebuilt from a saved profile (the workplace name isn't stored, only its ROR ID). */
+function aboutFromProfile(p: Person): AboutYou {
+  return {
+    name: p.name,
+    country: p.filters.country,
+    workplace: p.filters.rorId
+      ? { kind: "org", org: { id: p.filters.rorId, name: "Your saved workplace", country: p.filters.country } }
+      : { kind: "none" },
+  };
+}
+
+const visibility = [
+  { id: "country", label: "Country" },
+  { id: "workplace", label: "Workplace" },
+  { id: "hiring", label: "Hiring status" },
+] as const;
+
+export function BadgeForm() {
+  const router = useRouter();
+  const [load, setLoad] = useState<Load>({ state: "loading" });
+  const [attempt, setAttempt] = useState(0);
+  const [hiring, setHiring] = useState<boolean | null>(null);
+  const [colour, setColour] = useState<BadgeColour>(DEFAULT_COLOUR);
+  const [tried, setTried] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const hiringRef = useRef<HTMLFieldSetElement>(null);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const draft = readDraft();
+      let profile: Person | null = null;
+      let status = 0;
+      try {
+        const res = await fetch("/api/me", { cache: "no-store" });
+        status = res.status;
+        if (res.ok) profile = (await res.json()) as Person;
+      } catch {
+        status = 0;
+      }
+      if (!live) return;
+      setColour(readBadgePrefs().colour);
+
+      if (draft) {
+        // Step 1 just ran in this tab; the profile only adds the GitHub handle and any saved hiring answer.
+        setHiring(profile?.filters.hiring ?? null);
+        setLoad({ state: "ready", about: draft, handle: profile?.githubLogin ?? null, hiring: profile?.filters.hiring ?? null });
+      } else if (profile) {
+        setHiring(profile.filters.hiring);
+        setLoad({ state: "ready", about: aboutFromProfile(profile), handle: profile.githubLogin, hiring: profile.filters.hiring });
+      } else if (status === 409) {
+        setLoad({ state: "start" });
+      } else {
+        setLoad({ state: "failed", status });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [attempt]);
+
+  if (load.state === "loading") {
+    return (
+      <div aria-busy="true">
+        <h1 className={headingClass}>Your badge</h1>
+        <p role="status" className="mt-3 text-lg text-muted">
+          Loading…
+        </p>
+      </div>
+    );
+  }
+
+  if (load.state === "start" || load.state === "failed") {
+    const expired = load.state === "failed" && (load.status === 401 || load.status === 404);
+    return (
+      <div className="max-w-md">
+        <h1 className={headingClass}>Your badge</h1>
+        <p role="alert" className="mt-4 text-lg">
+          {load.state === "start"
+            ? "Start with your name, workplace and country."
+            : expired
+              ? "Your sign-in has expired."
+              : "Your details didn't load. Try again in a moment."}
+        </p>
+        <div className="mt-6">
+          {load.state === "start" ? (
+            <Button href="/signin">Go to About you</Button>
+          ) : expired ? (
+            <Button href="/signin">Sign in again</Button>
+          ) : (
+            <Button onClick={() => (setLoad({ state: "loading" }), setAttempt((n) => n + 1))}>Try again</Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const { about, handle } = load;
+  const answers = { ...about, hiring };
+  const missing = missingAnswers(answers);
+  const step1Missing = missing.filter((m) => m !== "hiring");
+  const hiringProblem = tried && missing.includes("hiring");
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTried(true);
+    setSaveError(null);
+    if (step1Missing.length) return; // shown below with a link back to step 1
+    if (missing.includes("hiring")) {
+      hiringRef.current?.querySelector<HTMLElement>("input")?.focus();
+      return;
+    }
+    const picked = new FormData(e.currentTarget).get("colour");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: about.name.trim(), filters: toFilters(answers) }),
+      });
+      if (!res.ok) {
+        setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
+        return;
+      }
+      if (isBadgeColour(picked)) writeBadgePrefs({ colour: picked });
+      clearDraft();
+      router.push(NEXT_STEP);
+    } catch {
+      setSaveError(saveErrorMessage(0, null));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const badge = (
+    <Badge name={about.name} handle={handle ?? "your-github"} label={countryName(about.country)}>
+      <span className="mt-4 block">
+        <span className="block text-xs text-muted">Works at</span>
+        <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
+      </span>
+      <span className="flex flex-wrap gap-1.5 pt-3">
+        {hiring === null ? (
+          <BadgeChip className="w-20" />
+        ) : (
+          <BadgeChip className={hiring ? "bg-accent text-on-accent" : "bg-[var(--skeleton)]"}>
+            {hiring ? "Hiring" : "Not hiring"}
+          </BadgeChip>
+        )}
+      </span>
+    </Badge>
+  );
+
+  return (
+    <form
+      onSubmit={submit}
+      noValidate
+      className={`grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16 ${colourFollowsPicker}`}
+    >
+      <div className="flex flex-col">
+        <h1 className={headingClass}>Your badge</h1>
+        <p className="mt-3 max-w-md text-lg text-muted">Three quick answers so you make the right connections.</p>
+
+        {/* Phone: the card first, so the choices below visibly change it. */}
+        <div className="mt-8 lg:hidden">{badge}</div>
+
+        <div className="mt-8 flex flex-col gap-9">
+          <fieldset ref={hiringRef} className="flex flex-col gap-3 border-0 p-0" aria-describedby={hiringProblem ? "hiring-problem" : undefined}>
+            <legend className={legendClass}>Are you hiring?</legend>
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { value: true, label: "Yes, I'm hiring", hint: "People looking for jobs can find you." },
+                { value: false, label: "Not right now", hint: "Career asks won't be sent to you." },
+              ].map((o) => (
+                <label
+                  key={String(o.value)}
+                  className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
+                >
+                  <input type="radio" name="hiring" checked={hiring === o.value} onChange={() => setHiring(o.value)} className="sr-only" />
+                  <span className="text-lg font-semibold leading-snug">{o.label}</span>
+                  <span className="text-sm text-muted">{o.hint}</span>
+                </label>
+              ))}
+            </div>
+            {hiringProblem && (
+              <p id="hiring-problem" className={errorClass}>
+                {missingMessage.hiring}
+              </p>
+            )}
+          </fieldset>
+
+          <ColourPicker defaultColour={colour} />
+
+          <fieldset className="border-0 p-0" aria-describedby="visibility-note">
+            <legend className={legendClass}>Show on your badge</legend>
+            <p id="visibility-note" className="-mt-1 mb-3 text-sm text-muted">
+              Coming soon: choose what other people see on your card.
+            </p>
+            <div className="flex flex-col gap-2">
+              {visibility.map((v) => (
+                <label key={v.id} className="flex min-h-12 cursor-not-allowed items-center gap-4 rounded-xl border-2 border-border bg-surface px-4 py-2">
+                  <span className="flex-1 font-semibold">{v.label}</span>
+                  <input type="checkbox" checked readOnly disabled className="peer sr-only" />
+                  <span
+                    aria-hidden="true"
+                    className="relative h-7 w-12 shrink-0 rounded-full bg-accent opacity-50 after:absolute after:left-6 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow"
+                  />
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+
+        <div className="sticky bottom-0 -mx-4 mt-8 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+          {tried && step1Missing.length > 0 && (
+            <p role="alert" className={`mb-3 ${errorClass}`}>
+              {missingMessage[step1Missing[0]]}{" "}
+              <a href="/signin" className="underline underline-offset-4">
+                Go back to About you
+              </a>
+            </p>
+          )}
+          {saveError && (
+            <p role="alert" className={`mb-3 ${errorClass}`}>
+              {saveError}
+              {saveError.startsWith("Your sign-in has expired") && (
+                <>
+                  {" "}
+                  <a href="/signin" className="underline underline-offset-4">
+                    Sign in again
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+          <Button type="submit" disabled={saving} className="w-full text-lg sm:w-auto sm:px-8">
+            {saving ? "Saving…" : "Continue"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="hidden lg:block">
+        <div className="lg:sticky lg:top-6">{badge}</div>
+      </div>
+    </form>
+  );
+}

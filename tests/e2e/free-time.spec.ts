@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 /**
- * A1 step 4: free times. Runs on the fake API, whose profiles are shared by
+ * Step 3: free times. Runs on the fake API, whose profiles are shared by
  * every test in the server process, so each test acts as a different
  * fixture person (x-demo-user). Saves are checked by what the server
  * stored (read back with GET and after a reload), not only by the request.
@@ -11,7 +11,7 @@ import { expect, test, type Page, type Request } from "@playwright/test";
 const AFTER_SUBMIT = 15_000;
 
 const isSave = (req: Request) => req.url().endsWith("/api/availability") && req.method() === "PUT";
-const finish = (page: Page) => page.getByRole("button", { name: "Finish" });
+const finish = (page: Page) => page.getByRole("button", { name: "Continue", exact: true });
 const block = (page: Page, label: string) => page.getByRole("button", { name: label, exact: true });
 /** Labels of the blocks that are switched on, in order. */
 const pickedLabels = (page: Page) =>
@@ -43,7 +43,7 @@ test.describe("free time (A1 step 4)", () => {
     await open(page, "p_002"); // fixture: 9:00-9:30 and 4:30-5:00
     await expect.poll(() => pickedLabels(page)).toEqual(["9:00 AM to 9:30 AM", "4:30 PM to 5:00 PM"]);
     await expect(page.getByRole("status").filter({ hasText: "1 hour" })).toContainText("9:00 AM – 9:30 AM, 4:30 PM – 5:00 PM");
-    await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 4 of 4");
+    await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 3 of 4");
   });
 
   test("picks are saved as joined ranges, stored, and still there after a reload", async ({ page }) => {
@@ -63,7 +63,7 @@ test.describe("free time (A1 step 4)", () => {
     const saving = page.waitForRequest(isSave);
     await finish(page).click();
     expect((await saving).postDataJSON()).toEqual(expected);
-    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
 
     expect(await stored(page, "p_004")).toEqual(expected);
     await page.goto("/onboarding/free-time");
@@ -71,7 +71,7 @@ test.describe("free time (A1 step 4)", () => {
     await expect.poll(() => pickedLabels(page)).toHaveLength(8);
   });
 
-  test("Clear then Finish saves no free times", async ({ page }) => {
+  test("Clear then Continue saves no free times", async ({ page }) => {
     await seed(page, "p_006", NINE_TO_TEN);
     await open(page, "p_006");
     await page.getByRole("button", { name: "Clear" }).click();
@@ -79,18 +79,18 @@ test.describe("free time (A1 step 4)", () => {
     const saving = page.waitForRequest(isSave);
     await finish(page).click();
     expect((await saving).postDataJSON()).toEqual([]);
-    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
     expect(await stored(page, "p_006")).toEqual([]);
   });
 
-  test("finishing without changes sends nothing", async ({ page }) => {
+  test("continuing without changes sends nothing", async ({ page }) => {
     await open(page, "p_001");
     let saved = false;
     page.on("request", (req) => {
       if (isSave(req)) saved = true;
     });
     await finish(page).click();
-    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
     expect(saved).toBe(false);
   });
 

@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { Steps } from "../../_components/steps";
 import { ProfileForm } from "./profile-form";
 
-export const metadata: Metadata = { title: "Your profile" };
+export const metadata: Metadata = { title: "Your details" };
 
-/** A1 step 3: the "Here's what we learned about you" card. */
+/** Step 4: "Are these the correct details?" */
 export default function ProfilePage() {
   return (
     <>
-      <Steps current={3} />
+      <Steps current={4} />
       <ProfileForm />
     </>
   );

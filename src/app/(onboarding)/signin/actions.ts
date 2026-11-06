@@ -4,32 +4,28 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { signIn } from "@/server/auth";
 import { config } from "@/server/config";
-import { BADGE_COOKIE, badgeCookieOptions, isBadgeColour, parseBadgePrefs, serializeBadgePrefs } from "../_components/badge-prefs";
 import { CONSENT_COOKIE, consentSources } from "../consent";
 
 const NEXT_STEP = "/onboarding";
 
 /**
- * Save the consent choices and the badge colour, then hand over to GitHub
- * (or skip it on the fake API). The colour cookie is frontend-only; the
- * backend doesn't read it.
+ * Save which sources Convo may use, then hand over to GitHub (or skip it on
+ * the fake API). GitHub on means all of its public sources (bio, repos,
+ * orgs), written in B2's consent cookie format; off means none. Step 1's
+ * name, country and workplace stay in the browser until step 2 saves them.
  */
 export async function continueWithGitHub(formData: FormData) {
-  const chosen = consentSources.map((s) => s.id).filter((id) => formData.get(id) === "on");
+  const github = formData.get("github") === "on";
+  // GitHub is the only sign-in for now; the form refuses to continue without it.
+  if (!github) redirect("/signin");
 
   const store = await cookies();
-  store.set(CONSENT_COOKIE, chosen.join(","), {
+  store.set(CONSENT_COOKIE, consentSources.map((s) => s.id).join(","), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 60 * 24 * 7,
   });
-
-  const colour = formData.get("colour");
-  if (isBadgeColour(colour)) {
-    const prefs = parseBadgePrefs(store.get(BADGE_COOKIE)?.value);
-    store.set(BADGE_COOKIE, serializeBadgePrefs({ ...prefs, colour }), badgeCookieOptions);
-  }
 
   if (config.fakeApi) redirect(NEXT_STEP);
   await signIn("github", { redirectTo: NEXT_STEP });

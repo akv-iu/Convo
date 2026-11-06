@@ -58,8 +58,8 @@ describe("nameProblem", () => {
 });
 
 describe("loadProblem", () => {
-  it("sends unfinished onboarding back to About you, and expired sign-ins to sign in", () => {
-    expect(loadProblem(409).action?.href).toBe("/onboarding");
+  it("sends unfinished onboarding back to step 1, and expired sign-ins to sign in", () => {
+    expect(loadProblem(409).action?.href).toBe("/signin");
     expect(loadProblem(401).action?.href).toBe("/signin");
     expect(loadProblem(404).action?.href).toBe("/signin");
     expect(loadProblem(503).action).toBeNull();

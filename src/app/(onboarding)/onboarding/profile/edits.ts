@@ -73,6 +73,6 @@ export function loadProblem(status: number): { message: string; action: { label:
   if (status === 401 || status === 404)
     return { message: "Your sign-in has expired.", action: { label: "Sign in again", href: "/signin" } };
   if (status === 409)
-    return { message: "Answer the three quick questions first.", action: { label: "Go to About you", href: "/onboarding" } };
+    return { message: "Start with your name, workplace and country.", action: { label: "Go to About you", href: "/signin" } };
   return { message: "Your profile didn't load. Try again in a moment.", action: null };
 }

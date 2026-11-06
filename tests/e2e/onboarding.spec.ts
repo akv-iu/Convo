@@ -2,315 +2,170 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 /**
- * A1 step 2: the three onboarding questions. Runs on the fake API. The
- * fake's state is shared by every test in the server process, so saves are
- * checked by the request this screen sends, not by reading the profile back.
+ * Step 2, "Your badge". Runs on the fake API, whose profiles are shared by
+ * every test in the server process, so tests that save act as their own
+ * fixture person (x-demo-user) and check what the server stored, not only
+ * the request sent.
  */
 
-const search = (page: Page) => page.getByRole("combobox", { name: "Search for your workplace" });
-const country = (page: Page) => page.getByRole("combobox", { name: "Country" });
-const continueButton = (page: Page) => page.getByRole("button", { name: "Continue" });
-/** The save error; Next.js also renders an empty role="alert" route announcer. */
-const saveAlert = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
+const AFTER_SUBMIT = 15_000;
 
-function savedFilters(req: Request) {
-  return (req.postDataJSON() as { filters: unknown }).filters;
-}
-
+const continueButton = (page: Page) => page.getByRole("button", { name: "Continue", exact: true });
+const alertWithText = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
 const isSave = (req: Request) => req.url().endsWith("/api/me") && req.method() === "PUT";
-
-/** Background colour of the badge stripe that's on screen (phone and laptop each have one). */
+const visibleBadge = (page: Page) =>
+  page.locator("[data-badge-stripe]:visible").locator("xpath=ancestor::div[@aria-hidden='true'][1]");
 const stripeColour = (page: Page) =>
   page
     .locator("[data-badge-stripe]")
     .evaluateAll((els) => els.filter((el) => el.checkVisibility()).map((el) => getComputedStyle(el).backgroundColor)[0]);
 
-test.describe("badge colour through onboarding", () => {
-  test("a fresh load of step 2 shows the saved colour, with one form on the page", async ({ page, baseURL }) => {
-    await page.context().addCookies([
-      { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },
-    ]);
-    await page.goto("/onboarding");
-    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 163, 138)");
-    await expect(page.locator("form")).toHaveCount(1);
+const OXFORD = { id: "https://ror.org/052gg0110", name: "University of Oxford", country: "GB" };
+
+/** Leave step 1's answers in this tab, as step 1 would, then open step 2. */
+async function openWithDraft(page: Page, person: string, draft: object = { name: "Ada Lovelace", country: "GB", workplace: { kind: "org", org: OXFORD } }) {
+  await page.setExtraHTTPHeaders({ "x-demo-user": person });
+  await page.goto("/ask");
+  await page.evaluate((d) => sessionStorage.setItem("convo_onboarding_draft", JSON.stringify(d)), draft);
+  await page.goto("/onboarding");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
+}
+
+async function stored(page: Page, person: string) {
+  const res = await page.request.get("/api/me", { headers: { "x-demo-user": person } });
+  expect(res.ok()).toBe(true);
+  return res.json();
+}
+
+test.describe("your badge (step 2)", () => {
+  test("shows the card from step 1's answers, with the new wording", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    await expect(page.getByText("Three quick answers so you make the right connections.")).toBeVisible();
+    const badge = visibleBadge(page);
+    await expect(badge).toContainText("Ada Lovelace");
+    await expect(badge).toContainText("University of Oxford");
+    await expect(badge).toContainText("United Kingdom");
+    await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 2 of 4");
   });
 
-  test("the colour picked on step 1 is on step 2's badge after Continue", async ({ page }) => {
-    await page.goto("/signin");
-    await page.getByRole("radio", { name: "Mint" }).check({ force: true });
-    await page.getByRole("button", { name: "Continue with GitHub" }).click();
-    await expect(page).toHaveURL(/\/onboarding$/, { timeout: 15_000 });
-    await expect.poll(() => stripeColour(page)).toBe("rgb(94, 230, 180)");
-  });
-
-  test("without a saved colour the badge stays Sunflower", async ({ page }) => {
-    await page.goto("/onboarding");
-    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 210, 63)");
-  });
-});
-
-test.describe("about you (A1 step 2)", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/onboarding");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("About you");
-  });
-
-  test("picking a workplace fills in the country, and the answers save together", async ({ page }) => {
-    await search(page).fill("stan");
-    await page.getByRole("option", { name: /Stanford University/ }).click();
-    await expect(page.getByText("Stanford University", { exact: true }).first()).toBeVisible();
-    await expect(country(page)).toHaveValue("US");
-
-    await page.getByText("Not right now", { exact: true }).click();
-    const saving = page.waitForRequest(isSave);
-    await continueButton(page).click();
-
-    expect(savedFilters(await saving)).toEqual({ country: "US", rorId: "https://ror.org/00f54p054", hiring: false });
-    await expect(page).toHaveURL(/\/onboarding\/profile$/);
-    await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 3 of 4");
-  });
-
-  test("'Not with an organisation' saves no workplace", async ({ page }) => {
-    await page.getByRole("checkbox", { name: "Not with an organisation" }).check();
-    await expect(search(page)).toBeDisabled();
-    await country(page).selectOption("CA");
+  test("hiring, colour and Continue save steps 1 and 2 together, and the server keeps them", async ({ page }) => {
+    await openWithDraft(page, "p_004");
     await page.getByText("Yes, I'm hiring", { exact: true }).click();
+    await expect(visibleBadge(page)).toContainText("Hiring");
+    await page.getByRole("radio", { name: "Lilac" }).check({ force: true });
+    await expect.poll(() => stripeColour(page)).toBe("rgb(196, 181, 253)");
 
     const saving = page.waitForRequest(isSave);
     await continueButton(page).click();
-    expect(savedFilters(await saving)).toEqual({ country: "CA", rorId: null, hiring: true });
+    expect((await saving).postDataJSON()).toEqual({
+      name: "Ada Lovelace",
+      filters: { country: "GB", rorId: OXFORD.id, hiring: true },
+    });
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
+
+    const me = await stored(page, "p_004");
+    expect(me.name).toBe("Ada Lovelace");
+    expect(me.filters).toEqual({ country: "GB", rorId: OXFORD.id, hiring: true });
+    expect(await page.evaluate(() => sessionStorage.getItem("convo_onboarding_draft"))).toBeNull();
+    // The colour carries on to step 3's badge.
+    await expect.poll(() => stripeColour(page)).toBe("rgb(196, 181, 253)");
   });
 
-  test("a country the user chose is not overwritten by the workplace", async ({ page }) => {
-    await country(page).selectOption("GB");
-    await search(page).fill("stan");
-    await page.getByRole("option", { name: /Stanford University/ }).click();
-    await expect(country(page)).toHaveValue("GB");
-  });
-
-  test("Change clears the workplace and returns to the search", async ({ page }) => {
-    await search(page).fill("oxford");
-    await page.getByRole("option", { name: /University of Oxford/ }).click();
-    await page.getByRole("button", { name: "Change workplace" }).click();
-    await expect(search(page)).toBeFocused();
-    await expect(search(page)).toHaveValue("");
-  });
-
-  test("Continue with nothing answered explains each question and sends nothing", async ({ page }) => {
+  test("Continue without a hiring answer explains it and sends nothing", async ({ page }) => {
+    await openWithDraft(page, "p_006", { name: "Elena", country: "CA", workplace: { kind: "none" } });
+    // p_006 already has a saved hiring answer, so clear it to test the empty case.
+    await page.route("**/api/me", (route) =>
+      route.request().method() === "GET" ? route.fulfill({ status: 409, json: { error: "Complete onboarding first." } }) : route.fallback(),
+    );
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
     let saved = false;
     page.on("request", (req) => {
       if (isSave(req)) saved = true;
     });
     await continueButton(page).click();
-
-    await expect(page.getByText("Choose where you work, or pick Not with an organisation.")).toBeVisible();
-    await expect(page.getByText("Choose the country you're based in.")).toBeVisible();
     await expect(page.getByText("Say whether you're hiring.")).toBeVisible();
-    await expect(search(page)).toBeFocused();
     await expect(page).toHaveURL(/\/onboarding$/);
     expect(saved).toBe(false);
   });
 
-  test("the workplace list works with the keyboard", async ({ page, isMobile }) => {
-    test.skip(isMobile, "keyboard path is checked on the laptop project");
-    await search(page).focus();
-    await page.keyboard.type("univ");
-    // Scoped to the workplace list: the country <select>'s options also have role "option".
-    const options = page.getByRole("listbox", { name: "Workplaces" }).getByRole("option");
-    await expect(options.first()).toBeVisible({ timeout: 10_000 });
-    await expect(options.first()).toHaveAttribute("aria-selected", "true");
-
-    await page.keyboard.press("ArrowDown");
-    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
-    const second = (await options.nth(1).locator("span").first().textContent()) ?? "";
-    await page.keyboard.press("Enter");
-    await expect(page.getByText(second, { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("listbox")).toHaveCount(0);
+  test("without step 1's answers, a saved profile is restored", async ({ page }) => {
+    await page.setExtraHTTPHeaders({ "x-demo-user": "p_002" });
+    await page.goto("/onboarding");
+    const badge = visibleBadge(page);
+    await expect(badge).toContainText("Tomasz Wierzbicki");
+    await expect(badge).toContainText("Germany");
+    await expect(page.getByRole("radio", { name: /Not right now/ })).toBeChecked();
   });
 
-  test("a failing workplace search shows an error, not 'no workplaces'", async ({ page }) => {
-    await page.route("**/api/ror?**", (route) =>
-      route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "ROR unavailable" }) }),
-    );
-    await search(page).fill("stan");
-    await expect(page.getByRole("status")).toContainText("Workplace search isn't responding right now");
-    await expect(page.getByRole("status")).not.toContainText("No workplaces match");
-    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  test("first-time users without step 1's answers are sent to step 1", async ({ page }) => {
+    await page.route("**/api/me", (route) => route.fulfill({ status: 409, json: { error: "Complete onboarding first." } }));
+    await page.goto("/onboarding");
+    await expect(alertWithText(page)).toHaveText("Start with your name, workplace and country.");
+    await expect(page.getByRole("link", { name: "Go to About you" })).toHaveAttribute("href", "/signin");
   });
 
-  test("changing a completed search cannot select its old result during debounce", async ({ page }) => {
-    await search(page).fill("stan");
-    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
-    await page.clock.install();
-    await page.clock.pauseAt(new Date());
-
-    await search(page).fill("oxford");
-    await search(page).press("Enter");
-    await expect(page.getByRole("listbox")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Change workplace" })).toHaveCount(0);
-    await expect(country(page)).toHaveValue("");
-
-    await page.clock.runFor(350);
-    await page.clock.resume();
-    await page.getByRole("option", { name: /University of Oxford/ }).click();
-    await expect(country(page)).toHaveValue("GB");
-  });
-
-  test("adding whitespace preserves results for the same search", async ({ page }) => {
-    await search(page).fill("stan");
-    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
-    await search(page).fill(" stan ");
-    await search(page).press("Enter");
-    await expect(country(page)).toHaveValue("US");
-  });
-
-  test("keyboard navigation keeps the last workplace visible and closes on leaving", async ({ page }) => {
-    await search(page).fill("univ");
-    const list = page.getByRole("listbox");
-    const options = list.getByRole("option");
-    await expect(options.first()).toBeVisible();
-    const count = await options.count();
-    for (let i = 1; i < count; i++) await search(page).press("ArrowDown");
-    await expect(options.last()).toHaveAttribute("aria-selected", "true");
-    await expect.poll(async () => options.last().evaluate((el) => {
-      const item = el.getBoundingClientRect();
-      const list = el.parentElement!.getBoundingClientRect();
-      return item.top >= list.top && item.bottom <= list.bottom;
-    })).toBe(true);
-    await search(page).press("Tab");
-    await expect(list).toHaveCount(0);
-  });
-
-  test("keyboard retry keeps focus inside the search and recovers", async ({ page }) => {
-    let attempts = 0;
-    await page.route("**/api/ror?**", (route) => {
-      attempts++;
-      return attempts === 1
-        ? route.fulfill({ status: 503, json: { error: "ROR unavailable" } })
-        : route.fulfill({ json: [{ id: "https://ror.org/00f54p054", name: "Stanford University", country: "US" }] });
+  test("a failed load is an error with Try again, not an empty form", async ({ page }) => {
+    let calls = 0;
+    await page.setExtraHTTPHeaders({ "x-demo-user": "p_002" });
+    await page.route("**/api/me", (route) => {
+      calls++;
+      return calls === 1 ? route.fulfill({ status: 503, json: { error: "Storage unavailable" } }) : route.fallback();
     });
-    await search(page).fill("stan");
-    const retry = page.getByRole("button", { name: "Try again" });
-    await expect(retry).toBeVisible();
-    await search(page).press("Tab");
-    await expect(retry).toBeFocused();
-    await page.waitForTimeout(250); // The old blur timer removed the focused button after 150 ms.
-    await expect(retry).toBeFocused();
-    await page.keyboard.press("Enter");
-    await expect(search(page)).toBeFocused();
-    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
-    expect(attempts).toBe(2);
-    await search(page).press("Enter");
-    await expect(country(page)).toHaveValue("US");
+    await page.goto("/onboarding");
+    await expect(alertWithText(page)).toHaveText("Your details didn't load. Try again in a moment.");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(visibleBadge(page)).toContainText("Tomasz Wierzbicki");
   });
 
-  test("a slow reply for older typing is ignored", async ({ page }) => {
-    await page.route("**/api/ror?**", async (route) => {
-      const q = new URL(route.request().url()).searchParams.get("q");
-      if (q === "stan") {
-        await new Promise((r) => setTimeout(r, 1500));
-        return route.fulfill({ json: [{ id: "https://ror.org/00f54p054", name: "Stanford University", country: "US" }] });
-      }
-      return route.fulfill({ json: [{ id: "https://ror.org/052gg0110", name: "University of Oxford", country: "GB" }] });
-    });
-    await search(page).fill("stan");
-    await page.waitForRequest((r) => r.url().includes("q=stan"));
-    await search(page).fill("oxford");
-
-    await expect(page.getByRole("option", { name: /University of Oxford/ })).toBeVisible();
-    await page.waitForTimeout(1700);
-    await expect(page.getByRole("option", { name: /Stanford/ })).toHaveCount(0);
-  });
-
-  test("the search box stops at 200 characters", async ({ page }) => {
-    await search(page).fill("x".repeat(250));
-    await expect(search(page)).toHaveValue("x".repeat(200));
-  });
-
-  test("a failed save keeps the answers and shows the server's message", async ({ page }) => {
+  test("a failed save keeps the choices and shows the server's message", async ({ page }) => {
+    await openWithDraft(page, "p_003");
     await page.route("**/api/me", (route) =>
       route.request().method() === "PUT"
-        ? route.fulfill({
-            status: 503,
-            contentType: "application/json",
-            body: JSON.stringify({ error: "Profile saved, but search wasn't updated. Retry the same save." }),
-          })
+        ? route.fulfill({ status: 503, json: { error: "Profile saved, but search update failed. Retry the same save." } })
         : route.fallback(),
     );
-    await page.getByRole("checkbox", { name: "Not with an organisation" }).check();
-    await country(page).selectOption("US");
-    await page.getByText("Not right now", { exact: true }).click();
+    await page.getByText("Yes, I'm hiring", { exact: true }).click();
     await continueButton(page).click();
-
-    await expect(saveAlert(page)).toHaveText("Profile saved, but search wasn't updated. Retry the same save.");
+    await expect(alertWithText(page)).toHaveText("Profile saved, but search update failed. Retry the same save.");
     await expect(page).toHaveURL(/\/onboarding$/);
-    await expect(country(page)).toHaveValue("US");
-    await expect(continueButton(page)).toBeEnabled();
+    await expect(page.getByRole("radio", { name: /Yes, I'm hiring/ })).toBeChecked();
   });
 
-  test("an expired sign-in offers a way back to sign in", async ({ page }) => {
+  test("an expired sign-in on save offers a way back", async ({ page }) => {
+    await openWithDraft(page, "p_003");
     await page.route("**/api/me", (route) =>
-      route.request().method() === "PUT"
-        ? route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "sign in first" }) })
-        : route.fallback(),
+      route.request().method() === "PUT" ? route.fulfill({ status: 401, json: { error: "sign in first" } }) : route.fallback(),
     );
-    await page.getByRole("checkbox", { name: "Not with an organisation" }).check();
-    await country(page).selectOption("US");
     await page.getByText("Not right now", { exact: true }).click();
     await continueButton(page).click();
-
-    await expect(saveAlert(page)).toContainText("Your sign-in has expired");
+    await expect(alertWithText(page)).toContainText("Your sign-in has expired");
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
+  test("show/hide on the card is marked coming soon, not offered as working", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    const group = page.getByRole("group", { name: "Show on your badge" });
+    await expect(group).toContainText("Coming soon");
+    for (const box of await group.getByRole("checkbox").all()) await expect(box).toBeDisabled();
+  });
+
+  test("a fresh load shows the saved colour, with one form on the page", async ({ page, baseURL }) => {
+    await page.context().addCookies([
+      { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },
+    ]);
+    await openWithDraft(page, "p_003");
+    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 163, 138)");
+    await expect(page.locator("form:visible")).toHaveCount(1);
+  });
+
   for (const scheme of ["light", "dark"] as const) {
-    test(`search loading, empty and error states are accessible in ${scheme} mode`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
-      let releaseSearch: () => void = () => {};
-      const pending = new Promise<void>((resolve) => { releaseSearch = resolve; });
-      await page.route("**/api/ror?**", async (route) => {
-        await pending;
-        await route.fulfill({ json: [] });
-      });
-      await search(page).fill("no matches");
-      await expect(page.getByRole("status")).toHaveText("Searching workplaces");
-      const scan = () => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
-      try {
-        expect((await scan()).violations, "loading").toEqual([]);
-      } finally {
-        releaseSearch();
-      }
-      await expect(page.getByRole("status")).toContainText("No workplaces match");
-      expect((await scan()).violations, "empty results").toEqual([]);
-
-      await page.unroute("**/api/ror?**");
-      await page.route("**/api/ror?**", (route) => route.fulfill({ status: 503, json: { error: "ROR unavailable" } }));
-      await search(page).fill("stan");
-      await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
-      expect((await scan()).violations, "search error").toEqual([]);
-      await expect(search(page)).toHaveAttribute("aria-expanded", "false");
-      await expect(search(page)).not.toHaveAttribute("aria-activedescendant");
-    });
-
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
-      await page.goto("/onboarding");
-      const scan = () => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
-
-      expect((await scan()).violations, "empty form").toEqual([]);
-
-      await continueButton(page).click(); // errors showing
-      expect((await scan()).violations, "with errors").toEqual([]);
-
-      await search(page).fill("univ"); // list open
-      // Scope to the workplace list: the country <select>'s hidden options also have role "option".
-      await expect(page.getByRole("listbox", { name: "Workplaces" }).getByRole("option").first()).toBeVisible({
-        timeout: 10_000,
-      });
-      expect((await scan()).violations, "with results").toEqual([]);
-
-      await page.goto("/onboarding/profile");
-      expect((await scan()).violations, "step 3").toEqual([]);
+      await openWithDraft(page, "p_005");
+      const scan = async (label: string) =>
+        expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
+      await scan("loaded");
     });
   }
 });

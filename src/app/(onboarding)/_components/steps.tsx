@@ -1,4 +1,4 @@
-const STEPS = ["Sign in", "About you", "Your profile", "Free time"] as const;
+const STEPS = ["About you", "Your badge", "Free time", "Your details"] as const;
 
 /** Progress through onboarding. `current` is 1-based. */
 export function Steps({ current }: { current: number }) {
