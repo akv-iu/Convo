@@ -154,6 +154,11 @@ async function toCandidates(es: Client, hits: estypes.SearchHit<EvidenceSource>[
   });
 }
 
+/** An open ask as a percolator document; shared by registerAsk and the seed script's bulk load. */
+export function askDocument(askId: string, userId: string, askText: string) {
+  return { ask_id: askId, user_id: userId, active: true, query: { match: { profile: { query: askText, minimum_should_match: ASK_MIN_MATCH } } } };
+}
+
 export const elasticSearch: SearchService = {
   async getPerson(id) {
     try {
@@ -232,10 +237,7 @@ export const elasticSearch: SearchService = {
 
   async registerAsk(askId, userId, askText) {
     try {
-      await client().index({
-        index: INDEX.asks, id: askId, op_type: "create",
-        document: { ask_id: askId, user_id: userId, active: true, query: { match: { profile: { query: askText, minimum_should_match: ASK_MIN_MATCH } } } },
-      });
+      await client().index({ index: INDEX.asks, id: askId, op_type: "create", document: askDocument(askId, userId, askText) });
     } catch (error) {
       if (!hasStatus(error, 409)) throw error; // already registered, or resolved: never revive it
     }

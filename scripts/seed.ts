@@ -8,7 +8,7 @@
 import { eq } from "drizzle-orm";
 import { evidence, people } from "@/contracts/fixtures";
 import { getProfile } from "@/server/profile/service";
-import { client, elasticSearch, INDEX } from "@/server/search/elastic";
+import { askDocument, client, elasticSearch, INDEX } from "@/server/search/elastic";
 import { db } from "../db";
 import { asks, users } from "../db/schema";
 
@@ -30,17 +30,10 @@ async function seedUsers(): Promise<number> {
 
 async function seedAsks(): Promise<number> {
   const open = await db().select({ id: asks.id, userId: asks.userId, refined: asks.refined }).from(asks).where(eq(asks.status, "open"));
-  const operations = open.flatMap((ask) => {
-    if (!ask.refined) return [];
-    return [{
-      create: { _index: INDEX.asks, _id: ask.id },
-    }, {
-      ask_id: ask.id,
-      user_id: ask.userId,
-      active: true,
-      query: { match: { profile: { query: ask.refined.text, minimum_should_match: "2<60%" } } },
-    }];
-  });
+  // One bulk call; `create` keeps registration once-only (409 = already registered or resolved).
+  const operations = open.flatMap((ask) => ask.refined
+    ? [{ create: { _index: INDEX.asks, _id: ask.id } }, askDocument(ask.id, ask.userId, ask.refined.text)]
+    : []);
   if (operations.length) {
     const result = await client().bulk({ operations });
     const failed = result.items.map((item) => item.create).find((item) => item && item.status >= 300 && item.status !== 409);
@@ -50,7 +43,10 @@ async function seedAsks(): Promise<number> {
 }
 
 async function main() {
-  await Promise.all(people.map((person) => elasticSearch.ingestPerson(person, evidence.filter((e) => e.personId === person.id))));
+  // One person at a time: each ingest is several Elasticsearch calls, and Phase 3 adds 500 people.
+  for (const person of people) {
+    await elasticSearch.ingestPerson(person, evidence.filter((e) => e.personId === person.id));
+  }
   console.log(`ingested ${people.length} fixture people`);
   if (process.env.DATABASE_URL) {
     console.log(`ingested ${await seedUsers()} signed-up users`);
