@@ -13,7 +13,7 @@ Edit only the folders your workstream owns. If you need a change elsewhere, stop
 | A1 and A2 | `src/components/ui/`, `tests/e2e/` |
 | B1 (engine) | `src/server/search/`, `src/server/ai/`, `src/server/pipeline/`, `scripts/`, `es/` |
 | B2 (app backend) | `src/server/profile/`, `src/server/requests/`, `src/server/schedule/`, `src/server/real.ts`, `src/server/auth.ts`, `src/app/api/`, `db/`, `src/instrumentation.ts` |
-| Both people, by PR | `src/contracts/`, `.github/`, this file |
+| Both people, by PR | `src/contracts/`, `.github/`, `.gitar/`, `sonar-project.properties`, `vitest.config.mts`, this file |
 
 ## The contract rule
 
