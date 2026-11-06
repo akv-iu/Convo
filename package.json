@@ -16,9 +16,9 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "es:rebuild": "tsx es/rebuild.ts",
-    "seed": "tsx scripts/seed.ts",
-    "try-search": "tsx scripts/try-search.ts"
+    "es:rebuild": "tsx --env-file-if-exists=.env.local es/rebuild.ts",
+    "seed": "tsx --env-file-if-exists=.env.local scripts/seed.ts",
+    "try-search": "tsx --env-file-if-exists=.env.local scripts/try-search.ts"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.5.1",

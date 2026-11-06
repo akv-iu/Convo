@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { routes, type RouteBody } from "@/contracts/routes";
-import { Person, type TimeBlock } from "@/contracts/types";
+import { EvidenceDoc, Person, type TimeBlock } from "@/contracts/types";
 import { search } from "@/server/search";
+import { MAX_REPO_EVIDENCE } from "./index";
 
 type User = typeof users.$inferSelect;
 type ProfilePatch = RouteBody<"putMe">;
@@ -55,13 +56,25 @@ function validateTimes(times: TimeBlock[]): void {
   }
 }
 
-async function syncProfile(person: Person, revision: number): Promise<void> {
+export async function syncProfile(user: User): Promise<Person> {
+  const person = toPerson(user);
+  const evidence = EvidenceDoc.array().max(MAX_REPO_EVIDENCE).safeParse(user.githubEvidence);
+  if (!evidence.success || evidence.data.some(doc => doc.personId !== user.id || doc.kind !== "repo")) {
+    throw new ProfileError("Saved repository evidence is invalid. Sign in again to refresh it.", 503);
+  }
   try {
-    await search.ingestPerson(person, undefined, revision);
+    await search.ingestPerson(person, evidence.data, user.revision);
+    if (user.githubEvidencePending) {
+      // Only this exact snapshot can confirm that stale repository evidence was replaced.
+      await db().update(users).set({ githubEvidencePending: false })
+        .where(and(eq(users.id, user.id), eq(users.revision, user.revision)));
+    }
   } catch {
     // Postgres is already saved. An identical retry can repair search without losing data.
-    throw new ProfileError("Profile saved, but search update failed. Retry the same save.", 503);
+    // shortcut: retries require a sign-in/save; add a worker when unattended recovery is needed.
+    throw new ProfileError("Profile saved, but search synchronization could not be confirmed. Retry the same save or sign in again.", 503);
   }
+  return person;
 }
 
 export async function getProfile(userId: string): Promise<Person> {
@@ -74,9 +87,7 @@ export async function updateProfile(userId: string, changes: ProfilePatch): Prom
   toPerson({ ...existing, ...changes }); // Validate onboarding before writing any fields.
   const saved = Object.values(changes).some((value) => value !== undefined)
     ? await writeUser(userId, changes) : existing;
-  const person = toPerson(saved);
-  await syncProfile(person, saved.revision);
-  return person;
+  return syncProfile(saved);
 }
 
 export async function getAvailability(userId: string): Promise<TimeBlock[]> {
@@ -89,6 +100,6 @@ export async function getAvailability(userId: string): Promise<TimeBlock[]> {
 export async function saveAvailability(userId: string, times: TimeBlock[]): Promise<TimeBlock[]> {
   validateTimes(times);
   const saved = await writeUser(userId, { freeTimes: times });
-  if (saved.filters !== null) await syncProfile(toPerson(saved), saved.revision);
+  if (saved.filters !== null) await syncProfile(saved);
   return saved.freeTimes;
 }

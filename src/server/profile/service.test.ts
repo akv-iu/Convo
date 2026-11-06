@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { people } from "@/contracts/fixtures";
 import { routes } from "@/contracts/routes";
-import type { Person } from "@/contracts/types";
+import type { EvidenceDoc, Person } from "@/contracts/types";
 
 const { query, ingestPerson } = vi.hoisted(() => ({ query: vi.fn(), ingestPerson: vi.fn() }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
@@ -11,12 +11,14 @@ vi.mock("@/server/search", () => ({ search: { ingestPerson } }));
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "./service";
 
 const person = structuredClone(people[0]);
-function result(value: Person = person, filters: Person["filters"] | null = value.filters, revision = 1) {
+function result(value: Person = person, filters: Person["filters"] | null = value.filters, revision = 1, evidence: unknown = [], pending = false) {
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations),
     filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision,
-    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true })]] };
+    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), JSON.stringify(evidence), pending]] };
 }
+const evidence: EvidenceDoc[] = [{ id: `${person.id}:repo:durable`, personId: person.id,
+  kind: "repo", title: "DurableRepository", text: "Repository evidence", url: "https://github.com/example/durable" }];
 beforeEach(() => {
   query.mockReset().mockResolvedValue(result());
   ingestPerson.mockReset().mockResolvedValue(undefined);
@@ -25,13 +27,60 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("real profile and availability services", () => {
+  it("replays durable evidence on an empty save after a restart, without exposing storage fields", async () => {
+    query.mockResolvedValue(result(person, person.filters, 4, evidence));
+    const restored = await updateProfile(person.id, {});
+    expect(restored).toEqual(person);
+    expect(restored).not.toHaveProperty("githubEvidence");
+    expect(restored).not.toHaveProperty("githubEvidencePending");
+    expect(ingestPerson).toHaveBeenCalledExactlyOnceWith(person, evidence, 4);
+    expect(query).toHaveBeenCalledOnce();
+  });
+
+  it("indexes the saved evidence when onboarding completes and acknowledges only that revision", async () => {
+    query.mockResolvedValueOnce(result(person, null, 0, evidence, true))
+      .mockResolvedValueOnce(result(person, person.filters, 1, evidence, true));
+    await updateProfile(person.id, { filters: person.filters });
+    expect(ingestPerson).toHaveBeenCalledExactlyOnceWith(person, evidence, 1);
+    expect(query.mock.calls[2][0]).toContain('where ("users"."id" = $2 and "users"."revision" = $3)');
+    expect(query.mock.calls[2][1]).toEqual([false, person.id, 1]);
+  });
+
+  it("keeps evidence during an availability save and repairs a failed acknowledgement on retry", async () => {
+    query.mockResolvedValueOnce(result(person, person.filters, 5, evidence, true))
+      .mockRejectedValueOnce(new Error("private-database-credentials"));
+    const error = await saveAvailability(person.id, person.freeTimes).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).toContain("Profile saved");
+    expect(String(error)).not.toContain("private-database-credentials");
+    expect(ingestPerson).toHaveBeenCalledWith(person, evidence, 5);
+    query.mockResolvedValueOnce(result(person, person.filters, 6, evidence, true));
+    expect(await saveAvailability(person.id, person.freeTimes)).toEqual(person.freeTimes);
+    expect(query.mock.calls.at(-1)?.[1]).toEqual([false, person.id, 6]);
+  });
+
+  it.each([null, {}, [{ ...evidence[0], personId: "another-user" }],
+    [{ ...evidence[0], kind: "talk" }], Array.from({ length: 21 }, () => evidence[0])])(
+    "refuses malformed or foreign saved evidence before indexing: %j", async docs => {
+      query.mockResolvedValue(result(person, person.filters, 1, docs));
+      await expect(updateProfile(person.id, {})).rejects.toMatchObject({ status: 503 });
+      expect(ingestPerson).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not mark evidence synchronized when search fails", async () => {
+    query.mockResolvedValue(result(person, person.filters, 7, evidence, true));
+    ingestPerson.mockRejectedValueOnce(new Error("private-search-token"));
+    await expect(updateProfile(person.id, {})).rejects.toMatchObject({ status: 503 });
+    expect(query).toHaveBeenCalledOnce();
+  });
   it("persists visibility while keeping hidden fields available to the owner and search", async () => {
     const visibility = { country: false, workplace: false, hiring: false };
     const updated = { ...person, visibility };
     query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
     expect(await updateProfile(person.id, { visibility })).toEqual(updated);
     expect(query.mock.calls[1][1]).toEqual([JSON.stringify(visibility), person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
     query.mockResolvedValueOnce(result(updated));
     expect(await getProfile(person.id)).toEqual(updated);
   });
@@ -42,7 +91,7 @@ describe("real profile and availability services", () => {
     expect(query.mock.calls[1][0]).toContain('"workplace_name" =');
     expect(query.mock.calls[1][0]).toContain('"badge_colour" =');
     expect(query.mock.calls[1][1]).toEqual(["Acme Robotics", "lilac", person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
     query.mockResolvedValueOnce(result(updated));
     expect(await getProfile(person.id)).toEqual(updated);
   });
@@ -79,7 +128,7 @@ describe("real profile and availability services", () => {
   it("saves initial onboarding answers before syncing a complete profile", async () => {
     query.mockResolvedValueOnce(result(person, null)).mockResolvedValueOnce(result());
     expect(await updateProfile(person.id, { filters: person.filters })).toEqual(person);
-    expect(ingestPerson).toHaveBeenCalledWith(person, undefined, 1);
+    expect(ingestPerson).toHaveBeenCalledWith(person, [], 1);
     expect(query.mock.calls[1][0]).toContain('set "filters" =');
   });
 
@@ -97,7 +146,7 @@ describe("real profile and availability services", () => {
     const [sql, params] = query.mock.calls[1];
     expect(sql).toMatch(/set "name" = \$\d+, "revision" = "users"\."revision" \+ 1 where "users"\."id" = \$\d+ returning/);
     expect(params).toEqual(["New name", person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
   });
 
   it("handles an empty patch without issuing an invalid empty UPDATE", async () => {
@@ -110,14 +159,14 @@ describe("real profile and availability services", () => {
     expect(await getAvailability(person.id)).toEqual(person.freeTimes);
   });
 
-  it("saves and clears availability and syncs search without passing replacement evidence", async () => {
+  it("saves and clears availability and syncs the saved evidence with availability", async () => {
     const updated = { ...person, freeTimes: [] };
     query.mockResolvedValueOnce(result(updated));
     expect(await saveAvailability(person.id, [])).toEqual([]);
     const [sql, params] = query.mock.calls[0];
     expect(sql).toMatch(/set "free_times" = \$\d+, "revision" = "users"\."revision" \+ 1 where "users"\."id" = \$\d+ returning/);
     expect(params).toEqual(["[]", person.id]);
-    expect(ingestPerson).toHaveBeenCalledWith(updated, undefined, 1);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
   });
 
   it("keeps pre-onboarding availability durable without indexing an incomplete Person", async () => {

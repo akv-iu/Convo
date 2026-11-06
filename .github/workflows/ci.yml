@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Sonar needs full history to tell new code from old
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -19,6 +21,23 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test -- --coverage
+      # Scan pushes to main and PRs into main. The free plan analyses no other PR
+      # targets (stacked PRs), and fork PRs get no secret.
+      - id: sonar
+        run: echo "enabled=${{ secrets.SONAR_TOKEN != '' && (github.event_name == 'push' || github.base_ref == 'main') }}" >> "$GITHUB_OUTPUT"
+      - name: SonarQube Cloud scan (fails the job when the quality gate fails)
+        id: scan
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1, pinned: this step holds the token
+        env:
+          # Scoped to this step so dependency install scripts never see it.
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Why the quality gate failed
+        if: always() && steps.scan.outcome == 'failure' && github.event_name == 'pull_request'
+        run: node .github/scripts/sonar-gate-report.mjs
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

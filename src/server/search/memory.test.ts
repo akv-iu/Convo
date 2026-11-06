@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { people } from "@/contracts/fixtures";
+import { DEMO_USER_A, DEMO_USER_B, people } from "@/contracts/fixtures";
 import { memorySearch } from "./memory";
+
+const byId = (id: string) => {
+  const person = people.find((p) => p.id === id);
+  if (!person) throw new Error(`no fixture ${id}`);
+  return person;
+};
+
+describe("fixture mutual interest", () => {
+  it("lists the people looking for someone like the given user, not the people that user wants", async () => {
+    expect(await memorySearch.whoIsLookingFor(byId(DEMO_USER_A))).toEqual(expect.arrayContaining([DEMO_USER_B, "p_006"]));
+    expect(await memorySearch.whoIsLookingFor(byId(DEMO_USER_B))).toEqual(["p_006"]);
+  });
+});
+
+describe("hard filters", () => {
+  it("keeps only people matching every given filter", async () => {
+    const { country, hiring } = byId(DEMO_USER_B).filters;
+    const all = await memorySearch.searchCandidates("kubernetes scheduler preemption etcd raft", { excludeIds: [] });
+    const filtered = await memorySearch.searchCandidates("kubernetes scheduler preemption etcd raft", { excludeIds: [], hard: { country, hiring } });
+    expect(filtered.map((c) => c.person.id)).toContain(DEMO_USER_B);
+    expect(filtered.every((c) => c.person.filters.country === country && c.person.filters.hiring === hiring)).toBe(true);
+    expect(filtered.length).toBeLessThanOrEqual(all.length);
+  });
+});
 
 describe("ask lifecycle", () => {
   it("counts a person once, removes only the resolved ask, and ignores late registration", async () => {

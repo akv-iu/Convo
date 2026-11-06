@@ -27,7 +27,7 @@ const request = (path: string, body: unknown) => new Request(`http://localhost:3
 function profileRows() {
   return { rows: [[person.id, person.githubLogin, person.name, person.bio,
     JSON.stringify(person.languages), JSON.stringify(person.organisations), JSON.stringify(person.filters),
-    JSON.stringify(person.freeTimes), "2026-11-05T12:00:00Z", 1, null, "sunflower", JSON.stringify(person.visibility)]] };
+    JSON.stringify(person.freeTimes), "2026-11-05T12:00:00Z", 1, null, "sunflower", JSON.stringify(person.visibility), "[]", false]] };
 }
 function savedAskRows(askId: string, raw: string, refined: RefinedAsk) {
   return { rows: [[askId, person.id, raw, JSON.stringify(refined), "open", true, "2026-11-05T12:00:00Z"]] };
@@ -57,7 +57,8 @@ describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
       store.reset(); // The real route must read the saved ask without relying on the demo store.
       query.mockResolvedValueOnce(savedAskRows(created.askId, sample.raw, created.refined))
         .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility)]) });
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
     }
     const matched = await match(request("match", { askId: created.askId }), context());
     expect(matched.status).toBe(200);

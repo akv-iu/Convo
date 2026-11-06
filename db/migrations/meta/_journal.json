@@ -22,6 +22,13 @@
       "when": 1793945095658,
       "tag": "0002_profile_display",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793988341340,
+      "tag": "0003_github_evidence",
+      "breakpoints": true
     }
   ]
 }
