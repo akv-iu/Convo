@@ -101,9 +101,75 @@ test.describe("about you (A1 step 2)", () => {
       route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "ROR unavailable" }) }),
     );
     await search(page).fill("stan");
-    await expect(page.getByRole("listbox")).toContainText("Workplace search isn't responding right now");
-    await expect(page.getByRole("listbox")).not.toContainText("No workplaces match");
+    await expect(page.getByRole("status")).toContainText("Workplace search isn't responding right now");
+    await expect(page.getByRole("status")).not.toContainText("No workplaces match");
     await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  test("changing a completed search cannot select its old result during debounce", async ({ page }) => {
+    await search(page).fill("stan");
+    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+
+    await search(page).fill("oxford");
+    await search(page).press("Enter");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Change workplace" })).toHaveCount(0);
+    await expect(country(page)).toHaveValue("");
+
+    await page.clock.runFor(350);
+    await page.clock.resume();
+    await page.getByRole("option", { name: /University of Oxford/ }).click();
+    await expect(country(page)).toHaveValue("GB");
+  });
+
+  test("adding whitespace preserves results for the same search", async ({ page }) => {
+    await search(page).fill("stan");
+    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
+    await search(page).fill(" stan ");
+    await search(page).press("Enter");
+    await expect(country(page)).toHaveValue("US");
+  });
+
+  test("keyboard navigation keeps the last workplace visible and closes on leaving", async ({ page }) => {
+    await search(page).fill("univ");
+    const list = page.getByRole("listbox");
+    const options = list.getByRole("option");
+    await expect(options.first()).toBeVisible();
+    const count = await options.count();
+    for (let i = 1; i < count; i++) await search(page).press("ArrowDown");
+    await expect(options.last()).toHaveAttribute("aria-selected", "true");
+    await expect.poll(async () => options.last().evaluate((el) => {
+      const item = el.getBoundingClientRect();
+      const list = el.parentElement!.getBoundingClientRect();
+      return item.top >= list.top && item.bottom <= list.bottom;
+    })).toBe(true);
+    await search(page).press("Tab");
+    await expect(list).toHaveCount(0);
+  });
+
+  test("keyboard retry keeps focus inside the search and recovers", async ({ page }) => {
+    let attempts = 0;
+    await page.route("**/api/ror?**", (route) => {
+      attempts++;
+      return attempts === 1
+        ? route.fulfill({ status: 503, json: { error: "ROR unavailable" } })
+        : route.fulfill({ json: [{ id: "https://ror.org/00f54p054", name: "Stanford University", country: "US" }] });
+    });
+    await search(page).fill("stan");
+    const retry = page.getByRole("button", { name: "Try again" });
+    await expect(retry).toBeVisible();
+    await search(page).press("Tab");
+    await expect(retry).toBeFocused();
+    await page.waitForTimeout(250); // The old blur timer removed the focused button after 150 ms.
+    await expect(retry).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(search(page)).toBeFocused();
+    await expect(page.getByRole("option", { name: /Stanford/ })).toBeVisible();
+    expect(attempts).toBe(2);
+    await search(page).press("Enter");
+    await expect(country(page)).toHaveValue("US");
   });
 
   test("a slow reply for older typing is ignored", async ({ page }) => {
@@ -166,6 +232,34 @@ test.describe("about you (A1 step 2)", () => {
   });
 
   for (const scheme of ["light", "dark"] as const) {
+    test(`search loading, empty and error states are accessible in ${scheme} mode`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      let releaseSearch: () => void = () => {};
+      const pending = new Promise<void>((resolve) => { releaseSearch = resolve; });
+      await page.route("**/api/ror?**", async (route) => {
+        await pending;
+        await route.fulfill({ json: [] });
+      });
+      await search(page).fill("no matches");
+      await expect(page.getByRole("status")).toHaveText("Searching workplaces");
+      const scan = () => new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+      try {
+        expect((await scan()).violations, "loading").toEqual([]);
+      } finally {
+        releaseSearch();
+      }
+      await expect(page.getByRole("status")).toContainText("No workplaces match");
+      expect((await scan()).violations, "empty results").toEqual([]);
+
+      await page.unroute("**/api/ror?**");
+      await page.route("**/api/ror?**", (route) => route.fulfill({ status: 503, json: { error: "ROR unavailable" } }));
+      await search(page).fill("stan");
+      await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+      expect((await scan()).violations, "search error").toEqual([]);
+      await expect(search(page)).toHaveAttribute("aria-expanded", "false");
+      await expect(search(page)).not.toHaveAttribute("aria-activedescendant");
+    });
+
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto("/onboarding");

@@ -58,13 +58,13 @@ export function WorkplaceSearch({
       setSearch({ state: "loading" });
       try {
         const res = await fetch(`/api/ror?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal });
-        if (ticket !== latest.current) return; // a newer search started
+        if (controller.signal.aborted || ticket !== latest.current) return;
         if (!res.ok) {
           setSearch({ state: "error", message: searchErrorMessage(res.status) });
           return;
         }
         const results = (await res.json()) as RorMatch[];
-        if (ticket !== latest.current) return;
+        if (controller.signal.aborted || ticket !== latest.current) return;
         setSearch({ state: "done", results });
         setActive(results.length ? 0 : -1);
       } catch (err) {
@@ -80,7 +80,14 @@ export function WorkplaceSearch({
   }, [trimmed, retry]);
 
   const results = search.state === "done" ? search.results : [];
-  const showList = open && trimmed.length > 0 && search.state !== "idle";
+  const showPanel = open && trimmed.length > 0 && search.state !== "idle";
+  const showList = showPanel && results.length > 0;
+
+  useEffect(() => {
+    if (showList && active >= 0) {
+      document.getElementById(`${id}-opt-${active}`)?.scrollIntoView({ block: "nearest" });
+    }
+  }, [showList, active, id]);
 
   function pick(org: RorMatch) {
     onChange({ kind: "org", org });
@@ -97,9 +104,9 @@ export function WorkplaceSearch({
     } else if (e.key === "ArrowUp" && results.length) {
       e.preventDefault();
       setActive((i) => (i <= 0 ? results.length - 1 : i - 1));
-    } else if (e.key === "Enter" && showList && active >= 0 && results[active]) {
+    } else if (e.key === "Enter" && open && trimmed) {
       e.preventDefault();
-      pick(results[active]);
+      if (showList && active >= 0 && results[active]) pick(results[active]);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -138,7 +145,12 @@ export function WorkplaceSearch({
   }
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
+      }}
+    >
       <input
         ref={inputRef}
         id={`${id}-input`}
@@ -146,7 +158,7 @@ export function WorkplaceSearch({
         role="combobox"
         aria-label="Search for your workplace"
         aria-expanded={showList}
-        aria-controls={listId}
+        aria-controls={showList ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={showList && active >= 0 ? `${id}-opt-${active}` : undefined}
         aria-invalid={invalid || undefined}
@@ -157,12 +169,15 @@ export function WorkplaceSearch({
         value={query}
         disabled={value?.kind === "none"}
         onChange={(e) => {
+          if (e.target.value.trim() !== trimmed) {
+            latest.current++;
+            setSearch({ state: "idle" });
+            setActive(-1);
+          }
           setQuery(e.target.value);
           setOpen(true);
-          if (!e.target.value.trim()) setSearch({ state: "idle" });
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={onKeyDown}
         className="min-h-14 w-full rounded-xl border-2 border-border bg-surface px-4 text-lg placeholder:text-muted focus-visible:border-accent focus-visible:outline-none disabled:opacity-60 aria-invalid:border-[#c2410c]"
       />
@@ -171,46 +186,48 @@ export function WorkplaceSearch({
         {status}
       </p>
 
-      {showList && (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label="Workplaces"
-          className="absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-auto rounded-xl border-2 border-border bg-surface p-1.5 shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)]"
-        >
-          {search.state === "loading" && <li className="px-3 py-3 text-muted">Searching…</li>}
+      {showPanel && (
+        <div className="absolute inset-x-0 top-full z-20 mt-2 rounded-xl border-2 border-border bg-surface p-1.5 shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)]">
+          {search.state === "loading" && <p className="px-3 py-3 text-muted">Searching…</p>}
           {search.state === "error" && (
-            <li className="flex items-center justify-between gap-3 px-3 py-3">
+            <div className="flex items-center justify-between gap-3 px-3 py-3">
               <span>{search.message}</span>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setRetry((n) => n + 1)}
+                onClick={() => {
+                  inputRef.current?.focus();
+                  setRetry((n) => n + 1);
+                }}
                 className="min-h-11 shrink-0 rounded-lg px-3 font-semibold text-accent focus-visible:outline-2 focus-visible:outline-accent"
               >
                 Try again
               </button>
-            </li>
+            </div>
           )}
           {search.state === "done" && results.length === 0 && (
-            <li className="px-3 py-3 text-muted">No workplaces match that.</li>
+            <p className="px-3 py-3 text-muted">No workplaces match that.</p>
           )}
-          {results.map((org, i) => (
-            <li
-              key={org.id}
-              id={`${id}-opt-${i}`}
-              role="option"
-              aria-selected={i === active}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pick(org)}
-              onMouseEnter={() => setActive(i)}
-              className={`flex min-h-12 cursor-pointer flex-col justify-center rounded-lg px-3 py-2 ${i === active ? "bg-accent/15" : ""}`}
-            >
-              <span className="font-semibold">{org.name}</span>
-              <span className="text-sm text-muted">{countryName(org.country)}</span>
-            </li>
-          ))}
-        </ul>
+          {showList && (
+            <ul id={listId} role="listbox" aria-label="Workplaces" tabIndex={-1} className="max-h-80 overflow-auto">
+              {results.map((org, i) => (
+                <li
+                  key={org.id}
+                  id={`${id}-opt-${i}`}
+                  role="option"
+                  aria-selected={i === active}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(org)}
+                  onMouseEnter={() => setActive(i)}
+                  className={`flex min-h-12 cursor-pointer flex-col justify-center rounded-lg px-3 py-2 ${i === active ? "bg-accent/15" : ""}`}
+                >
+                  <span className="font-semibold">{org.name}</span>
+                  <span className="text-sm text-muted">{countryName(org.country)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );
