@@ -7,5 +7,7 @@
 - Every match pipeline step runs in its own OpenTelemetry span named `match.<step>`.
 - Postgres is the source of truth; Elasticsearch is a copy. When a write saves to Postgres and then fails to update search, the error must say the save happened and that retrying the same request is safe. Flag code that reports such a failure as if nothing was saved.
 - Never send private GitHub data (private emails, private repos) to search, AI or the client; only public data and sources the user consented to.
+- Treat as a blocking issue: an API response that includes another user's profile without passing it through `visibleCard` (`src/server/profile/visibility.ts`). A person's hidden country, workplace and hiring values, and their visibility settings themselves, must never reach other users. Hidden is `null`, never a guessed value such as "not hiring".
+- All code here is written by AI agents; flag the mistakes they repeat: a `catch` that turns a failure into an empty list, `null` or a default value instead of an error status; a new helper that duplicates one already in `src/server/`; a retry or loop with no limit.
 - Schema changes need a generated migration in `db/migrations/` with its snapshot; flag edits to an already-merged migration file.
 - TypeScript strict: flag `any`, non-null assertions on external data, and unchecked `as` casts of request bodies or database rows.
