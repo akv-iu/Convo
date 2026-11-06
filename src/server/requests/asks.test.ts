@@ -45,7 +45,7 @@ describe("durable ask creation", () => {
     expect(sql).toContain('insert into "asks"');
     expect(params).toEqual([response.askId, person.id, "scheduler preemption", JSON.stringify(refined)]);
     expect(refineAsk).toHaveBeenCalledWith("scheduler preemption", person);
-    expect(registerAsk).toHaveBeenCalledWith(person.id, refined.text);
+    expect(registerAsk).toHaveBeenCalledWith(response.askId, person.id, refined.text);
   });
 
   it("uses a distinct ID for each intentional submission", async () => {
@@ -105,6 +105,33 @@ describe("durable ask creation", () => {
 });
 
 describe("matching a saved ask", () => {
+  it("uses current database visibility even when search contains an older public profile", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
+    const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
+    runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    const [card] = await matchAsk(person.id, ask.id);
+    expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
+    expect(card.person.workplaceName).toBeNull();
+    expect(card.badges).toEqual([]);
+    expect(query.mock.calls[2][1]).toEqual(["candidate"]);
+    expect(candidate.filters).toEqual(person.filters);
+  });
+
+  it("fails closed when a real candidate's current privacy cannot be loaded", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });
+    runMatch.mockResolvedValueOnce([{ person: { ...person, synthetic: false }, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    expect((await matchAsk(person.id, ask.id))[0].person.filters).toEqual({ country: null, rorId: null, hiring: null });
+  });
+
+  it("does not return cards when the current privacy read fails", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("private-database-token"));
+    runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-database-token");
+  });
   it("scopes the ask lookup to its owner and passes saved answers to the pipeline", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });
     expect(await matchAsk(person.id, ask.id, "raft")).toEqual([]);

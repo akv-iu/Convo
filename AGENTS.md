@@ -35,6 +35,13 @@ npm run lint && npm run typecheck && npm test
 
 Playwright (`npm run test:e2e`) for anything that changes a screen. Tests come with the code: a PR for a step includes the tests that prove it. Tests never call OpenAI, Elasticsearch or Postgres; use the fakes or recorded replies.
 
+## Review and handoff
+
+- When reviewing Person A's PR, inspect the code, contracts and feature behaviour. Use the contributor's checks and current CI results; do not rerun lint or build locally just for that review.
+- When making code changes, test and critically review them twice: fix findings from the first pass, then retest and check for regressions in the second. The checks above still apply to your own changes.
+- Supply the complete manual test checklist at once, including setup, expected results and cleanup. Ask before tests that contact live external services.
+- Clearly signal when work is ready for review or merge. A contract change still needs both people's approval before merge.
+
 ## Conventions
 
 - TypeScript strict, no `any`. Server components by default; `"use client"` only where there is interaction.

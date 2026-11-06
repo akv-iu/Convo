@@ -30,8 +30,10 @@ export interface SearchService {
   ingestPerson(person: Person, evidence?: EvidenceDoc[], revision?: number): Promise<void>;
   /** Hybrid search over evidence, collapsed to one result per person, with highlights. */
   searchCandidates(query: string, filters: SearchFilters, limit?: number): Promise<Candidate[]>;
-  /** Store a user's ask as a percolator query. */
-  registerAsk(userId: string, askText: string): Promise<void>;
+  /** Register once by ID. A resolved ID must never be reactivated by a delayed registration. */
+  registerAsk(askId: string, userId: string, askText: string): Promise<void>;
+  /** Idempotently remove this ask, preserving the owner's other asks. */
+  removeAsk(askId: string): Promise<void>;
   /** Which users have an ask this person could answer (reverse search). */
   whoIsLookingFor(person: Person): Promise<string[]>;
   /** Free times for several people. */
@@ -47,6 +49,7 @@ export const elasticSearch: SearchService = {
   ingestPerson: async () => notImplemented(),
   searchCandidates: async () => notImplemented(),
   registerAsk: async () => notImplemented(),
+  removeAsk: async () => notImplemented(),
   whoIsLookingFor: async () => notImplemented(),
   getAvailability: async () => notImplemented(),
 };

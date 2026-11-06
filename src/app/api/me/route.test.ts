@@ -28,7 +28,8 @@ const request = (path: string, body?: unknown) => new Request(`http://localhost:
 function result(value: Person = person, filters: Person["filters"] | null = value.filters) {
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations), filters === null ? null : JSON.stringify(filters),
-    JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", 1]] };
+    JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", 1,
+    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true })]] };
 }
 beforeEach(() => {
   runtime.fakeApi = false;
@@ -41,6 +42,24 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe.each(["fake", "real"] as const)("%s profile/availability HTTP contract", (mode) => {
   beforeEach(() => { runtime.fakeApi = mode === "fake"; });
+
+  it("saves, reads and clears custom workplaces with the same fake/real payload", async () => {
+    const updated = { ...person, workplaceName: "Acme Robotics", badgeColour: "lilac" as const,
+      visibility: { country: false, workplace: false, hiring: false } };
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
+    const response = await PUT(request("me", { workplaceName: "  Acme Robotics  ", badgeColour: "lilac", visibility: updated.visibility }), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(updated);
+    if (mode === "real") query.mockResolvedValueOnce(result(updated));
+    expect(await (await GET(request("me"), context())).json()).toEqual(updated);
+    if (mode === "real") query.mockResolvedValueOnce(result(updated)).mockResolvedValueOnce(result({ ...updated, workplaceName: null }));
+    expect(await (await PUT(request("me", { workplaceName: null }), context())).json()).toMatchObject({ workplaceName: null, badgeColour: "lilac" });
+  });
+
+  it.each([{ workplaceName: " " }, { workplaceName: "x".repeat(201) }, { badgeColour: "neon" }, { visibility: { country: false } }])("rejects invalid presentation fields %j", async body => {
+    expect((await PUT(request("me", body), context())).status).toBe(400);
+    expect(query).not.toHaveBeenCalled();
+  });
 
   it("returns the same profile response shape", async () => {
     const response = await GET(request("me"), context());

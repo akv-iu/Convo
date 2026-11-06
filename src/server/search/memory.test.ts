@@ -2,6 +2,28 @@ import { describe, expect, it } from "vitest";
 import { people } from "@/contracts/fixtures";
 import { memorySearch } from "./memory";
 
+describe("ask lifecycle", () => {
+  it("counts a person once, removes only the resolved ask, and ignores late registration", async () => {
+    const target = { ...people[0], id: "lifecycle-target", bio: "LifecycleUniqueTopic" };
+    await memorySearch.registerAsk("lifecycle-one", "lifecycle-owner", target.bio);
+    await memorySearch.registerAsk("lifecycle-two", "lifecycle-owner", target.bio);
+    await memorySearch.registerAsk("lifecycle-two", "lifecycle-owner", target.bio);
+    expect(await memorySearch.whoIsLookingFor(target)).toEqual(["lifecycle-owner"]);
+    await memorySearch.removeAsk("lifecycle-one");
+    expect(await memorySearch.whoIsLookingFor(target)).toEqual(["lifecycle-owner"]);
+    await memorySearch.removeAsk("lifecycle-two");
+    await memorySearch.removeAsk("lifecycle-two");
+    await memorySearch.registerAsk("lifecycle-two", "lifecycle-owner", target.bio);
+    expect(await memorySearch.whoIsLookingFor(target)).toEqual([]);
+  });
+  it("does not revive an ask when resolution finishes before registration", async () => {
+    const target = { ...people[0], id: "late-target", bio: "LateRegistrationTopic" };
+    await memorySearch.removeAsk("late-ask");
+    await memorySearch.registerAsk("late-ask", "late-owner", target.bio);
+    expect(await memorySearch.whoIsLookingFor(target)).toEqual([]);
+  });
+});
+
 describe("person updates without replacing evidence", () => {
   it("looks up fixture and newly ingested recipients without inventing unknown people", async () => {
     expect(await memorySearch.getPerson(people[0].id)).toEqual(people[0]);
