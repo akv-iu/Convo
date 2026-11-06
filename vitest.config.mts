@@ -11,7 +11,9 @@ export default defineConfig({
       provider: "v8",
       // lcov feeds SonarQube Cloud; html is the CI artifact.
       reporter: ["text-summary", "html", "lcov"],
-      include: ["src/server/**", "src/contracts/**", "src/app/api/**"],
+      // src/app/**/*.ts: screen logic with unit tests (onboarding answers, drafts, server actions).
+      // Screens themselves (.tsx) are covered by Playwright, as in sonar-project.properties.
+      include: ["src/server/**", "src/contracts/**", "src/app/api/**", "src/app/**/*.ts"],
       exclude: ["**/*.test.ts", "src/contracts/fixtures/**"],
       thresholds: { lines: 60 },
     },
