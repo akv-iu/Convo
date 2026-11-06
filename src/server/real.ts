@@ -8,6 +8,8 @@ import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/
 import { searchWorkplaces } from "@/server/profile/ror";
 import { createAsk, matchAsk } from "@/server/requests/asks";
 import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
+import { sendRequest, getInbox, respondToRequest } from "@/server/requests/messages";
+import { getSlots, bookSlot } from "@/server/schedule/service";
 
 export const real: Api = {
   getMe: ({ userId }) => getProfile(userId),
@@ -19,11 +21,11 @@ export const real: Api = {
   match: ({ userId, body }) => matchAsk(userId, body.askId, body.query),
   reject: ({ userId, body }) => rejectPerson(userId, body),
   setSoftBlocker: ({ userId, body }) => setSoftBlocker(userId, body),
-  sendRequest: notImplemented("B2: requests table"),
-  inbox: notImplemented("B2: requests for the receiver"),
-  respond: notImplemented("B2: accept, decline, reply"),
-  slots: notImplemented("B2: findSlots over both people's free times"),
-  schedule: notImplemented("B2: book the slot"),
+  sendRequest: ({ userId, body }) => sendRequest(userId, body),
+  inbox: ({ userId }) => getInbox(userId),
+  respond: ({ userId, params, body }) => respondToRequest(userId, params.id, body),
+  slots: ({ userId, params }) => getSlots(userId, params.id),
+  schedule: ({ userId, params, body }) => bookSlot(userId, params.id, body.slot),
   resolve: notImplemented("B2: mark the ask resolved"),
   lookingForMe: notImplemented("B2: search.whoIsLookingFor count"),
 };
