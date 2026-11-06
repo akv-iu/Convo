@@ -7,7 +7,22 @@ import type { CSSProperties, ReactNode } from "react";
  * surrounding element (step 1's picker). Decorative for screen readers; each
  * screen's form carries the meaning.
  */
-export function Badge({ children, label, colour }: { children?: ReactNode; label?: string; colour?: string }) {
+export function Badge({
+  children,
+  label,
+  colour,
+  name = "Your name",
+  handle = "your-github",
+  nameFor,
+}: {
+  children?: ReactNode;
+  label?: string;
+  colour?: string;
+  name?: string;
+  handle?: string;
+  /** When set, tapping the name focuses this input (the profile card's name field). */
+  nameFor?: string;
+}) {
   const style = colour ? ({ "--badge": colour } as CSSProperties) : undefined;
   return (
     <div aria-hidden="true" style={style} className="relative mx-auto w-full max-w-[19rem] lg:mt-16">
@@ -27,8 +42,17 @@ export function Badge({ children, label, colour }: { children?: ReactNode; label
           <div className="flex items-center gap-3">
             <span className="size-14 shrink-0 rounded-full bg-accent/80" />
             <div className="min-w-0 flex-1">
-              <p className="text-2xl font-extrabold leading-tight tracking-tight [font-stretch:85%]">Your name</p>
-              <p className="text-sm text-muted">@your-github</p>
+              {nameFor ? (
+                <label
+                  htmlFor={nameFor}
+                  className="-mx-1 block cursor-pointer rounded-md px-1 text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%] hover:bg-accent/10"
+                >
+                  {name}
+                </label>
+              ) : (
+                <p className="text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%]">{name}</p>
+              )}
+              <p className="truncate text-sm text-muted">@{handle}</p>
             </div>
           </div>
           {children}
