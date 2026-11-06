@@ -159,6 +159,7 @@ test.describe("sign-in and consent (A1 step 1)", () => {
       await scan("/signin");
       await page.locator("summary", { hasText: "Your data" }).click();
       await page.getByText("Repos and languages", { exact: true }).click(); // a stub showing
+      await expect.poll(() => badgeRowHeight(page, "Can help with")).toBe(0);
       await scan("/signin with the data note open and a source off");
       await page.goto("/onboarding");
       await scan("/onboarding");
