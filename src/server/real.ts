@@ -4,17 +4,21 @@
  */
 import type { Api } from "@/contracts/routes";
 import { notImplemented } from "@/server/api";
+import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
+import { searchWorkplaces } from "@/server/profile/ror";
+import { createAsk, matchAsk } from "@/server/requests/asks";
+import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 
 export const real: Api = {
-  getMe: notImplemented("B2: profile from Postgres"),
-  putMe: notImplemented("B2: save profile, re-ingest to Elasticsearch"),
-  searchRor: notImplemented("B2: ROR lookup"),
-  getAvailability: notImplemented("B2: free times from Postgres"),
-  putAvailability: notImplemented("B2: save free times, update Elasticsearch"),
-  refine: notImplemented("B2: create ask, call ai.refineAsk, search.registerAsk"),
-  match: notImplemented("B2: load ask and exclusions, call runMatch"),
-  reject: notImplemented("B2: rejections table, batch-reject rule"),
-  setSoftBlocker: notImplemented("B2: soft blocker flag on the ask"),
+  getMe: ({ userId }) => getProfile(userId),
+  putMe: ({ userId, body }) => updateProfile(userId, body),
+  searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),
+  getAvailability: ({ userId }) => getAvailability(userId),
+  putAvailability: ({ userId, body }) => saveAvailability(userId, body),
+  refine: ({ userId, body }) => createAsk(userId, body.text),
+  match: ({ userId, body }) => matchAsk(userId, body.askId, body.query),
+  reject: ({ userId, body }) => rejectPerson(userId, body),
+  setSoftBlocker: ({ userId, body }) => setSoftBlocker(userId, body),
   sendRequest: notImplemented("B2: requests table"),
   inbox: notImplemented("B2: requests for the receiver"),
   respond: notImplemented("B2: accept, decline, reply"),

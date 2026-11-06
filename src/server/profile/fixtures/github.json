@@ -1,0 +1,24 @@
+[
+  {
+    "profile": { "id": 101, "login": "ada-example", "name": "Ada Example", "bio": "Builds scheduling tools" },
+    "repos": [
+      { "name": "notes", "description": "Conference notes", "language": "TypeScript", "html_url": "https://github.com/ada-example/notes", "stargazers_count": 1, "private": false },
+      { "name": "scheduler", "description": "Fair task scheduling", "language": "Rust", "html_url": "https://github.com/ada-example/scheduler", "stargazers_count": 40, "private": false },
+      { "name": "internal", "description": "Private work", "language": "Python", "html_url": "https://github.com/ada-example/internal", "stargazers_count": 100, "private": true }
+    ],
+    "orgs": [{ "login": "example-labs" }]
+  },
+  {
+    "profile": { "id": 102, "login": "newcomer-example", "name": null, "bio": null },
+    "repos": [],
+    "orgs": []
+  },
+  {
+    "profile": { "id": 103, "login": "sam-example", "name": "  ", "bio": "" },
+    "repos": [
+      { "name": "tiny-tool", "description": null, "language": "Go", "html_url": "https://github.com/sam-example/tiny-tool", "stargazers_count": 0, "private": false },
+      { "name": "another-tool", "description": "Another tool", "language": "Go", "html_url": "https://github.com/sam-example/another-tool", "stargazers_count": 2, "private": false }
+    ],
+    "orgs": []
+  }
+]
