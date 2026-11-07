@@ -362,7 +362,41 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await blocker.click({ force: true });
     await expect(alertWithText(page)).toHaveText("Storage unavailable");
     await expect(blocker).toBeChecked();
-    await expect(blocker).toBeEnabled();
+    await expect(blocker).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("the switch keeps keyboard focus while saving, and waits for a pass in flight", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/rejections", async (route) => {
+      await held;
+      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
+    });
+    let puts = 0;
+    await page.route("**/api/soft-blocker", (route) => {
+      puts++;
+      return route.fulfill({ json: { askId: "made-up", enabled: false } });
+    });
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+
+    // While a pass is saving, the switch says it's unavailable and ignores presses.
+    await passButton(page).click();
+    await expect(blocker).toHaveAttribute("aria-disabled", "true");
+    await blocker.focus();
+    await page.keyboard.press("Space");
+    expect(puts).toBe(0);
+    release();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+
+    // Saving the switch keeps focus on it.
+    await blocker.focus();
+    await page.keyboard.press("Space");
+    await expect(blocker).not.toBeChecked();
+    await expect(blocker).toBeFocused();
+    expect(puts).toBe(1);
   });
 
   for (const scheme of ["light", "dark"] as const) {

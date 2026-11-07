@@ -58,6 +58,8 @@ export function MatchesView() {
   const [cutoffNote, setCutoffNote] = useState(false);
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
+  /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
+  const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
   const [blocker, setBlocker] = useState(true);
   const [blockerSaving, setBlockerSaving] = useState(false);
@@ -65,6 +67,7 @@ export function MatchesView() {
 
   useEffect(() => {
     if (!askId) return;
+    deckGen.current++;
     let live = true;
     void (async () => {
       try {
@@ -101,10 +104,11 @@ export function MatchesView() {
 
   const act = useCallback(
     async (kind: "pass" | "send") => {
-      if (!current || busy) return;
+      if (!current || busy || blockerSaving) return;
       setBusy(kind);
       setActionFailure(null);
       const who = current.person.name;
+      const gen = deckGen.current;
       try {
         const res =
           kind === "pass"
@@ -119,6 +123,11 @@ export function MatchesView() {
                 body: JSON.stringify({ askId, toPersonId: current.person.id }),
               });
         const body = await res.json().catch(() => null);
+        if (deckGen.current !== gen) {
+          // The deck reloaded meanwhile (e.g. the switch changed); the server's list already reflects this save.
+          if (res.ok) setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
+          return;
+        }
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
           setActionFailure({ failure, retrySend: kind === "send" && res.status !== 401 && res.status !== 404 });
@@ -150,7 +159,7 @@ export function MatchesView() {
         setDx(0);
       }
     },
-    [askId, busy, current, matches],
+    [askId, blockerSaving, busy, current, matches],
   );
 
   // ← passes and → sends, unless the user is typing somewhere.
@@ -189,7 +198,8 @@ export function MatchesView() {
   }
 
   async function toggleBlocker(enabled: boolean) {
-    if (blockerSaving) return;
+    // One change at a time, and not while a pass or send is saving.
+    if (blockerSaving || busy) return;
     setBlockerSaving(true);
     setBlockerFailed(null);
     try {
@@ -287,14 +297,14 @@ export function MatchesView() {
             type="checkbox"
             role="switch"
             checked={blocker}
-            disabled={blockerSaving}
+            aria-disabled={blockerSaving || busy !== null}
             onChange={(e) => void toggleBlocker(e.target.checked)}
             aria-describedby="blocker-hint"
             className="peer sr-only"
           />
           <span
             aria-hidden="true"
-            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
+            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-aria-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
           />
         </label>
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
