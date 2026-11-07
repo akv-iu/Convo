@@ -8,7 +8,7 @@ vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
 vi.mock("@/server/search", () => ({ search: { ingestPerson } }));
-import { getProfile, updateProfile, getAvailability, saveAvailability } from "./service";
+import { getProfile, updateProfile, getAvailability, saveAvailability, syncProfile } from "./service";
 
 const person = structuredClone(people[0]);
 function result(value: Person = person, filters: Person["filters"] | null = value.filters, revision = 1, evidence: unknown = [], pending = false) {
@@ -27,6 +27,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("real profile and availability services", () => {
+  it("syncs to the search it is given, and acknowledges only that write", async () => {
+    const target = { ingestPerson: vi.fn().mockResolvedValue(undefined) };
+    const user = {
+      ...person, createdAt: new Date("2026-11-05T00:00:00Z"), revision: 4, workplaceName: null,
+      badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
+      githubEvidence: evidence, githubEvidencePending: true,
+    };
+
+    await expect(syncProfile(user, target as never)).resolves.toEqual(person);
+
+    expect(target.ingestPerson).toHaveBeenCalledExactlyOnceWith(person, evidence, 4);
+    expect(ingestPerson).not.toHaveBeenCalled(); // the app's own search is untouched
+    expect(query).toHaveBeenCalledOnce();
+    expect(String(query.mock.calls[0][0])).toContain('update "users" set "github_evidence_pending"');
+  });
+
   it("replays durable evidence on an empty save after a restart, without exposing storage fields", async () => {
     query.mockResolvedValue(result(person, person.filters, 4, evidence));
     const restored = await updateProfile(person.id, {});

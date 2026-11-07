@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "../../../db";
-import { asks, users } from "../../../db/schema";
+import { asks, rejections, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
@@ -13,6 +13,14 @@ import { getExclusions } from "./rejections";
 
 class AskError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
+}
+
+async function registerSavedAsk(askId: string, userId: string, text: string): Promise<void> {
+  try {
+    await search.registerAsk(askId, userId, text);
+  } catch {
+    console.warn("[asks] Ask saved; search registration failed. A later match will retry.");
+  }
 }
 
 export async function createAsk(userId: string, text: string): Promise<{ askId: string; refined: RefinedAsk }> {
@@ -33,12 +41,7 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
   } catch {
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }
-  try {
-    await search.registerAsk(askId, userId, refined.text);
-  } catch {
-    // shortcut: no durable search retry; add an outbox before C2 needs reliable registration.
-    throw new AskError(`Ask saved with ID ${askId}, but search registration failed. Keep this ID; do not resubmit the question.`, 503);
-  }
+  await registerSavedAsk(askId, userId, refined.text);
   return { askId, refined };
 }
 
@@ -57,17 +60,23 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Stored ask is invalid.", 503);
   }
 
-  const [requester, { excludeIds, hiddenBelowRank }, pendingUsers] = await Promise.all([
+  const [requester, { excludeIds, hiddenBelowRank }, excludedPeople] = await Promise.all([
     getProfile(userId),
     getExclusions(askId),
     Promise.resolve(db().select({ id: users.id }).from(users)
-      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters))))
+      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters)))
+      // An attendee's active rejection also hides that attendee from the rejected person's matches.
+      .union(db().select({ id: asks.userId }).from(asks)
+        .innerJoin(rejections, eq(rejections.askId, asks.id))
+        .where(and(eq(rejections.personId, userId), eq(asks.status, "open"), eq(asks.softBlocker, true)))))
       .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
+    // Replaying the saved ID repairs search without another ask or AI call; failure must not block results.
+    ask.status === "open" && ask.refined ? registerSavedAsk(ask.id, ask.userId, ask.refined.text) : undefined,
   ]);
   try {
     const matches = await runMatch({
       ask, requester, query,
-      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...pendingUsers.map(user => user.id)],
+      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...excludedPeople.map(person => person.id)],
       hiddenBelowRank,
     });
     if (!matches.length) return [];

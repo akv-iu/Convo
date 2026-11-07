@@ -3,7 +3,7 @@ import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { routes, type RouteBody } from "@/contracts/routes";
 import { EvidenceDoc, Person, type TimeBlock } from "@/contracts/types";
-import { search } from "@/server/search";
+import { search, type SearchService } from "@/server/search";
 import { MAX_REPO_EVIDENCE } from "./index";
 
 type User = typeof users.$inferSelect;
@@ -56,14 +56,15 @@ function validateTimes(times: TimeBlock[]): void {
   }
 }
 
-export async function syncProfile(user: User): Promise<Person> {
+/** `target` lets the seed write to Elasticsearch whatever the app's search switch says. */
+export async function syncProfile(user: User, target: SearchService = search): Promise<Person> {
   const person = toPerson(user);
   const evidence = EvidenceDoc.array().max(MAX_REPO_EVIDENCE).safeParse(user.githubEvidence);
   if (!evidence.success || evidence.data.some(doc => doc.personId !== user.id || doc.kind !== "repo")) {
     throw new ProfileError("Saved repository evidence is invalid. Sign in again to refresh it.", 503);
   }
   try {
-    await search.ingestPerson(person, evidence.data, user.revision);
+    await target.ingestPerson(person, evidence.data, user.revision);
     if (user.githubEvidencePending) {
       // Only this exact snapshot can confirm that stale repository evidence was replaced.
       await db().update(users).set({ githubEvidencePending: false })
