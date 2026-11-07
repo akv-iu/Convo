@@ -247,7 +247,7 @@ test.describe("your details (step 4)", () => {
       await expect(page.getByText("Add the name people should see.")).toBeVisible();
       await scan("editor with errors");
       await page.goto("/ask");
-      await scan("ask placeholder");
+      await scan("ask screen");
     });
   }
 });
