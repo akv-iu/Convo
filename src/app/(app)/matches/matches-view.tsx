@@ -53,8 +53,13 @@ type Load =
   | { state: "ready"; matches: MatchResult[] }
   | { state: "failed"; failure: Failure };
 
+/** Keyed by the ask, so nothing from one ask (its switch setting, deck or answers) shows on another. */
 export function MatchesView() {
   const askId = useSearchParams().get("ask") ?? "";
+  return <AskMatches key={askId} askId={askId} />;
+}
+
+function AskMatches({ askId }: { askId: string }) {
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState("");
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -75,6 +80,9 @@ export function MatchesView() {
   const [question, setQuestion] = useState<string | null>(null);
   /** The saved soft-blocker setting; null until GET /api/asks/:id answers, so the switch never shows a guess. */
   const [blocker, setBlocker] = useState<boolean | null>(null);
+  /** The setting didn't load for a reason Try again can fix. */
+  const [askFailed, setAskFailed] = useState(false);
+  const [askAttempt, setAskAttempt] = useState(0);
   const [blockerSaving, setBlockerSaving] = useState(false);
   const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
 
@@ -85,14 +93,17 @@ export function MatchesView() {
     void (async () => {
       setQuestion(recallAsk(askId)?.refined.text ?? null); // this tab's copy, shown until the server answers
       const ask = await loadAsk(askId);
-      if (!live || !ask) return; // the match load reports any problem; the switch stays hidden until known
+      if (!live) return;
+      // The matches load separately and may still show, so say the setting didn't.
+      // A 401 or 404 fails the match load too, which explains it.
+      if (typeof ask === "number") return setAskFailed(ask !== 401 && ask !== 404);
       setQuestion(ask.refined?.text ?? ask.rawText);
       setBlocker(ask.softBlocker);
     })();
     return () => {
       live = false;
     };
-  }, [askId]);
+  }, [askId, askAttempt]);
 
   useEffect(() => {
     if (!askId) return;
@@ -424,6 +435,21 @@ export function MatchesView() {
           </p>
         )}
       </div>
+      )}
+      {askFailed && (
+        <p role="alert" className={`mt-4 ${errorClass}`}>
+          The &ldquo;Keep people I pass on hidden&rdquo; setting didn&apos;t load.{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setAskFailed(false);
+              setAskAttempt((n) => n + 1);
+            }}
+            className="underline underline-offset-4"
+          >
+            Try again
+          </button>
+        </p>
       )}
 
       <p role="status" aria-live="polite" className="sr-only">

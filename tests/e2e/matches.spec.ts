@@ -40,11 +40,11 @@ async function open(page: Page, askId: string) {
   await page.setExtraHTTPHeaders({ "x-demo-user": ME });
   await page.goto(`/matches?ask=${askId}`);
 }
+const askJson = (askId: string, softBlocker: boolean) =>
+  ({ id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" });
 /** A saved ask for tests that mock the matches of a made-up ask (the switch shows only once its setting is known). */
 async function savedAsk(page: Page, askId: string, softBlocker = true) {
-  await page.route(`**/api/asks/${askId}`, (route) =>
-    route.fulfill({ json: { id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" } }),
-  );
+  await page.route(`**/api/asks/${askId}`, (route) => route.fulfill({ json: askJson(askId, softBlocker) }));
 }
 
 /** Made-up results for screens the fake's data can't reach (many people, hidden fields). */
@@ -371,6 +371,40 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(fresh.getByRole("switch", { name: "Keep people I pass on hidden" })).not.toBeChecked();
     await expect(fresh.getByText(ask.refined.text)).toBeVisible();
     await fresh.context().close();
+  });
+
+  test("if the saved setting doesn't load, the screen says so and Try again loads it", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    let loads = 0;
+    await page.route("**/api/asks/made-up", (route) =>
+      ++loads === 1 ? route.fulfill({ status: 503, json: { error: "down" } }) : route.fulfill({ json: askJson("made-up", false) }),
+    );
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await expect(alertWithText(page)).toContainText("setting didn't load.");
+    await expect(card(page)).toBeVisible(); // the matches load anyway
+    await expect(blocker).toHaveCount(0);
+    await alertWithText(page).getByRole("button", { name: "Try again" }).click();
+    await expect(blocker).not.toBeChecked();
+    await expect(alertWithText(page)).toHaveCount(0);
+  });
+
+  test("moving to another ask never shows the last one's switch setting", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await savedAsk(page, "made-up"); // on
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/asks/other-ask", async (route) => {
+      await held;
+      return route.fulfill({ json: askJson("other-ask", false) });
+    });
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await expect(blocker).toBeChecked();
+    await page.evaluate(() => window.history.pushState(null, "", "/matches?ask=other-ask"));
+    await expect(blocker).toHaveCount(0); // hidden while the other ask loads, never this one's "on"
+    release();
+    await expect(blocker).not.toBeChecked();
   });
 
   test("a failed soft-blocker save leaves the switch as it was", async ({ page }) => {

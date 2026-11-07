@@ -182,10 +182,10 @@ describe("the saved ask (GET /api/asks/:id)", () => {
     expect(fetch).toHaveBeenCalledWith("/api/asks/a%201", { cache: "no-store" });
   });
 
-  it("returns null when it can't be read, instead of guessing", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
-    expect(await loadAsk("a1")).toBeNull();
+  it("returns the status when it can't be read (0 offline), instead of guessing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 503 })));
+    expect(await loadAsk("a1")).toBe(503);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    expect(await loadAsk("a1")).toBeNull();
+    expect(await loadAsk("a1")).toBe(0);
   });
 });

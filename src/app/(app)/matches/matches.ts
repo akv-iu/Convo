@@ -105,15 +105,15 @@ export function blockerFailure(status: number, body: unknown): Failure {
 
 /**
  * The saved ask (GET /api/asks/:id): its question and soft-blocker setting, so
- * a new tab or device shows them too. Null when it can't be read; the match
- * load reports why.
+ * a new tab or device shows them too. When it can't be read, the status
+ * instead (0 when offline).
  */
-export async function loadAsk(askId: string): Promise<Ask | null> {
+export async function loadAsk(askId: string): Promise<Ask | number> {
   try {
     const res = await fetch(`/api/asks/${encodeURIComponent(askId)}`, { cache: "no-store" });
-    return res.ok ? ((await res.json()) as Ask) : null;
+    return res.ok ? ((await res.json()) as Ask) : res.status;
   } catch {
-    return null;
+    return 0;
   }
 }
 
