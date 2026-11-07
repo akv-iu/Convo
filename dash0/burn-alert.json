@@ -1,0 +1,20 @@
+{
+  "apiVersion": "dash0.com/v1alpha1",
+  "kind": "CheckRule",
+  "id": "c16d0d62-2311-48ab-974a-a8ff81b0cd64",
+  "name": "Convo match latency error-budget burn",
+  "expression": "max by (dash0_slo_id, slo) ({otel_metric_name=\"dash0.slo.burn_rate.fast\",slo=\"convo-match-latency\"} or {otel_metric_name=\"dash0.slo.burn_rate.slow\",slo=\"convo-match-latency\"}) > $__threshold",
+  "thresholds": {
+    "degraded": 1
+  },
+  "interval": "1m",
+  "for": "2m",
+  "enabled": true,
+  "labels": {
+    "service": "convo"
+  },
+  "annotations": {
+    "summary": "Convo match latency is burning its 5% error budget",
+    "description": "Inspect the match step dashboard, then open a slow POST /api/match trace. The SLO has a five-minute settling delay."
+  }
+}
