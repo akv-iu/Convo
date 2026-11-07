@@ -98,6 +98,85 @@ test.describe("your details (step 4)", () => {
     expect((await stored(page, "p_005")).languages).toEqual(expected);
   });
 
+  test("fields keep their own names for screen readers, not the badge's text", async ({ page }) => {
+    await openEditor(page, "p_002");
+    await expect(page.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
+    await expect(page.getByRole("textbox", { name: "Bio", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Add a skill", exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Add an organisation", exact: true })).toBeVisible();
+  });
+
+  test("tapping the badge in the editor moves to that field", async ({ page, isMobile }) => {
+    test.skip(isMobile, "checked on the laptop layout, where the badge sits beside the form");
+    await openEditor(page, "p_002");
+    await visibleBadge(page).getByText("Bio", { exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Bio", exact: true })).toBeFocused();
+  });
+
+  test("text left in an Add box is saved with Save and finish", async ({ page, isMobile }, testInfo) => {
+    const person = isMobile ? "p_002" : "p_001"; // one per project, so runs can't overlap
+    const before = (await stored(page, person)).organisations as string[];
+    await openEditor(page, person);
+    const typed = `kept-${testInfo.project.name}-${testInfo.retry}`;
+    await page.getByRole("textbox", { name: "Add an organisation" }).fill(typed);
+    const saving = page.waitForRequest(isSave);
+    await saveButton(page).click();
+    expect((await saving).postDataJSON()).toEqual({ organisations: [...before, typed] });
+    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    expect((await stored(page, person)).organisations).toContain(typed);
+    // Put it back so other runs start the same.
+    await page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { organisations: before } });
+  });
+
+  test("text in an Add box that can't be added stops the save with the reason", async ({ page }) => {
+    await openEditor(page, "p_004");
+    let saved = false;
+    page.on("request", (req) => {
+      if (isSave(req)) saved = true;
+    });
+    await page.getByRole("textbox", { name: "Add a skill" }).fill("x".repeat(45));
+    await saveButton(page).click();
+    await expect(page.getByText("Keep it under 40 characters.")).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Add a skill" })).toBeFocused();
+    expect(saved).toBe(false);
+  });
+
+  test("after a failed save, Save and finish saves again even with the edits undone", async ({ page }) => {
+    await openEditor(page, "p_006");
+    let fail = true;
+    const sent: unknown[] = [];
+    await page.route("**/api/me", (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      sent.push(route.request().postDataJSON());
+      if (fail) return route.fulfill({ status: 503, json: { error: "Profile saved, but search update failed. Retry the same save." } });
+      return route.fallback();
+    });
+    const bio = page.getByRole("textbox", { name: "Bio" });
+    const original = await bio.inputValue();
+    await bio.fill(`${original} (edited)`);
+    await saveButton(page).click();
+    await expect(alertWithText(page)).toContainText("Retry the same save");
+    await bio.fill(original);
+    fail = false;
+    await saveButton(page).click();
+    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual({}); // the documented repair: an empty save
+  });
+
+  test("a save that finds the profile gone offers sign-in", async ({ page }) => {
+    await openEditor(page, "p_003");
+    await page.route("**/api/me", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 404, json: { error: "Profile not found. Sign in again." } })
+        : route.fallback(),
+    );
+    await page.getByRole("textbox", { name: "Bio" }).fill("Changed");
+    await saveButton(page).click();
+    await expect(alertWithText(page)).toContainText("Your sign-in has expired");
+    await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
+  });
+
   test("an empty name is explained and nothing is sent", async ({ page }) => {
     await openEditor(page, "p_004");
     let saved = false;

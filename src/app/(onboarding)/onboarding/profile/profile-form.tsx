@@ -20,7 +20,7 @@ import { showSavedColour } from "../../_components/badge-prefs";
 import { saveErrorMessage } from "../answers";
 import { countryName } from "../countries";
 import { ChipEditor } from "./chip-editor";
-import { changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
+import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
 export const NEXT_STEP = "/ask";
 
@@ -41,34 +41,28 @@ const HEADING = "Are these the correct details?";
 
 type Load = { state: "loading" } | { state: "failed"; status: number } | { state: "ready"; person: Person };
 
-/** A badge row: in the editor it's a label for its field; in review, tapping it opens the editor there. */
+/**
+ * A badge row: tapping it opens the editor at its field (or moves there,
+ * when already editing). Pointer only, like the rest of the aria-hidden
+ * badge; keyboard and screen-reader users have the form's own fields. Not a
+ * <label>, which would add the badge's text to the field's accessible name.
+ */
 function BadgeRow({
   field,
   caption,
-  editing,
   onOpen,
   children,
 }: {
   field: Field;
   caption: string;
-  editing: boolean;
   onOpen: (field: Field) => void;
   children: ReactNode;
 }) {
   const className = "-mx-2 mt-3 block w-[calc(100%+1rem)] cursor-pointer rounded-lg px-2 py-1 text-left hover:bg-accent/10";
-  const inner = (
-    <>
+  return (
+    <span role="presentation" onClick={() => onOpen(field)} className={className}>
       <span className="block text-xs text-muted">{caption}</span>
       {children}
-    </>
-  );
-  return editing ? (
-    <label htmlFor={field} className={className}>
-      {inner}
-    </label>
-  ) : (
-    <span role="presentation" onClick={() => onOpen(field)} className={className}>
-      {inner}
     </span>
   );
 }
@@ -83,6 +77,13 @@ export function ProfileForm() {
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** What's still typed in each Add box, and its problem; added on save (addPending). */
+  const [pending, setPending] = useState({
+    languages: { text: "", problem: null as string | null },
+    organisations: { text: "", problem: null as string | null },
+  });
+  /** Set by a failed save: the next save is sent even with no changes (see submit). */
+  const [mustResend, setMustResend] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -169,35 +170,59 @@ export function ProfileForm() {
       nameRef.current?.focus();
       return;
     }
-    const changes = changesFrom(o, d);
+    // Anything still typed in an Add box counts, as if Add had been pressed.
+    let next = d;
+    for (const [key, field] of [
+      ["languages", FIELD.skills],
+      ["organisations", FIELD.orgs],
+    ] as const) {
+      if (!pending[key].text.trim()) continue;
+      const added = addPending(next[key], pending[key].text);
+      if (added.problem) {
+        setPending((p) => ({ ...p, [key]: { ...p[key], problem: added.problem } }));
+        document.getElementById(field)?.focus();
+        return;
+      }
+      next = { ...next, [key]: added.list };
+    }
+    if (next !== d) {
+      setDraft(next);
+      setPending({ languages: { text: "", problem: null }, organisations: { text: "", problem: null } });
+    }
+    const changes = changesFrom(o, next);
     setSaving(true);
     try {
-      if (Object.keys(changes).length) {
+      // After a failed save, always save again, even with nothing changed: a 503 can leave the
+      // profile saved but out of search (and everyone's matches); PUT {} is the documented repair.
+      if (mustResend || Object.keys(changes).length) {
         const res = await fetch("/api/me", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(changes),
         });
         if (!res.ok) {
+          setMustResend(true);
           setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
           return;
         }
+        setMustResend(false);
       }
       router.push(NEXT_STEP);
     } catch {
+      setMustResend(true);
       setSaveError(saveErrorMessage(0, null));
     } finally {
       setSaving(false);
     }
   }
 
-  const row = { editing, onOpen: startEditing };
+  const row = { onOpen: startEditing };
   const badge = (
     <Badge
       name={d.name.trim() || "Your name"}
       handle={person.githubLogin}
       label={countryName(person.filters.country)}
-      nameFor={editing ? FIELD.name : undefined}
+      onName={() => startEditing(FIELD.name)}
     >
       <BadgeRow {...row} field={FIELD.bio} caption="Bio">
         {d.bio.trim() ? (
@@ -309,6 +334,10 @@ export function ProfileForm() {
             hint="Add what people can ask you about."
             values={d.languages}
             onChange={(languages) => update({ languages })}
+            text={pending.languages.text}
+            onTextChange={(text) => setPending((p) => ({ ...p, languages: { ...p.languages, text } }))}
+            problem={pending.languages.problem}
+            onProblemChange={(problem) => setPending((p) => ({ ...p, languages: { ...p.languages, problem } }))}
             placeholder="e.g. Kubernetes"
             addLabel="Add a skill"
             empty="Nothing found yet. Add what you can help with."
@@ -320,6 +349,12 @@ export function ProfileForm() {
             hint="Organisations and projects you belong to."
             values={d.organisations}
             onChange={(organisations) => update({ organisations })}
+            text={pending.organisations.text}
+            onTextChange={(text) => setPending((p) => ({ ...p, organisations: { ...p.organisations, text } }))}
+            problem={pending.organisations.problem}
+            onProblemChange={(problem) =>
+              setPending((p) => ({ ...p, organisations: { ...p.organisations, problem } }))
+            }
             placeholder="e.g. cncf"
             addLabel="Add an organisation"
             empty="None found. Add projects you belong to."

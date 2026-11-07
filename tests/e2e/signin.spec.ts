@@ -41,7 +41,7 @@ test.describe("about you (step 1)", () => {
     await expect(page.locator("[data-badge-stripe]")).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 1 of 4");
     const sources = page.getByRole("group", { name: "Where should we look?" });
-    await expect(sources.getByRole("checkbox", { name: /GitHub/ })).toBeChecked();
+    await expect(sources.getByRole("checkbox", { name: /^GitHub/ })).toBeChecked();
     await expect(sources.getByRole("checkbox", { name: /Research papers/ })).toBeDisabled();
     await expect(sources.getByRole("checkbox", { name: /CV or LinkedIn/ })).toBeDisabled();
     await expect(sources.getByText("Coming soon")).toHaveCount(2);
@@ -95,6 +95,35 @@ test.describe("about you (step 1)", () => {
     expect(decodeURIComponent(consent?.value ?? "")).toBe("profile,repos,orgs");
     expect(consent?.httpOnly).toBe(true);
     expect(consent?.sameSite).toBe("Lax");
+  });
+
+  test("each GitHub source can be declined, and only the ticked ones are saved", async ({ page }) => {
+    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    for (const name of [/^Bio/, /^Repos and languages/, /^Organisations/]) {
+      await expect(choices.getByRole("checkbox", { name })).toBeChecked();
+    }
+    await choices.getByRole("checkbox", { name: /^Repos and languages/ }).uncheck();
+    await answerAll(page);
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
+    expect(decodeURIComponent((await consentCookie(page))?.value ?? "")).toBe("profile,orgs");
+  });
+
+  test("declining every GitHub source still signs in, with an empty consent", async ({ page }) => {
+    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    for (const box of await choices.getByRole("checkbox").all()) await box.uncheck();
+    await answerAll(page);
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
+    const consent = await consentCookie(page);
+    expect(consent).toBeDefined();
+    expect(consent?.value).toBe("");
+  });
+
+  test("turning GitHub off hides its choices", async ({ page }) => {
+    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toBeVisible();
+    await page.getByText("GitHub", { exact: true }).click();
+    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toHaveCount(0);
   });
 
   test("'Not with an organisation' is enough for the workplace", async ({ page }) => {

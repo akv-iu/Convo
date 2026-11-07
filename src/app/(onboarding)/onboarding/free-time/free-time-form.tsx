@@ -12,15 +12,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Person } from "@/contracts/types";
+import type { Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { countryName } from "../countries";
 import { loadProblem } from "../profile/edits";
 import {
+  availabilityBody,
   blocksForDay,
   blocksIn,
   clock,
+  hiddenFromGrid,
   hourLabel,
   pickedFromSaved,
   presets,
@@ -28,7 +30,6 @@ import {
   runs,
   sameSet,
   timeLabel,
-  toTimeBlocks,
   totalLabel,
   VENUE_LABEL,
 } from "./blocks";
@@ -59,6 +60,14 @@ export function FreeTimeForm() {
   const [attempt, setAttempt] = useState(0);
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [original, setOriginal] = useState<Set<number>>(new Set());
+  /** Saved times the grid can't show; sent back with every save so they're never deleted. */
+  const [hidden, setHidden] = useState<TimeBlock[]>([]);
+  /**
+   * After a failed save the next Continue always saves, even with no changes:
+   * a 503 can leave the profile saved but missing from search (and so from
+   * everyone's matches) until a save succeeds.
+   */
+  const [mustResend, setMustResend] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [who, setWho] = useState<{ name: string; handle: string; country: string } | null>(null);
@@ -86,8 +95,10 @@ export function FreeTimeForm() {
         const res = await fetch("/api/availability", { cache: "no-store" });
         if (!live) return;
         if (!res.ok) return setLoad({ state: "failed", status: res.status });
-        const saved = pickedFromSaved(blocks, await res.json());
+        const times = (await res.json()) as TimeBlock[];
         if (!live) return;
+        const saved = pickedFromSaved(blocks, times);
+        setHidden(hiddenFromGrid(blocks, times));
         setPicked(saved);
         setOriginal(new Set(saved));
         setLoad({ state: "ready" });
@@ -122,19 +133,22 @@ export function FreeTimeForm() {
     setSaveError(null);
     setSaving(true);
     try {
-      if (!sameSet(picked, original)) {
+      if (mustResend || !sameSet(picked, original)) {
         const res = await fetch("/api/availability", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(toTimeBlocks(blocks, picked)),
+          body: JSON.stringify(availabilityBody(blocks, picked, hidden)),
         });
         if (!res.ok) {
+          setMustResend(true);
           setSaveError(saveProblem(res.status, await res.json().catch(() => null)));
           return;
         }
+        setMustResend(false);
       }
       router.push(NEXT_STEP);
     } catch {
+      setMustResend(true);
       setSaveError(saveProblem(0, null));
     } finally {
       setSaving(false);
@@ -268,6 +282,12 @@ export function FreeTimeForm() {
             <p className="text-sm text-muted">People can&apos;t book a time with you until you add some.</p>
           )}
         </div>
+        {hidden.length > 0 && (
+          <p className="mt-2 text-sm text-muted">
+            You also have {hidden.length === 1 ? "1 saved time" : `${hidden.length} saved times`} this grid can&apos;t
+            show. They stay as they are.
+          </p>
+        )}
 
         <div className="mt-8 lg:hidden">{badge}</div>
 

@@ -213,7 +213,7 @@ export function WorkplaceSearch({
       </p>
 
       {showPanel && (
-        <div className="absolute inset-x-0 top-full z-20 mt-2 rounded-xl border-2 border-border bg-surface p-1.5 shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)]">
+        <div className="absolute inset-x-0 top-full z-20 mt-2 rounded-xl border-2 border-border bg-surface p-1.5 shadow-[var(--popover-shadow)]">
           {search.state === "loading" && <p className="px-3 py-3 text-muted">Searching…</p>}
           {search.state === "error" && (
             <>

@@ -18,6 +18,7 @@
   --skeleton: #dfe4ee;
   --danger: #c2410c; /* error text, 5.2:1 on surface */
   --danger-border: #c2410c;
+  --popover-shadow: 0 18px 40px -18px rgb(20 33 61 / 0.45); /* badge and pop-ups */
 
   background: var(--background);
   color: var(--foreground);
@@ -37,6 +38,7 @@
     --skeleton: #2a3756;
     --danger: #fdba74;
     --danger-border: #fb923c;
+    --popover-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.7);
   }
 }
 

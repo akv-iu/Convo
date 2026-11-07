@@ -131,7 +131,8 @@ export function workplaceLabel(w: Workplace): string | null {
 export function saveErrorMessage(status: number, body: unknown): string {
   const serverMessage =
     typeof body === "object" && body && "error" in body && typeof body.error === "string" ? body.error : null;
-  if (status === 401) return "Your sign-in has expired. Sign in again to save your answers.";
+  // 404: the profile row is gone ("Profile not found. Sign in again."), so retrying can never work.
+  if (status === 401 || status === 404) return "Your sign-in has expired. Sign in again to save your answers.";
   if (status === 503) return serverMessage ?? "Saving failed for a moment. Try again.";
   if (status === 400) return "One of the answers wasn't accepted. Check them and try again.";
   return "Your answers weren't saved. Try again.";

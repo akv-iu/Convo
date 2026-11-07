@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
 import { people } from "@/contracts/fixtures";
-import { addChip, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip } from "./edits";
+import { addChip, addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip } from "./edits";
 
 const person = people[0];
 
@@ -19,6 +19,21 @@ describe("addChip", () => {
     expect(addChip([], "x".repeat(LIMITS.chip + 1)).problem).toMatch(/under/);
     const full = Array.from({ length: LIMITS.chips }, (_, i) => `skill ${i}`);
     expect(addChip(full, "one more").problem).toMatch(/up to/);
+  });
+});
+
+describe("addPending (text left in an Add box on save)", () => {
+  it("adds it like Add would", () => {
+    expect(addPending(["Go"], "  Rust ")).toEqual({ list: ["Go", "Rust"], problem: null });
+  });
+
+  it("drops a duplicate quietly, since it's already on the badge", () => {
+    expect(addPending(["Go"], "go")).toEqual({ list: ["Go"], problem: null });
+  });
+
+  it("stops the save for anything else Add would refuse", () => {
+    expect(addPending([], "x".repeat(41)).problem).toMatch(/under 40/);
+    expect(addPending(Array.from({ length: 12 }, (_, i) => `s${i}`), "one more").problem).toMatch(/up to 12/);
   });
 });
 

@@ -70,6 +70,30 @@ export function pickedFromSaved(blocks: Block[], saved: TimeBlock[]): Set<number
   return picked;
 }
 
+/**
+ * The parts of saved times the grid can't show: other days, before 8:00 or
+ * after 18:00, and anything that isn't a whole half hour. PUT replaces the
+ * whole list, so these are sent back unchanged with the picks; a save from
+ * this screen never deletes them. Boundaries keep the saved text.
+ */
+export function hiddenFromGrid(blocks: Block[], saved: TimeBlock[]): TimeBlock[] {
+  const out: TimeBlock[] = [];
+  for (const s of saved) {
+    const start = Date.parse(s.start);
+    const end = Date.parse(s.end);
+    const inside = blocks
+      .filter((b) => Date.parse(b.start) >= start && Date.parse(b.end) <= end)
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    let cursor = { at: start, text: s.start };
+    for (const b of inside) {
+      if (Date.parse(b.start) > cursor.at) out.push({ start: cursor.text, end: b.start });
+      if (Date.parse(b.end) > cursor.at) cursor = { at: Date.parse(b.end), text: b.end };
+    }
+    if (cursor.at < end) out.push({ start: cursor.text, end: s.end });
+  }
+  return out;
+}
+
 /** Runs of neighbouring picked blocks, as minutes. */
 export function runs(blocks: Block[], picked: Set<number>): { from: number; to: number }[] {
   const out: { from: number; to: number }[] = [];
@@ -82,9 +106,14 @@ export function runs(blocks: Block[], picked: Set<number>): { from: number; to: 
   return out;
 }
 
-/** The PUT /api/availability body: one interval per run of picked blocks. */
+/** One interval per run of picked blocks. */
 export function toTimeBlocks(blocks: Block[], picked: Set<number>, day: string = CONFERENCE_DAY): TimeBlock[] {
   return runs(blocks, picked).map((r) => ({ start: iso(day, r.from), end: iso(day, r.to) }));
+}
+
+/** The PUT /api/availability body: the picks plus the saved times the grid can't show, in time order. */
+export function availabilityBody(blocks: Block[], picked: Set<number>, hidden: TimeBlock[]): TimeBlock[] {
+  return [...hidden, ...toTimeBlocks(blocks, picked)].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
 /** "9:00 AM – 10:30 AM" for each run. */

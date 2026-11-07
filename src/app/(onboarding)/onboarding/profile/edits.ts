@@ -34,13 +34,25 @@ export function draftFrom(person: Person): Draft {
  * duplicates, at most LIMITS.chips in total. Returns the list unchanged when
  * the value can't be added, with the reason.
  */
+export const DUPLICATE_CHIP = "That's already on your badge.";
+
 export function addChip(list: string[], raw: string): { list: string[]; problem: string | null } {
   const value = raw.trim().replace(/\s+/g, " ");
   if (!value) return { list, problem: null };
   if (value.length > LIMITS.chip) return { list, problem: `Keep it under ${LIMITS.chip} characters.` };
-  if (list.some((v) => v.toLowerCase() === value.toLowerCase())) return { list, problem: "That's already on your badge." };
+  if (list.some((v) => v.toLowerCase() === value.toLowerCase())) return { list, problem: DUPLICATE_CHIP };
   if (list.length >= LIMITS.chips) return { list, problem: `You can add up to ${LIMITS.chips}.` };
   return { list: [...list, value], problem: null };
+}
+
+/**
+ * On save, text still in an Add box is added as if Add was pressed, so it
+ * isn't silently lost. A duplicate is already on the badge, so it's simply
+ * dropped; any other problem stops the save with that message.
+ */
+export function addPending(list: string[], raw: string): { list: string[]; problem: string | null } {
+  const result = addChip(list, raw);
+  return result.problem === DUPLICATE_CHIP ? { list, problem: null } : result;
 }
 
 export function removeChip(list: string[], value: string): string[] {

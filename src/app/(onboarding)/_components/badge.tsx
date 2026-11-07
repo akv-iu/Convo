@@ -13,15 +13,19 @@ export function Badge({
   colour,
   name = "Your name",
   handle = "your-github",
-  nameFor,
+  onName,
 }: {
   children?: ReactNode;
   label?: ReactNode;
   colour?: string;
   name?: string;
   handle?: string;
-  /** When set, tapping the name focuses this input (the profile card's name field). */
-  nameFor?: string;
+  /**
+   * When set, tapping the name calls this (the profile card opens its name
+   * field). A click handler, not a <label>: the badge is aria-hidden, and a
+   * label would add the badge's text to the field's accessible name.
+   */
+  onName?: () => void;
 }) {
   const style = colour ? ({ "--badge": colour } as CSSProperties) : undefined;
   return (
@@ -29,7 +33,7 @@ export function Badge({
       <div className="absolute -top-16 left-1/2 hidden h-20 w-6 -translate-x-1/2 rounded-b-sm bg-accent lg:block" />
       <div className="absolute -top-2 left-1/2 hidden h-5 w-10 -translate-x-1/2 rounded-md border-4 border-foreground/70 lg:block" />
 
-      <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] ring-1 ring-border lg:rotate-[-2.5deg]">
+      <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[var(--popover-shadow)] ring-1 ring-border lg:rotate-[-2.5deg]">
         <div
           data-badge-stripe
           className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[var(--badge-ink)] transition-colors duration-200 motion-reduce:transition-none"
@@ -42,13 +46,14 @@ export function Badge({
           <div className="flex items-center gap-3">
             <span className="size-14 shrink-0 rounded-full bg-accent/80" />
             <div className="min-w-0 flex-1">
-              {nameFor ? (
-                <label
-                  htmlFor={nameFor}
+              {onName ? (
+                <span
+                  role="presentation"
+                  onClick={onName}
                   className="-mx-1 block cursor-pointer rounded-md px-1 text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%] hover:bg-accent/10"
                 >
                   {name}
-                </label>
+                </span>
               ) : (
                 <p className="text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%]">{name}</p>
               )}

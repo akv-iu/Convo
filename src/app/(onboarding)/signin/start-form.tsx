@@ -10,9 +10,10 @@
  * shown as coming soon until Person B adds their backends, and GitHub is
  * required because it's the only way to sign in.
  */
-import { useRef, useState, type FormEvent } from "react";
+import { Fragment, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { saveDraft } from "../_components/draft";
+import { consentSources } from "../consent";
 import { aboutYouMissing, missingMessage, NAME_MAX, type Missing, type Workplace } from "../onboarding/answers";
 import { countries } from "../onboarding/countries";
 import { WorkplaceSearch } from "../onboarding/workplace-search";
@@ -21,7 +22,7 @@ const sources = [
   {
     id: "github",
     label: "GitHub",
-    hint: "Repos, languages, bio and organisations. You'll sign in with GitHub next.",
+    hint: "You'll sign in with GitHub next. Choose what Convo may read below.",
     ready: true,
   },
   {
@@ -49,6 +50,8 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
   const [country, setCountry] = useState("");
   const [countryTouched, setCountryTouched] = useState(false);
   const [github, setGithub] = useState(true);
+  // Per-source consent under GitHub (PRD: per-source consent at sign-in). All on to start; any can be turned off.
+  const [consent, setConsent] = useState<Set<string>>(() => new Set(consentSources.map((s) => s.id)));
   const [tried, setTried] = useState(false);
   const sections = useRef<Record<Exclude<Missing, "hiring"> | "github", HTMLElement | null>>({
     name: null,
@@ -185,35 +188,73 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
           <legend className={legendClass}>Where should we look?</legend>
           <div className="flex flex-col gap-2.5">
             {sources.map((s) => (
-              <label
-                key={s.id}
-                className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none ${s.ready ? "cursor-pointer" : "cursor-not-allowed"}`}
-              >
-                <span className="col-start-1 row-start-1 flex flex-wrap items-center gap-2 text-lg font-semibold leading-snug">
-                  {s.label}
-                  {!s.ready && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted">
-                      Coming soon
-                    </span>
-                  )}
-                </span>
-                <span id={`source-${s.id}-hint`} className="col-start-1 row-start-2 block text-sm text-muted">
-                  {s.hint}
-                </span>
-                <input
-                  type="checkbox"
-                  name={s.id}
-                  checked={s.id === "github" ? github : false}
-                  disabled={!s.ready}
-                  onChange={s.id === "github" ? (e) => setGithub(e.target.checked) : undefined}
-                  aria-describedby={`source-${s.id}-hint`}
-                  className="peer sr-only"
-                />
-                <span
-                  aria-hidden="true"
-                  className="relative col-start-2 row-span-2 row-start-1 h-7 w-12 shrink-0 rounded-full bg-border transition-colors peer-checked:bg-accent peer-disabled:opacity-50 motion-reduce:transition-none after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
-                />
-              </label>
+              <Fragment key={s.id}>
+                <label
+                  className={`grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none ${s.ready ? "cursor-pointer" : "cursor-not-allowed"}`}
+                >
+                  <span className="col-start-1 row-start-1 flex flex-wrap items-center gap-2 text-lg font-semibold leading-snug">
+                    {s.label}
+                    {!s.ready && (
+                      <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted">
+                        Coming soon
+                      </span>
+                    )}
+                  </span>
+                  <span id={`source-${s.id}-hint`} className="col-start-1 row-start-2 block text-sm text-muted">
+                    {s.hint}
+                  </span>
+                  <input
+                    type="checkbox"
+                    name={s.id}
+                    checked={s.id === "github" ? github : false}
+                    disabled={!s.ready}
+                    onChange={s.id === "github" ? (e) => setGithub(e.target.checked) : undefined}
+                    aria-describedby={`source-${s.id}-hint`}
+                    className="peer sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="relative col-start-2 row-span-2 row-start-1 h-7 w-12 shrink-0 rounded-full bg-border transition-colors peer-checked:bg-accent peer-disabled:opacity-50 motion-reduce:transition-none after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-transform peer-checked:after:translate-x-5 motion-reduce:after:transition-none"
+                  />
+                </label>
+                {s.id === "github" && github && (
+                  <fieldset className="ml-4 flex flex-col gap-1 border-0 border-l-2 border-l-border py-1 pl-4">
+                    <legend className="sr-only">What Convo may read from GitHub</legend>
+                    <p className="text-sm text-muted" aria-hidden="true">
+                      From GitHub, Convo may read:
+                    </p>
+                    {consentSources.map((c) => (
+                      <label
+                        key={c.id}
+                        className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-1 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
+                      >
+                        <input
+                          type="checkbox"
+                          name="consent"
+                          value={c.id}
+                          checked={consent.has(c.id)}
+                          onChange={(e) =>
+                            setConsent((cur) => {
+                              const next = new Set(cur);
+                              if (e.target.checked) next.add(c.id);
+                              else next.delete(c.id);
+                              return next;
+                            })
+                          }
+                          aria-describedby={`consent-${c.id}-hint`}
+                          className="size-5 shrink-0 accent-accent focus-visible:outline-none"
+                        />
+                        <span>
+                          <span className="block font-semibold">{c.label}</span>
+                          <span id={`consent-${c.id}-hint`} className="block text-sm text-muted">
+                            {c.hint}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+              </Fragment>
             ))}
           </div>
           {githubProblem && (
@@ -233,9 +274,10 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
             </span>
             Your data
           </summary>
-          <p className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-xl border border-border bg-surface p-4 text-sm text-foreground shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] sm:left-0 sm:right-auto">
-            We only use public info and anything you upload, and we never post to GitHub. Turning a source off skips
-            it; it won&apos;t remove anything already on your profile.
+          <p className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-xl border border-border bg-surface p-4 text-sm text-foreground shadow-[var(--popover-shadow)] sm:left-0 sm:right-auto">
+            We only use public info and anything you upload, and we never post to GitHub. Turning a source off means
+            Convo won&apos;t read it next time you sign in. Your saved bio and organisations stay until you edit them;
+            turning off repositories also removes your repo highlights.
           </p>
         </details>
       </div>

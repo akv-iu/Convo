@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import type { KeyboardEvent } from "react";
 import { addChip, LIMITS, removeChip } from "./edits";
 
 /**
  * A list of short values (skills, organisations) as removable chips plus
  * an input to add more. Removing a chip removes it from the profile when
- * saved; the button says so.
+ * saved; the button says so. The Add box's text and problem belong to the
+ * form, so Save and finish can add what's still typed there (addPending).
  */
 export function ChipEditor({
   id,
@@ -17,6 +18,10 @@ export function ChipEditor({
   placeholder,
   addLabel,
   empty,
+  text,
+  onTextChange,
+  problem,
+  onProblemChange,
 }: {
   id: string;
   legend: string;
@@ -26,16 +31,17 @@ export function ChipEditor({
   placeholder: string;
   addLabel: string;
   empty: string;
+  text: string;
+  onTextChange: (text: string) => void;
+  problem: string | null;
+  onProblemChange: (problem: string | null) => void;
 }) {
-  const [text, setText] = useState("");
-  const [problem, setProblem] = useState<string | null>(null);
-
   function add() {
     const result = addChip(values, text);
-    setProblem(result.problem);
+    onProblemChange(result.problem);
     if (result.list !== values) {
       onChange(result.list);
-      setText("");
+      onTextChange("");
     }
   }
 
@@ -87,8 +93,8 @@ export function ChipEditor({
           aria-invalid={problem ? true : undefined}
           aria-describedby={problem ? `${id}-problem` : undefined}
           onChange={(e) => {
-            setText(e.target.value);
-            setProblem(null);
+            onTextChange(e.target.value);
+            onProblemChange(null);
           }}
           onKeyDown={onKeyDown}
           className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]"

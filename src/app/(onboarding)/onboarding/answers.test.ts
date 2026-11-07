@@ -76,6 +76,8 @@ describe("workplaceLabel", () => {
 describe("saveErrorMessage", () => {
   it("asks the user to sign in again on 401", () => {
     expect(saveErrorMessage(401, { error: "sign in first" })).toMatch(/sign in again/i);
+    // A deleted profile (404) is the same: only signing in again can fix it.
+    expect(saveErrorMessage(404, { error: "Profile not found. Sign in again." })).toMatch(/sign in again/i);
   });
 
   it("passes on the server's retry message on 503", () => {

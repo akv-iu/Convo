@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
 import { block, people } from "@/contracts/fixtures";
 import {
+  availabilityBody,
   blocksForDay,
   blocksIn,
   clock,
+  hiddenFromGrid,
   hourLabel,
   pickedFromSaved,
   presets,
@@ -85,5 +87,45 @@ describe("presets", () => {
   it("sameSet compares picks", () => {
     expect(sameSet(new Set([1, 2]), new Set([2, 1]))).toBe(true);
     expect(sameSet(new Set([1]), new Set([1, 2]))).toBe(false);
+  });
+});
+
+describe("hiddenFromGrid (saved times the grid can't show are kept)", () => {
+  const t = (start: string, end: string) => ({ start, end });
+
+  it("keeps other days, early and late times whole, with their own text", () => {
+    const saved = [
+      t("2026-11-10T09:00:00-07:00", "2026-11-10T10:00:00-07:00"),
+      t("2026-11-09T07:00:00-07:00", "2026-11-09T07:45:00-07:00"),
+      t("2026-11-09T18:30:00-07:00", "2026-11-09T19:00:00-07:00"),
+    ];
+    expect(hiddenFromGrid(blocks, saved)).toEqual(saved);
+  });
+
+  it("keeps only the parts of an interval that don't fill whole half hours", () => {
+    const saved = [t("2026-11-09T07:45:00-07:00", "2026-11-09T09:15:00-07:00")];
+    expect(hiddenFromGrid(blocks, saved)).toEqual([
+      t("2026-11-09T07:45:00-07:00", "2026-11-09T08:00:00-07:00"),
+      t("2026-11-09T09:00:00-07:00", "2026-11-09T09:15:00-07:00"),
+    ]);
+    expect(pickedFromSaved(blocks, saved)).toEqual(new Set([0, 1])); // 8:00-9:00 shows on the grid
+  });
+
+  it("keeps nothing extra for times the grid shows exactly, in any offset", () => {
+    expect(hiddenFromGrid(blocks, [t("2026-11-09T16:00:00Z", "2026-11-09T17:00:00Z")])).toEqual([]);
+    expect(hiddenFromGrid(blocks, [])).toEqual([]);
+  });
+
+  it("a save sends the picks plus the hidden times, in time order, and the API accepts it", () => {
+    const hidden = [t("2026-11-10T09:00:00-07:00", "2026-11-10T10:00:00-07:00"), t("2026-11-09T07:00:00-07:00", "2026-11-09T07:30:00-07:00")];
+    const body = availabilityBody(blocks, new Set([2, 3]), hidden);
+    expect(body).toEqual([
+      t("2026-11-09T07:00:00-07:00", "2026-11-09T07:30:00-07:00"),
+      t("2026-11-09T09:00:00-07:00", "2026-11-09T10:00:00-07:00"),
+      t("2026-11-10T09:00:00-07:00", "2026-11-10T10:00:00-07:00"),
+    ]);
+    expect(routes.putAvailability.body.safeParse(body).success).toBe(true);
+    // Clearing the grid still keeps what it can't show.
+    expect(availabilityBody(blocks, new Set(), hidden)).toHaveLength(2);
   });
 });

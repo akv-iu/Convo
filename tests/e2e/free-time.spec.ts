@@ -71,6 +71,48 @@ test.describe("free time (A1 step 4)", () => {
     await expect.poll(() => pickedLabels(page)).toHaveLength(8);
   });
 
+  test("saved times the grid can't show are kept when saving", async ({ page, isMobile }) => {
+    // One fixture person per project, so the phone and laptop runs can't overwrite each other.
+    const person = isMobile ? "p_003" : "p_001";
+    const otherDay = { start: "2026-11-10T09:00:00-07:00", end: "2026-11-10T10:00:00-07:00" };
+    const early = { start: "2026-11-09T07:00:00-07:00", end: "2026-11-09T07:45:00-07:00" };
+    await seed(page, person, [early, ...NINE_TO_TEN, otherDay]);
+    await open(page, person);
+    await expect(page.getByText("You also have 2 saved times this grid can't show.")).toBeVisible();
+    await page.getByRole("button", { name: "Clear" }).click();
+    await block(page, "2:00 PM to 2:30 PM").click();
+    const saving = page.waitForRequest(isSave);
+    await finish(page).click();
+    const two = { start: "2026-11-09T14:00:00-07:00", end: "2026-11-09T14:30:00-07:00" };
+    expect((await saving).postDataJSON()).toEqual([early, two, otherDay]);
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
+    expect(await stored(page, person)).toEqual([early, two, otherDay]);
+  });
+
+  test("after a failed save, Continue saves again even with the picks put back", async ({ page }) => {
+    await seed(page, "p_005", NINE_TO_TEN);
+    await open(page, "p_005");
+    let fail = true;
+    const sent: unknown[] = [];
+    await page.route("**/api/availability", (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      sent.push(route.request().postDataJSON());
+      if (fail) return route.fulfill({ status: 503, json: { error: "Profile saved, but search update failed. Retry the same save." } });
+      return route.fallback();
+    });
+    await block(page, "5:30 PM to 6:00 PM").click();
+    await finish(page).click();
+    await expect(alertWithText(page)).toContainText("Retry the same save");
+    // Undo the change: nothing differs from what was loaded, but search may still be out of date.
+    await block(page, "5:30 PM to 6:00 PM").click();
+    fail = false;
+    await finish(page).click();
+    await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual(NINE_TO_TEN);
+    expect(await stored(page, "p_005")).toEqual(NINE_TO_TEN);
+  });
+
   test("Clear then Continue saves no free times", async ({ page }) => {
     await seed(page, "p_006", NINE_TO_TEN);
     await open(page, "p_006");

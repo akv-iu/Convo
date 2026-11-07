@@ -37,9 +37,11 @@ vi.mock("@/server/config", () => ({
 
 const { continueWithGitHub } = await import("./actions");
 
-function form(fields: Record<string, string>) {
+/** The step 1 form as the browser posts it: github=on plus one consent=<id> per ticked source. */
+function form(github: boolean, consent: string[] = []) {
   const data = new FormData();
-  for (const [k, v] of Object.entries(fields)) data.set(k, v);
+  if (github) data.set("github", "on");
+  for (const id of consent) data.append("consent", id);
   return data;
 }
 
@@ -60,24 +62,39 @@ describe("continueWithGitHub (step 1)", () => {
     fakeApi.value = true;
   });
 
-  it("with GitHub on, saves consent for all GitHub sources and goes to step 2 on the fake API", async () => {
-    expect(await redirectOf(continueWithGitHub(form({ github: "on" })))).toBe("/onboarding");
+  it("with every source ticked, saves consent for all three and goes to step 2 on the fake API", async () => {
+    expect(await redirectOf(continueWithGitHub(form(true, ["profile", "repos", "orgs"])))).toBe("/onboarding");
     const consent = jar.get("convo_consent");
     expect(consent?.value).toBe("profile,repos,orgs");
     expect(consent?.options).toMatchObject({ httpOnly: true, sameSite: "lax", maxAge: 60 * 60 * 24 * 7 });
     expect(signIn).not.toHaveBeenCalled();
   });
 
+  it("saves only the sources left ticked, in B2's order", async () => {
+    await redirectOf(continueWithGitHub(form(true, ["orgs", "profile"])));
+    expect(jar.get("convo_consent")?.value).toBe("profile,orgs");
+  });
+
+  it("with every source unticked, saves an empty value (basic identity only)", async () => {
+    expect(await redirectOf(continueWithGitHub(form(true)))).toBe("/onboarding");
+    expect(jar.get("convo_consent")?.value).toBe("");
+  });
+
+  it("ignores IDs that aren't GitHub sources", async () => {
+    await redirectOf(continueWithGitHub(form(true, ["repos", "email", "papers"])));
+    expect(jar.get("convo_consent")?.value).toBe("repos");
+  });
+
   it("with GitHub off, stores nothing and returns to step 1", async () => {
-    expect(await redirectOf(continueWithGitHub(form({})))).toBe("/signin");
+    expect(await redirectOf(continueWithGitHub(form(false, ["repos"])))).toBe("/signin");
     expect(jar.size).toBe(0);
     expect(signIn).not.toHaveBeenCalled();
   });
 
   it("on the real API, starts GitHub sign-in that comes back to step 2", async () => {
     fakeApi.value = false;
-    expect(await redirectOf(continueWithGitHub(form({ github: "on" })))).toBeNull();
-    expect(jar.get("convo_consent")?.value).toBe("profile,repos,orgs");
+    expect(await redirectOf(continueWithGitHub(form(true, ["repos"])))).toBeNull();
+    expect(jar.get("convo_consent")?.value).toBe("repos");
     expect(signIn).toHaveBeenCalledWith("github", { redirectTo: "/onboarding" });
   });
 });
