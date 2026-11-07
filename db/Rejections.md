@@ -17,9 +17,18 @@ search and AI remain fake. Production remains in fake mode until integration.
 - Matching and rejection responses share the same exclusion reader. After
   three submissions, the cutoff is the **maximum submitted rank**. Matching
   retains ranks strictly less than that cutoff after filtering and reranking.
-- Turning the switch off restores individual candidates but keeps the batch
+- Turning the switch off restores this ask's individually rejected candidates but keeps the batch
   cutoff active. Turning it back on reapplies all saved individual exclusions.
-  These are the frozen fake's existing semantics, including resolved asks.
+  Existing outgoing and batch-cutoff behavior, including old resolved-ask views,
+  is preserved.
+- The real backend also hides an attendee who rejected the signed-in user under
+  any **open** ask with its soft blocker enabled. The signed-in user's own switch
+  cannot override someone else's rejection. Turning off or resolving the source
+  ask releases its reverse exclusion; another active blocking ask can keep it.
+  The rule is checked with pending-profile exclusions in one SQL query before
+  search, ranking and explanations. A failed read stops matching with 503.
+  Like the existing exclusion read, this uses the matching request's database
+  snapshot; a later change takes effect on the next request.
 - Rejections count submissions, not unique people. Repeating the same POST
   counts again, including after an uncertain network failure. Three submissions
   of rank zero produce cutoff zero and therefore no matches. Disable duplicate
@@ -33,10 +42,11 @@ search and AI remain fake. Production remains in fake mode until integration.
   out, the commit outcome is unknown. Refresh matching before deciding what to do.
   The PUT switch request can safely repeat the same desired value.
 
-No shared contracts, B1 engine code or screens change. The fake does not enforce
-reverse-direction blocking; this slice does not add that behavior. Any change
-to the above semantics must be agreed with both people through the contract flow.
-Request/inbox/response APIs are the next B2 slice; scheduling and resolution follow.
+No shared contracts, B1 engine code or screens change. `FAKE_API=1` still uses
+the unchanged one-way fake. To check the real two-way rule, use `FAKE_API=0`
+with `FAKES=search,ai`. See [Two-Way-Blocker.md](Two-Way-Blocker.md) for the
+complete two-account checklist. This implements the existing shared Ask type's
+"both ways" description without changing request or response shapes.
 
 ## Complete manual check
 
