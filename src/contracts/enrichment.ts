@@ -69,7 +69,8 @@ export const CvUpload = z.strictObject({
 const chosen = z.strictObject({ discoveryId: id, candidateId: id });
 export const StartEnrichment = z.strictObject({
   identity: EnrichmentIdentity, idempotencyKey: z.uuid(),
-  github: z.strictObject({ import: z.boolean(), bio: z.boolean(), repos: z.boolean(), orgs: z.boolean() }),
+  github: z.strictObject({ import: z.boolean(), bio: z.boolean(), repos: z.boolean(), orgs: z.boolean() })
+    .refine(value => !value.import || value.bio || value.repos || value.orgs, "Choose a GitHub category or turn its import off"),
   research: z.union([z.strictObject({ skip: z.literal(true) }), chosen]).nullable(),
   publicProfile: z.union([
     z.strictObject({ skip: z.literal(true) }), chosen, z.strictObject({ url: SourceUrl }),

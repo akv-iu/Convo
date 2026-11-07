@@ -74,6 +74,13 @@ describe("revised enrichment contract", () => {
     expect(job).toMatchObject({ state: "manual", phase: "done", draft: null });
     expect((await fake.enrichmentState(ctx(undefined, DEMO_GOOGLE_NEW))).identity).toEqual(input.identity);
   });
+
+  it("does not permit enabled GitHub imports without a consented category", () => {
+    const input = enrichmentStart(); input.github = { import: true, bio: false, repos: false, orgs: false };
+    expect(routes.startEnrichment.body.safeParse(input).success).toBe(false);
+    input.github.import = false;
+    expect(routes.startEnrichment.body.safeParse(input).success).toBe(true);
+  });
   it("uses owner-bound candidate selections and rejects changed discovery inputs", async () => {
     const research = await discover("research");
     const input = enrichmentStart(); input.research = { discoveryId: research.discoveryId, candidateId: research.candidates[0].id };

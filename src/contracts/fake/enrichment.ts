@@ -20,9 +20,13 @@ export interface FakeEnrichmentState {
   connections: Map<string, { accountId: string; login: string }>;
 }
 export function freshEnrichment(): FakeEnrichmentState {
+  const connections: FakeEnrichmentState["connections"] = new Map();
+  fixtures.people.forEach((person, index) => {
+    if (person.githubLogin !== null) connections.set(person.id, { accountId: String(index + 1), login: person.githubLogin });
+  });
   return {
     discoveries: new Map(), uploads: new Map(), jobs: new Map(), sources: new Map(), evidence: new Map(),
-    versions: new Map(), identities: new Map(), connections: new Map(),
+    versions: new Map(), identities: new Map(), connections,
   };
 }
 const state = () => store.get().enrichment;
@@ -46,8 +50,8 @@ export function noteProfileChange(userId: string, textChanged = false) {
   if (textChanged) versions(userId).text++;
 }
 function connection(userId: string) {
-  return state().connections.get(userId) ?? (store.profile(userId).githubLogin
-    ? { accountId: userId, login: store.profile(userId).githubLogin! } : null);
+  store.profile(userId);
+  return state().connections.get(userId) ?? null;
 }
 function discard(job: Job, terminal: "cancelled" | "superseded" = "cancelled", keepUpload?: string) {
   job.value.state = terminal; job.value.phase = "done"; job.value.draft = null;
