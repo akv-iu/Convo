@@ -71,6 +71,7 @@ An AI reviewer that knows our rules.
 - It passes at once for most PRs.
 - It waits for an approval from someone other than the author when the PR completes a feature file or has the `needs-approval` label.
 - It runs again whenever a review is submitted or dismissed.
+- It shows up as a status named `Feature sign-off`, set by a job called `Evaluate sign-off`. Each run replaces the last verdict, so an approval turns the same entry green. The job itself goes red only if the script breaks; a run that breaks partway leaves the status pending, so the PR stays blocked until it runs again.
 
 ### Tests
 
@@ -89,8 +90,7 @@ Unchanged: lint, types and unit tests with coverage, then the Playwright click-t
 Person B, once this change is merged:
 
 - [ ] GitHub settings: turn on "Allow auto-merge" and "Automatically delete head branches".
-- [ ] Branch protection on `main`: add `Feature sign-off` to the required checks.
-- [ ] Create the `needs-approval` label.
+- [ ] Branch protection on `main`: add the `Feature sign-off` status to the required checks (not the `Evaluate sign-off` job). The `needs-approval` label already exists: Gitar created it.
 - [ ] SonarQube Cloud: Administration → AI Code Assurance → "contains AI-generated code", then choose the AI-qualified gate. Check that today's code passes it first.
 
 Each person:

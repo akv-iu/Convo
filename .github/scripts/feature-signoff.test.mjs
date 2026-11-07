@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvedByOther, checklist, completes } from "./feature-signoff.mjs";
+import { approvedByOther, checklist, completes, verdict } from "./feature-signoff.mjs";
 
 describe("feature sign-off", () => {
   it("counts ticked and open boxes, nested or not, and nothing else in brackets", () => {
@@ -26,5 +26,14 @@ describe("feature sign-off", () => {
     expect(approvedByOther([review("b", "APPROVED"), review("b", "CHANGES_REQUESTED")], "a")).toBe(false);
     expect(approvedByOther([review("b", "APPROVED"), review("b", "DISMISSED")], "a")).toBe(false);
     expect(approvedByOther([], "a")).toBe(false);
+  });
+
+  it("fails only when something needs sign-off and nobody else has approved", () => {
+    expect(verdict([], false).state).toBe("success");
+    expect(verdict(["the needs-approval label"], false)).toEqual({
+      state: "failure",
+      description: "Waiting for the other person's approval: the needs-approval label.",
+    });
+    expect(verdict(["the needs-approval label"], true).state).toBe("success");
   });
 });
