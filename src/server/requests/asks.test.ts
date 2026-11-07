@@ -3,12 +3,14 @@ import { people } from "@/contracts/fixtures";
 import { routes } from "@/contracts/routes";
 import type { Ask } from "@/contracts/types";
 
-const { query, getProfile, refineAsk, registerAsk, runMatch } = vi.hoisted(() => ({
+const { query, getProfile, refineAsk, registerAsk, runMatch, after, afterTasks } = vi.hoisted(() => ({
   query: vi.fn(), getProfile: vi.fn(), refineAsk: vi.fn(), registerAsk: vi.fn(), runMatch: vi.fn(),
+  after: vi.fn(), afterTasks: [] as (() => Promise<unknown>)[],
 }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
+vi.mock("next/server", async (importOriginal) => ({ ...await importOriginal<typeof import("next/server")>(), after }));
 vi.mock("@/server/profile/service", () => ({ getProfile }));
 vi.mock("@/server/ai", async () => ({ ai: { refineAsk }, ...await import("@/server/ai/blocked") }));
 vi.mock("@/server/search", () => ({ search: { registerAsk } }));
@@ -31,6 +33,8 @@ beforeEach(() => {
   refineAsk.mockReset().mockResolvedValue(refined);
   registerAsk.mockReset().mockResolvedValue(undefined);
   runMatch.mockReset().mockResolvedValue([]);
+  afterTasks.length = 0;
+  after.mockReset().mockImplementation((task: () => Promise<unknown>) => { afterTasks.push(task); });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
 });
@@ -99,6 +103,34 @@ describe("durable ask creation", () => {
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-url");
     expect(registerAsk).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("runs the first match in the background after the response, so its explanations are cached", async () => {
+    const { askId } = await createAsk(person.id, "scheduler preemption");
+    expect(after).toHaveBeenCalledOnce();
+    expect(runMatch).not.toHaveBeenCalled(); // nothing extra before the response
+
+    query.mockResolvedValueOnce(askRows({ ...ask, id: askId }));
+    await afterTasks[0]();
+
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ ask: expect.objectContaining({ id: askId }), requester: person }));
+  });
+
+  it("only logs, without provider details, when the background match fails", async () => {
+    const { askId } = await createAsk(person.id, "scheduler preemption");
+    query.mockResolvedValueOnce(askRows({ ...ask, id: askId }));
+    runMatch.mockRejectedValueOnce(new Error("private-search-token"));
+
+    await expect(afterTasks[0]()).resolves.toBeUndefined();
+
+    expect(console.warn).toHaveBeenCalledWith("[asks] Background first match failed; the asker's own first match computes it.");
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("private-search-token");
+  });
+
+  it("still answers when there is no request to run the background match after", async () => {
+    after.mockImplementationOnce(() => { throw new Error("`after` was called outside a request scope."); });
+    await expect(createAsk(person.id, "scheduler preemption")).resolves.toMatchObject({ refined });
   });
 
   it("returns the saved ask when registration fails and logs no provider details", async () => {

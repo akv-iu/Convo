@@ -19,6 +19,11 @@ Production stays in fake mode until the integration checkpoint.
   containing the word "idiot" gets the same 422, for building that screen.
 - Each refinement submission creates a new ask. Keep its ID for subsequent
   matching requests. Disable duplicate submissions while a save is pending.
+- After `/api/refine` responds, the real backend runs that ask's first match in
+  the background (about 3.5 s), so its AI explanations are cached when the asker
+  opens the results and `/api/match` answers well under 2 s. **Screens:** show
+  the refined question and wait for the asker before calling `/api/match`;
+  calling it immediately throws away that head start.
 - `/api/match` accepts `{ askId, query? }`, loads the owned ask and current
   profile, reads its persisted rejections, and calls the existing four-span
   pipeline. Matches conform to the frozen schema, including highlights,
