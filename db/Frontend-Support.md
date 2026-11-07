@@ -24,6 +24,15 @@ saved fields. They also travel with `MatchResult.person`, so other people's card
 can display them. Search metadata updates preserve repository evidence and use
 the existing revision ordering.
 
+- **Badge picture:** `avatar` is one of the built-in pictures (`AvatarId`:
+  star, moon, sun, leaf, wave, peak, bolt, heart, flower, cloud, gem, spark), or
+  `null` for initials on the badge colour.
+  - It's saved with `PUT /api/me { avatar }`, which needs no new route, and stored
+    in `users.avatar` (text, nullable, no default; migration
+    `0005_default_avatars`). It carries through `toPerson`, the search index's
+    stored person and every `CardPerson`.
+  - It's always shown, because it isn't a show/hide section.
+  - Synthetic profiles have none. Photo uploads come later, as a separate field.
 - Custom workplace: `rorId: null`, `workplaceName: "Acme Robotics"`.
 - Directory workplace: its real `rorId`, with its name in `workplaceName`.
 - Independent: `rorId: null`, `workplaceName: null`.

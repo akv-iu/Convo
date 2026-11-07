@@ -54,6 +54,11 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
   });
 
   it("saves a workplace name and badge colour, preserves them on unrelated edits and clears the workplace", async () => {
+    const pictured = await api.putMe(ctx(DEMO_USER_A, routes.putMe.body.parse({ avatar: "moon" })));
+    expect(pictured.avatar).toBe("moon");
+    expect((await api.getMe(ctx(DEMO_USER_A))).avatar).toBe("moon");
+    expect(routes.putMe.body.safeParse({ avatar: "photo.jpg" }).success).toBe(false);
+    expect((await api.putMe(ctx(DEMO_USER_A, { avatar: null }))).avatar).toBeNull();
     const body = routes.putMe.body.parse({ workplaceName: "  Acme Robotics  ", badgeColour: "lilac" });
     const saved = await api.putMe(ctx(DEMO_USER_A, body));
     expect(saved).toMatchObject({ workplaceName: "Acme Robotics", badgeColour: "lilac" });

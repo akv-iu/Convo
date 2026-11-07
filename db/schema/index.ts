@@ -3,7 +3,7 @@
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
   githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
+  /** A built-in picture (Person.avatar); null shows initials. Last, so existing row reads keep their column order. */
+  avatar: text("avatar").$type<AvatarId>(),
 });
 
 export const asks = pgTable(

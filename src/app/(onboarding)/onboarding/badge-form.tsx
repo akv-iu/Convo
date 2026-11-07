@@ -23,7 +23,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import type { Person, ProfileVisibility } from "@/contracts/types";
+import { Avatar, avatars } from "@/components/ui/avatars";
+import type { AvatarId, Person, ProfileVisibility } from "@/contracts/types";
 import { Badge, BadgeChip } from "../_components/badge";
 import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
 import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
@@ -64,6 +65,11 @@ export function BadgeForm() {
   const [hiring, setHiring] = useState<boolean | null>(null);
   const [colour, setColour] = useState<BadgeColour>(DEFAULT_COLOUR);
   const [visibility, setVisibility] = useState<ProfileVisibility>(SHOW_ALL);
+  /** The chosen picture (null: initials), saved with Continue like the colour. */
+  const [avatar, setAvatar] = useState<AvatarId | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const plusRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLFieldSetElement>(null);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -86,6 +92,7 @@ export function BadgeForm() {
       // The saved profile's colour is the truth; before there is one, the cookie preview is all we have.
       setColour(profile ? showSavedColour(profile.badgeColour) : readBadgePrefs().colour);
       setVisibility(profile?.visibility ?? SHOW_ALL);
+      setAvatar(profile?.avatar ?? null);
 
       if (draft) {
         // Step 1 just ran in this tab; the profile only adds the GitHub handle and any saved hiring answer.
@@ -163,7 +170,7 @@ export function BadgeForm() {
       const res = await fetch("/api/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility)),
+        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility, avatar)),
       });
       if (!res.ok) {
         setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
@@ -192,10 +199,32 @@ export function BadgeForm() {
    */
   const tappable = "cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
 
+  function closePicker() {
+    setPickerOpen(false);
+    plusRef.current?.focus();
+  }
+
   const badge = (
     <Badge
       name={about.name}
       handle={handle ?? "your-github"}
+      avatar={avatar}
+      avatarControl={
+        <button
+          ref={plusRef}
+          type="button"
+          aria-label="Choose a picture"
+          aria-expanded={pickerOpen}
+          aria-controls="avatar-picker"
+          onClick={() => {
+            setPickerOpen((open) => !open);
+            setTimeout(() => pickerRef.current?.querySelector<HTMLInputElement>("input:checked")?.focus(), 0);
+          }}
+          className="absolute -bottom-1 -right-1 flex size-7 items-center justify-center rounded-full bg-accent text-lg font-bold leading-none text-on-accent shadow ring-2 ring-surface hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+      }
       label={
         visibility.country ? (
           <span role="presentation" onClick={() => toggleSection("country")} className={tappable}>
@@ -264,7 +293,48 @@ export function BadgeForm() {
         aria-label="Your badge's look"
         className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
-        <div className="w-full">{badge}</div>
+        <div className="flex w-full flex-col gap-4">
+          {badge}
+          {pickerOpen && (
+            <fieldset
+              id="avatar-picker"
+              ref={pickerRef}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  closePicker();
+                }
+              }}
+              className="rounded-2xl border-2 border-border bg-surface p-4"
+            >
+              <legend className="float-left mb-3 w-full text-base font-semibold">Your picture</legend>
+              <div className="clear-both grid grid-cols-5 gap-2 sm:grid-cols-4">
+                {[{ id: null, name: "Initials" }, ...avatars].map((a) => (
+                  <label key={a.id ?? "initials"} title={a.name} className="relative flex cursor-pointer justify-center">
+                    <input
+                      type="radio"
+                      name="avatar"
+                      checked={avatar === a.id}
+                      onChange={() => setAvatar(a.id)}
+                      className="peer sr-only"
+                    />
+                    <Avatar
+                      avatar={a.id}
+                      name={about.name}
+                      className="size-11 ring-1 ring-black/10 peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
+                    />
+                    <span className="sr-only">{a.name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button type="button" variant="secondary" onClick={closePicker}>
+                  Done
+                </Button>
+              </div>
+            </fieldset>
+          )}
+        </div>
         <div className="flex flex-col gap-6 sm:pt-2 lg:pt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
