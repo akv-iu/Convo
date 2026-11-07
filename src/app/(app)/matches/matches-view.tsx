@@ -23,25 +23,20 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { Button } from "@/components/ui/button";
-import type { MatchResult } from "@/contracts/types";
+import { githubProfile } from "@/components/ui/person-badge";
+import type { MatchResult, Request, RequestView } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
 import { MatchCard } from "./match-card";
 import {
   blockerFailure,
-  githubProfile,
+  loadAsk,
   matchFailure,
   passFailure,
-  recallBlocker,
-  recallSent,
-  rememberBlocker,
-  rememberSent,
   resolveFailure,
   sendFailure,
   swipeOutcome,
   withinCutoff,
-  withoutSent,
   type Failure,
-  type SentTo,
   type Swipe,
 } from "./matches";
 
@@ -54,8 +49,13 @@ type Load =
   | { state: "ready"; matches: MatchResult[] }
   | { state: "failed"; failure: Failure };
 
+/** Keyed by the ask, so nothing from one ask (its switch setting, deck or answers) shows on another. */
 export function MatchesView() {
   const askId = useSearchParams().get("ask") ?? "";
+  return <AskMatches key={askId} askId={askId} />;
+}
+
+function AskMatches({ askId }: { askId: string }) {
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState("");
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -72,7 +72,9 @@ export function MatchesView() {
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
   const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
-  const [sent, setSent] = useState<SentTo[]>([]);
+  const [sent, setSent] = useState<RequestView[]>([]);
+  const [sentStatus, setSentStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [sentAttempt, setSentAttempt] = useState(0);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
@@ -82,14 +84,55 @@ export function MatchesView() {
   /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
   const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
-  /** null: not saved from this tab, so the screen can't know (there's no route to read it back yet). */
+  /** The saved soft-blocker setting; null until GET /api/asks/:id answers, so the switch never shows a guess. */
   const [blocker, setBlocker] = useState<boolean | null>(null);
+  /** The setting didn't load for a reason Try again can fix. */
+  const [askFailed, setAskFailed] = useState(false);
+  const [askAttempt, setAskAttempt] = useState(0);
   const blockerRef = useRef<boolean | null>(null);
   useEffect(() => {
     blockerRef.current = blocker;
   }, [blocker]);
   const [blockerSaving, setBlockerSaving] = useState(false);
   const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
+
+  // The saved ask: its question and the switch's real setting, so a new tab or another device shows them too.
+  useEffect(() => {
+    if (!askId) return;
+    let live = true;
+    void (async () => {
+      setQuestion(recallAsk(askId)?.refined.text ?? null); // this tab's copy, shown until the server answers
+      const ask = await loadAsk(askId);
+      if (!live) return;
+      // The matches load separately and may still show, so say the setting didn't.
+      // A 401 or 404 fails the match load too, which explains it.
+      if (typeof ask === "number") return setAskFailed(ask !== 401 && ask !== 404);
+      setQuestion(ask.refined?.text ?? ask.rawText);
+      setBlocker(ask.softBlocker);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [askId, askAttempt]);
+
+  useEffect(() => {
+    if (!askId) return;
+    let live = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/requests/sent", { cache: "no-store" });
+        if (!response.ok) throw new Error("Sent requests unavailable");
+        const requests = ((await response.json()) as RequestView[]).filter(request => request.askId === askId);
+        if (!live) return;
+        // A send may finish while this snapshot loads; retain that successful response too.
+        setSent(current => [...new Map([...requests, ...current].map(request => [request.id, request])).values()]);
+        setSentStatus("ready");
+      } catch {
+        if (live) setSentStatus("failed");
+      }
+    })();
+    return () => { live = false; };
+  }, [askId, sentAttempt]);
 
   useEffect(() => {
     if (!askId) return;
@@ -104,14 +147,8 @@ export function MatchesView() {
         });
         const body = await res.json().catch(() => null);
         if (!live) return;
-        // The question and switch come from this tab's copies (there's no route to read an ask back).
-        setQuestion(recallAsk(askId)?.refined.text ?? null);
-        setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
-        // Leave out people this tab already sent the ask to: a second send would be a duplicate request.
-        const already = recallSent(askId);
-        setSent(already);
-        setLoad({ state: "ready", matches: withoutSent([...(body as MatchResult[])], already).sort((a, b) => a.rank - b.rank) });
+        setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setIndex(0);
         setPassLocked(false);
       } catch {
@@ -143,9 +180,7 @@ export function MatchesView() {
       setActionFailure(null);
       setDx(0); // the card goes back at once instead of waiting off to the side for the save
       const who = current.person.name;
-      const login = current.person.githubLogin;
       const gen = deckGen.current;
-      const sentTo = { id: current.person.id, name: who, githubLogin: login };
       try {
         const res =
           kind === "pass"
@@ -174,11 +209,14 @@ export function MatchesView() {
           }
           return;
         }
+        if (kind === "send") {
+          const saved: RequestView = { ...(body as Request), type: null, person: current.person };
+          setSent(previous => [...previous.filter(request => request.id !== saved.id), saved]);
+        }
         if (stale) {
           if (kind === "send") {
-            setSent(rememberSent(askId, sentTo));
             // The reload may have been answered before this send was saved: drop them from the new deck.
-            setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: withoutSent(cur.matches, [sentTo]) } : cur));
+            setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: cur.matches.filter(match => match.person.id !== current.person.id) } : cur));
           } else {
             // The reload may have been answered before this pass was saved: apply it to the new deck too.
             const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
@@ -193,7 +231,6 @@ export function MatchesView() {
           return;
         }
         if (kind === "send") {
-          setSent(rememberSent(askId, sentTo));
           setAnnounce(`Request sent to ${who}.`);
           setIndex((i) => i + 1);
         } else {
@@ -279,7 +316,6 @@ export function MatchesView() {
       }
       const saved = (body as { enabled: boolean }).enabled;
       setBlocker(saved);
-      rememberBlocker(askId, saved);
       setAnnounce(saved ? "People you passed on are hidden." : "People you passed on are back in the list.");
       refresh();
     } catch {
@@ -318,6 +354,16 @@ export function MatchesView() {
     setAttempt((n) => n + 1); // reload even when the query didn't change
   }
 
+  const sentNotice = sentStatus === "loading" ? <p role="status">Loading your sent requests…</p> : sentStatus === "failed" ? (
+    <p role="alert" className={errorClass}>
+      Your sent requests didn&apos;t load.{" "}
+      <button type="button" className="underline underline-offset-4" onClick={() => {
+        setSentStatus("loading");
+        setSentAttempt(value => value + 1);
+      }}>Try again</button>
+    </p>
+  ) : null;
+
   if (!askId) {
     return (
       <div className="mx-auto max-w-xl">
@@ -338,14 +384,15 @@ export function MatchesView() {
           Lanyard won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
         </p>
         {question && <p className="mt-2 text-muted">&ldquo;{question}&rdquo;</p>}
-        {sent.length > 0 && (
+        {sentNotice}
+        {sent.some(request => request.person) && (
           <section aria-labelledby="connect-heading" className="mt-8 rounded-2xl border-2 border-border bg-surface p-5">
             <h2 id="connect-heading" className="text-xl font-extrabold tracking-tight">
               Stay in touch
             </h2>
             <p className="mt-1 text-sm text-muted">Say thanks, or follow the people you reached out to.</p>
             <ul className="mt-3 flex flex-col gap-2">
-              {sent.map((p) => (
+              {sent.flatMap(request => request.person ? [request.person] : []).map((p) => (
                 <li key={p.id}>
                   <a
                     href={githubProfile(p.githubLogin)}
@@ -422,6 +469,7 @@ export function MatchesView() {
         </p>
       )}
 
+      {blocker !== null && (
       <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
         <label className="flex min-h-11 cursor-pointer items-center gap-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-accent">
           <span className="flex-1 font-semibold">Keep people I pass on hidden</span>
@@ -430,8 +478,7 @@ export function MatchesView() {
             role="switch"
             checked={blocker ?? true}
             aria-disabled={blockerSaving || busy !== null}
-            // While unknown, the first press confirms the default (on) rather than turning it off.
-            onChange={(e) => void toggleBlocker(blocker === null ? true : e.target.checked)}
+            onChange={(e) => void toggleBlocker(e.target.checked)}
             aria-describedby="blocker-hint"
             className="peer sr-only"
           />
@@ -441,9 +488,7 @@ export function MatchesView() {
           />
         </label>
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
-          {blocker === null
-            ? "New questions start with this on. If you changed it in another tab, press to confirm it's on."
-            : blocker
+          {blocker
               ? "On: people you passed on stay out of this list, and you're kept out of theirs."
               : "Off: people you passed on can show up again."}
         </p>
@@ -461,6 +506,23 @@ export function MatchesView() {
           </p>
         )}
       </div>
+      )}
+      {askFailed && (
+        <p role="alert" className={`mt-4 ${errorClass}`}>
+          The &ldquo;Keep people I pass on hidden&rdquo; setting didn&apos;t load.{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setAskFailed(false);
+              setAskAttempt((n) => n + 1);
+            }}
+            className="underline underline-offset-4"
+          >
+            Try again
+          </button>
+        </p>
+      )}
+      {sentNotice}
 
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
@@ -575,7 +637,7 @@ export function MatchesView() {
             )}
             <p className="mt-2 text-muted">
               {sent.length > 0
-                ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.map((p) => p.name).join(", ")}. They'll see your question in their inbox.`
+                ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.map(request => request.person?.name ?? "someone at the conference").join(", ")}. They'll see your question in their inbox.`
                 : applied
                   ? "Try a different search, or show everyone."
                   : "Try asking it another way, or check back as more people join."}

@@ -3,7 +3,7 @@
  * user's own badge in onboarding (A1) and other people's cards on the
  * match screen (A2). The IDs are the contract's BadgeColour values.
  */
-import type { BadgeColour } from "@/contracts/types";
+import type { BadgeColour, CardPerson } from "@/contracts/types";
 
 export type { BadgeColour };
 
@@ -29,3 +29,8 @@ export function colourHex(id: BadgeColour): string {
 
 /** The cookie that previews the user's badge colour before their profile loads. */
 export const BADGE_COOKIE = "convo_badge";
+
+/** A person's own badge colour, sunflower when they have none. */
+export function personColour(person: CardPerson | null): string {
+  return colourHex(person?.badgeColour ?? DEFAULT_COLOUR);
+}

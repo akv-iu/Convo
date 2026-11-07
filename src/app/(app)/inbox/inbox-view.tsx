@@ -13,8 +13,9 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Request } from "@/contracts/types";
-import { lengthLabel } from "../ask/asks";
+import type { Request, RequestView } from "@/contracts/types";
+import { lengthLabel, typeLabel } from "../ask/asks";
+import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 import {
   inboxFailure,
@@ -32,7 +33,7 @@ const headingClass =
   "text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl";
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
-type Load = { state: "loading" } | { state: "ready"; requests: Request[] } | { state: "failed"; failure: Failure };
+type Load = { state: "loading" } | { state: "ready"; requests: RequestView[] } | { state: "failed"; failure: Failure };
 type Action = { action: "accept" } | { action: "decline" } | { action: "reply"; reply: string };
 
 export function InboxView() {
@@ -47,7 +48,7 @@ export function InboxView() {
         const res = await fetch("/api/inbox", { cache: "no-store" });
         if (!live) return;
         if (!res.ok) return setLoad({ state: "failed", failure: inboxFailure(res.status) });
-        const requests = (await res.json()) as Request[];
+        const requests = (await res.json()) as RequestView[];
         if (live) setLoad({ state: "ready", requests: inboxOrder(requests) });
       } catch {
         if (live) setLoad({ state: "failed", failure: inboxFailure(0) });
@@ -65,8 +66,11 @@ export function InboxView() {
 
   function saved(updated: Request, message: string) {
     setAnnounce(message);
+    // Answers and bookings return a plain request: keep the asker's badge and the ask type already shown.
     setLoad((cur) =>
-      cur.state === "ready" ? { state: "ready", requests: cur.requests.map((r) => (r.id === updated.id ? updated : r)) } : cur,
+      cur.state === "ready"
+        ? { state: "ready", requests: cur.requests.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)) }
+        : cur,
     );
   }
 
@@ -138,7 +142,7 @@ function RequestCard({
   onSaved,
   onReload,
 }: {
-  request: Request;
+  request: RequestView;
   onSaved: (r: Request, message: string) => void;
   onReload: () => void;
 }) {
@@ -195,8 +199,13 @@ function RequestCard({
         >
           {statusLabel[request.status]}
         </span>
+        {request.type && <span className="font-semibold">{typeLabel[request.type]}</span>}
         <span className="text-muted">{lengthLabel(request.minutes)}</span>
         <span className="text-muted">· {venueTime(request.createdAt)}</span>
+      </div>
+
+      <div className="mt-3">
+        <PersonBadge person={request.person} caption="Asked by" />
       </div>
 
       <h2 id={qId} className="mt-3 text-xl font-semibold leading-snug tracking-tight break-words">

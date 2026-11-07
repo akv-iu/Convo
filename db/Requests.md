@@ -1,7 +1,7 @@
 # Saved requests, inbox and responses
 
-This B2 slice implements POST `/api/requests`, GET `/api/inbox`, and POST
-`/api/requests/:id/respond`. It uses the existing requests table: no migration,
+This B2 slice implements POST `/api/requests`, GET `/api/inbox`, GET
+`/api/requests/sent`, GET `/api/asks/:id` and POST `/api/requests/:id/respond`. It uses the existing requests table: no migration,
 reset, new dependency or credential change. Test with `FAKE_API=0` and
 `FAKES=search,ai`: Neon is real; search and AI are still fake.
 
@@ -18,6 +18,24 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
 - The inbox contains only requests addressed to the session user, newest first,
   with ID as a deterministic tie-breaker. An empty inbox is `[]`. It does not
   contain outgoing requests unless the sender also addressed themselves.
+- **GET `/api/requests/sent`** is the asker's side: requests the session user
+  sent, newest first, so they can see accept/decline, the receiver's reply and
+  the booked `slot`.
+- Both lists return `RequestView`: the request plus `type` (the ask's type, null
+  if unrefined) and `person`, the **other person's badge**. That's the asker in
+  the inbox and the receiver in sent requests. The badge is a `CardPerson`, with
+  that person's show/hide choices applied (hidden sections are null, the settings
+  themselves aren't returned). Accounts are read from Postgres. People without
+  an account (synthetic) come from one batched search read. A real account found
+  only in search shows nothing, and an unfinished profile gives `person: null`,
+  as does someone who can't be found. An invalid completed profile returns a
+  sanitized 503 instead of a missing badge. If search is down, the list returns 503
+  rather than leaving out badges. Other routes (send, respond, schedule) still
+  return a plain `Request`; keep the badge you already have when you update an
+  item.
+- **GET `/api/asks/:id`** returns the caller's own `Ask` (question, refinement,
+  status, `softBlocker`), so a new tab can show the question and the real
+  switch state. Someone else's ask returns 404.
 - Respond with `{ action: "accept" }`, `{ action: "decline" }`, or
   `{ action: "reply", reply: "..." }`. Status becomes accepted, declined or
   answered. Only the receiver can update it: 403 for anyone else, 404 if missing.

@@ -24,6 +24,15 @@ export const statusLabel: Record<RequestStatus, string> = {
   scheduled: "Meeting booked",
 };
 
+/** The same statuses from the asker's side ("You asked"). */
+export const sentStatusLabel: Record<RequestStatus, string> = {
+  sent: "Sent",
+  accepted: "Accepted",
+  declined: "Declined",
+  answered: "Replied",
+  scheduled: "Meeting booked",
+};
+
 /** Venue time (Salt Lake City), so everyone at the conference sees the same clock. */
 const VENUE_TZ = "America/Denver";
 
@@ -66,7 +75,7 @@ export function respondFailure(status: number, body: unknown): Failure {
 }
 
 /** Newest first, as the API sends them; new ones float to the top. */
-export function inboxOrder(requests: Request[]): Request[] {
+export function inboxOrder<R extends Request>(requests: R[]): R[] {
   const isNew = (r: Request) => (r.status === "sent" ? 0 : 1);
   return requests.map((r, i) => ({ r, i })).sort((a, b) => isNew(a.r) - isNew(b.r) || a.i - b.i).map(({ r }) => r);
 }

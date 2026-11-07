@@ -250,6 +250,22 @@ describe("lookups", () => {
     expect(es.mget).toHaveBeenCalledTimes(1);
   });
 
+  it("reads several people in one call, leaving out missing and malformed ones", async () => {
+    es.mget.mockResolvedValueOnce({ docs: [
+      { _id: "p_test", found: true, _source: { person } }, { _id: "nobody", found: false },
+      { _id: "broken", found: true, _source: { person: { id: "broken" } } },
+    ] });
+    expect(await elasticSearch.getPeople(["p_test", "nobody", "broken"])).toEqual([person]);
+    expect(es.mget).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ ids: ["p_test", "nobody", "broken"] }));
+    expect(await elasticSearch.getPeople([])).toEqual([]);
+    expect(es.mget).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the people read when one document errors, rather than dropping that person", async () => {
+    es.mget.mockResolvedValueOnce({ docs: [{ _id: "p_test", error: { type: "shard_failure", reason: "down" } }] });
+    await expect(elasticSearch.getPeople(["p_test"])).rejects.toThrow("People lookup failed");
+  });
+
   it("treats a failed lookup as an error, never as 'no such person'", async () => {
     const shardError = { _id: "p_test", _index: "people", error: { type: "shard_failure", reason: "no shard available" } };
     es.mget.mockResolvedValueOnce({ docs: [shardError] });
