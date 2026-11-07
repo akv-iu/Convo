@@ -1,0 +1,192 @@
+{
+  "apiVersion": "perses.dev/v1alpha1",
+  "kind": "PersesDashboard",
+  "metadata": {
+    "name": "convo-matching",
+    "labels": {
+      "dash0.com/id": "5ed118fc-72c4-40ae-83bc-ccfa6885a7f2"
+    }
+  },
+  "spec": {
+    "display": {
+      "name": "Convo matching"
+    },
+    "duration": "1h",
+    "panels": {
+      "steps": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "p95 time per match step"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "yAxis": {
+                "format": {
+                  "unit": "milliseconds"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum by (otel_span_name) (rate({otel_metric_name=\"dash0.spans.duration\",service_name=\"convo\",deployment_environment_name=\"production\",otel_span_name=~\"match\\\\.(understand|search|mutual|explain)\"}[$__rate_interval]))) * 1000",
+                    "seriesNameFormat": "{{otel_span_name}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "tokens": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "AI tokens per created ask (window average)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "yAxis": {
+                "format": {
+                  "unit": "decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "(sum(increase({otel_metric_name=\"convo.ai.tokens.input\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval])) + sum(increase({otel_metric_name=\"convo.ai.tokens.output\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval]))) / sum(increase({otel_metric_name=\"convo.ask.created\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval]))"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "cache": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "AI cache hit rate (entries)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "yAxis": {
+                "format": {
+                  "unit": "percent-decimal"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(rate({otel_metric_name=\"convo.ai.cache.hits\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval])) / (sum(rate({otel_metric_name=\"convo.ai.cache.hits\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval])) + sum(rate({otel_metric_name=\"convo.ai.cache.misses\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval])))"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "match": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "p95 POST /api/match (all responses)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "yAxis": {
+                "format": {
+                  "unit": "milliseconds"
+                },
+                "min": 0
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum(rate({otel_metric_name=\"convo.match.duration\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval]))) * 1000"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/steps"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/tokens"
+              }
+            },
+            {
+              "x": 0,
+              "y": 8,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/cache"
+              }
+            },
+            {
+              "x": 12,
+              "y": 8,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/match"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "apiVersion": "openslo.com/v1",
+  "kind": "SLO",
+  "metadata": {
+    "name": "convo-match-latency",
+    "labels": {
+      "dash0.com/origin": "convo-match-latency",
+      "slo": "convo-match-latency"
+    },
+    "annotations": {
+      "dash0.com/display-name": "95% of POST /api/match under 2 seconds"
+    }
+  },
+  "spec": {
+    "description": "Latency only, including error responses. Counts production SERVER spans for POST /api/match before Dash0 trace sampling. A fast event has a duration strictly less than 2,000,000,000 nanoseconds. No traffic is no data, not success.",
+    "service": "convo",
+    "budgetingMethod": "Occurrences",
+    "timeWindow": [
+      {
+        "duration": "28d",
+        "isRolling": true
+      }
+    ],
+    "indicator": {
+      "spec": {
+        "ratioMetric": {
+          "counter": true,
+          "good": {
+            "metricSource": {
+              "type": "Prometheus",
+              "spec": {
+                "query": "{otel_metric_name=\"convo.match.fast\",service_name=\"convo\",deployment_environment_name=\"production\"}"
+              }
+            }
+          },
+          "total": {
+            "metricSource": {
+              "type": "Prometheus",
+              "spec": {
+                "query": "{otel_metric_name=\"convo.match.requests\",service_name=\"convo\",deployment_environment_name=\"production\"}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "objectives": [
+      {
+        "displayName": "95% under 2 seconds",
+        "target": 0.95
+      }
+    ]
+  }
+}

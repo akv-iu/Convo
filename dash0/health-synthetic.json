@@ -1,0 +1,71 @@
+{
+  "apiVersion": "dash0.com/v1alpha1",
+  "kind": "Dash0SyntheticCheck",
+  "metadata": {
+    "name": "convo-dependency-health",
+    "labels": {
+      "dash0.com/id": "81f5c3c4-8a49-47fd-917c-d2104205c947"
+    }
+  },
+  "spec": {
+    "display": {
+      "name": "Convo dependency health"
+    },
+    "enabled": true,
+    "plugin": {
+      "kind": "http",
+      "spec": {
+        "request": {
+          "method": "get",
+          "url": "https://convo-delta-snowy.vercel.app/api/health",
+          "redirects": "disabled",
+          "tls": {
+            "allowInsecure": false
+          },
+          "tracing": {
+            "addTracingHeaders": true
+          },
+          "headers": [],
+          "queryParameters": []
+        },
+        "assertions": {
+          "criticalAssertions": [
+            {
+              "kind": "status_code",
+              "spec": {
+                "operator": "is",
+                "value": "200"
+              }
+            },
+            {
+              "kind": "timing",
+              "spec": {
+                "type": "total",
+                "operator": "lte",
+                "value": "10s"
+              }
+            }
+          ],
+          "degradedAssertions": []
+        }
+      }
+    },
+    "schedule": {
+      "interval": "5m",
+      "locations": [
+        "us-east"
+      ],
+      "strategy": "all_locations"
+    },
+    "retries": {
+      "kind": "off",
+      "spec": {}
+    },
+    "notifications": {
+      "channels": []
+    },
+    "labels": {
+      "service": "convo"
+    }
+  }
+}
