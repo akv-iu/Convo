@@ -24,6 +24,7 @@
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { githubProfile } from "@/components/ui/person-badge";
 import type { MatchResult, Request, RequestView } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
@@ -68,17 +69,25 @@ function AskMatches({ askId }: { askId: string }) {
   const [attempt, setAttempt] = useState(0);
   /** The person whose full profile is open (one at a time), or null. */
   const [openId, setOpenId] = useState<string | null>(null);
-  /** Set by a pass or send: move keyboard focus to the next person's row once it opens. */
-  const focusAfterAction = useRef(false);
+  /**
+   * Set after a pass or send: keep the keyboard's place once the list updates. It runs once per
+   * action (not on every change of the open row), and only if focus is still on the person acted on,
+   * or was lost because their buttons went away; if the user moved on (another row, the search box),
+   * it leaves focus alone.
+   */
+  const [focusRequest, setFocusRequest] = useState<{ actedId: string; n: number } | null>(null);
   useEffect(() => {
-    if (!focusAfterAction.current) return;
-    focusAfterAction.current = false;
-    // With no one left, the count goes too, so land on the end panel's heading.
-    const target = openId
-      ? document.getElementById(`match-${openId}-toggle`)
-      : (document.getElementById("matches-count") ?? document.getElementById("matches-done"));
+    if (!focusRequest) return;
+    const active = document.activeElement;
+    const actedRow = document.getElementById(`match-${focusRequest.actedId}-item`);
+    if (active && active !== document.body && !actedRow?.contains(active)) return;
+    // The next open person's row; with no one left to answer, the end panel; else the count.
+    const target =
+      document.querySelector<HTMLElement>('[id^="match-"][id$="-toggle"][aria-expanded="true"]') ??
+      document.getElementById("matches-done") ??
+      document.getElementById("matches-count");
     target?.focus();
-  }, [openId]);
+  }, [focusRequest]);
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
   const [actionFailure, setActionFailure] = useState<Failure | null>(null);
   /**
@@ -194,14 +203,25 @@ function AskMatches({ askId }: { askId: string }) {
   const sentIds = useMemo(() => new Set(sent.flatMap((r) => (r.person ? [r.person.id] : [r.toPersonId]))), [sent]);
   /** Nobody left to answer: the list is empty, or everyone still in it has your request or was passed on. */
   const allDone = matches.every((m) => sentIds.has(m.person.id) || passedIds.has(m.person.id));
-  /** The list was emptied by you (sends, passes or the cutoff), not by a lack of people. */
-  const reviewed = sent.length > 0 || cutoffNote || passedAny;
+  /**
+   * The requests that explain this list: those to people in it, plus, without a search, earlier
+   * ones (the server leaves those people out). A search that finds no one isn't explained by them.
+   */
+  const sentHere = applied
+    ? sent.filter((request) => matches.some((m) => m.person.id === (request.person?.id ?? request.toPersonId)))
+    : sent;
+  /** This list was emptied by you (passes, the cutoff, or your requests), not by a lack of people. */
+  const reviewed = passedAny || cutoffNote || sentHere.length > 0;
+  /** A reload only brings people back when you passed on someone with the switch off. */
+  const canSeeAgain = passedAny && blocker === false;
 
   /** What the end panel says under its heading. */
   function endNote() {
-    if (sent.length > 0) {
-      const names = sent.map((request) => request.person?.name ?? "someone at the conference").join(", ");
-      return `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${names}. They'll see your question in their inbox.`;
+    // The cutoff line above explains who's gone; a reload or the switch doesn't bring them back.
+    if (cutoffNote) return "Try asking it another way, or check back as more people join.";
+    if (sentHere.length > 0) {
+      const names = sentHere.map((request) => request.person?.name ?? "someone at the conference").join(", ");
+      return `You sent ${sentHere.length === 1 ? "a request" : `${sentHere.length} requests`} to ${names}. They'll see your question in their inbox.`;
     }
     if (passedAny) {
       // Only while the switch is on are they gone; with it off, See them again lists them unmarked.
@@ -228,13 +248,16 @@ function AskMatches({ askId }: { askId: string }) {
       setActionFailure(null);
       const who = match.person.name;
       const gen = deckGen.current;
-      /** After acting on someone, open the next person still waiting for an answer. */
+      /**
+       * After acting on someone, open the next person still waiting for an answer, unless the user
+       * opened someone else while the save ran.
+       */
       const openNext = (list: MatchResult[]) => {
         const next = list.find(
           (m) => m.rank > match.rank && m.person.id !== match.person.id && !sentIds.has(m.person.id) && !passedIds.has(m.person.id),
         );
-        focusAfterAction.current = true; // the buttons go with the closed row; keep the keyboard's place
-        setOpenId(next ? next.person.id : null);
+        setOpenId((current) => (current === match.person.id ? (next?.person.id ?? null) : current));
+        setFocusRequest((previous) => ({ actedId: match.person.id, n: (previous?.n ?? 0) + 1 }));
       };
       try {
         const res =
@@ -469,22 +492,14 @@ function AskMatches({ askId }: { askId: string }) {
 
       {blocker !== null && (
       <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
-        <label className="flex min-h-11 cursor-pointer items-center gap-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-accent">
-          <span className="flex-1 font-semibold">Keep people I pass on hidden</span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={blocker ?? false}
-            aria-disabled={blockerSaving || busy !== null}
-            onChange={(e) => void toggleBlocker(e.target.checked)}
-            aria-describedby="blocker-hint"
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden="true"
-            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-aria-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
-          />
-        </label>
+        <Switch
+          boxed={false}
+          label="Keep people I pass on hidden"
+          checked={blocker ?? false}
+          busy={blockerSaving || busy !== null}
+          describedBy="blocker-hint"
+          onChange={(on) => void toggleBlocker(on)}
+        />
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
           {blocker
               ? "On: people you passed on stay out of this list, and you're kept out of theirs."
@@ -590,6 +605,7 @@ function AskMatches({ askId }: { askId: string }) {
                 return (
                   <li
                     key={m.person.id}
+                    id={`match-${m.person.id}-item`}
                     className={`overflow-hidden rounded-2xl border-2 bg-surface transition-colors motion-reduce:transition-none ${open ? "border-accent" : "border-border"}`}
                   >
                     <button
@@ -608,6 +624,20 @@ function AskMatches({ askId }: { askId: string }) {
                     {open && (
                       <div id={panelId} role="region" aria-labelledby={`match-${m.person.id}-name`} className="border-t-2 border-border px-4 pb-4 pt-4">
                         <MatchDetails match={m} nameId={`match-${m.person.id}-name`} />
+                        {lockedIds.has(m.person.id) && (
+                          <p className={`mt-4 ${errorClass}`}>
+                            Lanyard couldn&apos;t confirm your pass on {m.person.name}, so Pass and Send are off until you{" "}
+                            <button
+                              type="button"
+                              onClick={refresh}
+                              aria-disabled={busy !== null}
+                              className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                            >
+                              refresh the matches
+                            </button>{" "}
+                            to see what was saved.
+                          </p>
+                        )}
                         {note ? (
                           <p className="mt-4 font-semibold">{note}</p>
                         ) : (
@@ -651,7 +681,7 @@ function AskMatches({ askId }: { askId: string }) {
             <p className="mt-2 text-muted">{endNote()}</p>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <Button href="/ask">Ask something else</Button>
-              {reviewed && (
+              {canSeeAgain && (
                 <Button variant="secondary" onClick={refresh}>
                   See them again
                 </Button>

@@ -30,7 +30,7 @@ export function MatchSummary({
           <span className="text-sm text-muted">@{p.githubLogin}</span>
         </span>
         {facts.length > 0 && <span className="block text-sm text-muted">{facts.join(" · ")}</span>}
-        <span className="mt-1 block line-clamp-2 text-sm leading-snug">{match.explanation}</span>
+        <span className="mt-1 line-clamp-2 text-sm leading-snug">{match.explanation}</span>
         {(sent || passed || match.mutual || p.synthetic) && (
           <span className="mt-1.5 flex flex-wrap gap-1.5">
             {sent && <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-bold text-on-accent">Request sent</span>}

@@ -22,6 +22,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import type { Person, ProfileVisibility } from "@/contracts/types";
 import { Badge, BadgeChip } from "../_components/badge";
 import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
@@ -33,6 +34,7 @@ import {
   missingMessage,
   saveErrorMessage,
   SHOW_ALL,
+  VISIBILITY_SECTIONS,
   toProfileBody,
   workplaceLabel,
   type AboutYou,
@@ -52,11 +54,7 @@ type Load =
   | { state: "start" } // no step 1 answers anywhere: begin at step 1
   | { state: "failed"; status: number };
 
-const sections = [
-  { id: "country", label: "Country" },
-  { id: "workplace", label: "Workplace" },
-  { id: "hiring", label: "Hiring status" },
-] as const;
+const sections = VISIBILITY_SECTIONS;
 
 
 export function BadgeForm() {
@@ -275,26 +273,13 @@ export function BadgeForm() {
             </p>
             <div className="flex max-w-sm flex-col gap-1.5">
               {sections.map((v) => (
-                <label
+                <Switch
                   key={v.id}
-                  className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border-2 border-border bg-surface px-3 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
-                >
-                  <span className="flex-1 font-semibold">{v.label}</span>
-                  <span className="text-sm text-muted" aria-hidden="true">
-                    {visibility[v.id] ? "Shown" : "Hidden"}
-                  </span>
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    checked={visibility[v.id]}
-                    onChange={(e) => setVisibility((cur) => ({ ...cur, [v.id]: e.target.checked }))}
-                    className="peer sr-only"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
-                  />
-                </label>
+                  label={v.label}
+                  aside={visibility[v.id] ? "Shown" : "Hidden"}
+                  checked={visibility[v.id]}
+                  onChange={(on) => setVisibility((cur) => ({ ...cur, [v.id]: on }))}
+                />
               ))}
             </div>
           </fieldset>
