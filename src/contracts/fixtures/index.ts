@@ -1,5 +1,6 @@
 /**
  * Hand-written fixtures for the fake API and the contract tests.
+ * Day 0 task for A and B: grow this to 20 people (10 so far) and 10 sample asks (done).
  * Each sample ask names the one person who should rank first, here and against the
  * 500 generated attendees, which live in scripts/synthetic and only go to Elasticsearch.
  */

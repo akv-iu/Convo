@@ -22,9 +22,15 @@ const PARALLEL = 8;
 /** A few at a time: each ingest waits for a refresh (about a second), so one by one takes minutes for 500. */
 async function eachInParallel<T>(items: readonly T[], ingest: (item: T) => Promise<unknown>): Promise<void> {
   let next = 0;
+  let failed = false;
   const worker = async (): Promise<void> => {
-    if (next >= items.length) return;
-    await ingest(items[next++]);
+    if (failed || next >= items.length) return;
+    try {
+      await ingest(items[next++]);
+    } catch (error) {
+      failed = true; // the other workers start nothing new, and the seed fails with this error
+      throw error;
+    }
     return worker();
   };
   await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, worker));
@@ -40,9 +46,11 @@ export async function seedSynthetic(): Promise<number> {
 }
 
 export async function seedUsers(): Promise<number> {
-  // syncProfile ingests the GitHub evidence saved in Postgres, so a rebuilt index gets it back.
+  // syncProfile replays the GitHub evidence saved in Postgres, so a rebuilt index gets it back. It writes
+  // straight to Elasticsearch, like the rest of this script: the app's search switch (FAKE_API=1 in
+  // .env.local) would send users to throwaway memory and still clear their pending flag.
   const onboarded = await db().select().from(users).where(isNotNull(users.filters));
-  await eachInParallel(onboarded, syncProfile);
+  await eachInParallel(onboarded, (user) => syncProfile(user, elasticSearch));
   return onboarded.length;
 }
 
