@@ -27,7 +27,7 @@ export function MatchSummary({
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-lg font-bold leading-snug break-words">{p.name}</span>
-          <span className="text-sm text-muted">@{p.githubLogin}</span>
+          {p.githubLogin && <span className="text-sm text-muted">@{p.githubLogin}</span>}
         </span>
         {facts.length > 0 && <span className="block text-sm text-muted">{facts.join(" · ")}</span>}
         <span className="mt-1 line-clamp-2 text-sm leading-snug">{match.explanation}</span>

@@ -21,14 +21,16 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
           <h2 id={nameId} className="text-2xl font-bold leading-snug tracking-tight break-words">
             {p.name}
           </h2>
-          <a
-            href={githubProfile(p.githubLogin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
-          </a>
+          {p.githubLogin && (
+            <a
+              href={githubProfile(p.githubLogin)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
           {badgeFacts(p).length > 0 && <p className="text-sm text-muted">{badgeFacts(p).join(" · ")}</p>}
         </div>
       </div>
