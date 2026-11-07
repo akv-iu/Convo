@@ -32,12 +32,16 @@ import {
   matchFailure,
   passFailure,
   recallBlocker,
+  recallSent,
   rememberBlocker,
+  rememberSent,
   resolveFailure,
   sendFailure,
   swipeOutcome,
   withinCutoff,
+  withoutSent,
   type Failure,
+  type SentTo,
   type Swipe,
 } from "./matches";
 
@@ -60,7 +64,7 @@ export function MatchesView() {
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
   const [actionFailure, setActionFailure] = useState<{ failure: Failure; retrySend: boolean } | null>(null);
   const [announce, setAnnounce] = useState("");
-  const [sent, setSent] = useState<{ name: string; githubLogin: string }[]>([]);
+  const [sent, setSent] = useState<SentTo[]>([]);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
@@ -91,7 +95,10 @@ export function MatchesView() {
         setQuestion(recallAsk(askId)?.refined.text ?? null);
         setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
-        setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
+        // Leave out people this tab already sent the ask to: a second send would be a duplicate request.
+        const already = recallSent(askId);
+        setSent(already);
+        setLoad({ state: "ready", matches: withoutSent([...(body as MatchResult[])], already).sort((a, b) => a.rank - b.rank) });
         setIndex(0);
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
@@ -144,7 +151,7 @@ export function MatchesView() {
           return;
         }
         if (kind === "send") {
-          setSent((s) => [...s, { name: who, githubLogin: login }]);
+          setSent(rememberSent(askId, { id: current.person.id, name: who, githubLogin: login }));
           setAnnounce(`Request sent to ${who}.`);
           setIndex((i) => i + 1);
         } else {
@@ -291,7 +298,7 @@ export function MatchesView() {
             <p className="mt-1 text-sm text-muted">Say thanks, or follow the people you reached out to.</p>
             <ul className="mt-3 flex flex-col gap-2">
               {sent.map((p) => (
-                <li key={p.githubLogin}>
+                <li key={p.id}>
                   <a
                     href={githubProfile(p.githubLogin)}
                     target="_blank"

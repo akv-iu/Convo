@@ -169,7 +169,7 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await mine.getByRole("button", { name: "Accept this request" }).click();
     const picker = mine.getByRole("region", { name: "Pick a time to meet" });
     await picker.getByRole("button", { name: /10:00 AM.*Book$/ }).click();
-    await expect(mine.getByRole("alert")).toContainText("Here are fresh times.");
+    await expect(mine.getByRole("alert")).toContainText("Showing what's free now.");
     await expect(picker.getByRole("button", { name: /Book$/ })).toHaveCount(1);
     await expect(picker.getByRole("button", { name: /12:00 PM/ })).toBeVisible();
     expect(slotLoads).toBe(2);

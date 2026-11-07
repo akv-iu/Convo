@@ -399,6 +399,27 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(puts).toBe(1);
   });
 
+  test("See them again leaves out people already sent the question", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    let sends = 0;
+    await page.route("**/api/requests", (route) => {
+      sends++;
+      return route.fulfill({ json: { id: `r${sends}` } });
+    });
+    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
+    await open(page, "made-up");
+    await sendButton(page).click();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await passButton(page).click();
+    await page.getByRole("button", { name: "See them again" }).click();
+    // Person 1 already has the question, so only Person 2 comes back.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(card(page)).toContainText("1 of 1");
+    await page.reload();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    expect(sends).toBe(1);
+  });
+
   test("Mark as answered resolves the ask, and suggests staying in touch with the people sent requests", async ({ page }) => {
     const askId = await newAsk(page);
     const [first] = await serverMatches(page, askId);

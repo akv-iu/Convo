@@ -72,7 +72,7 @@ describe("inboxOrder", () => {
 
 describe("booking failures (A2 step 5)", () => {
   it("a taken or stale time (409) loads fresh times; a 503 says to check before booking again", () => {
-    expect(bookFailure(409, null).message).toMatch(/fresh times/);
+    expect(bookFailure(409, null).message).toMatch(/Showing what's free now/);
     expect(bookFailure(503, null).message).toMatch(/Reload your requests to check/);
     expect(bookFailure(503, { error: "Booking saved, but the reply was unreadable." }).message).toBe("Booking saved, but the reply was unreadable.");
     expect(bookFailure(403, null).message).toMatch(/no longer yours/);
