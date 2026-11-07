@@ -224,6 +224,22 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
+  test("tapping a line on the badge hides it, and the switch beside the badge follows", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    const badge = visibleBadge(page);
+    await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    await badge.getByText("University of Oxford").click();
+    await expect(visibilitySwitch(page, "Workplace")).not.toBeChecked();
+    await badge.getByText("United Kingdom").click();
+    await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
+    await badge.getByText("University of Oxford").click();
+    await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    // The colour picker and the switches sit with the badge, in one section.
+    const look = page.getByRole("region", { name: "Your badge's look" });
+    await expect(look.getByRole("radio", { name: "Lilac" })).toHaveCount(1);
+    await expect(look.getByRole("group", { name: "Show on your badge" })).toBeVisible();
+  });
+
   test("the saved profile's colour wins over this browser's preview cookie", async ({ page, baseURL }) => {
     await page.context().addCookies([
       { name: "convo_badge", value: encodeURIComponent(JSON.stringify({ colour: "coral" })), url: baseURL! },

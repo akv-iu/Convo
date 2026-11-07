@@ -1,5 +1,5 @@
 /**
- * One result card (A2 step 1): who they are, why Convo picked them (the
+ * One result card (A2 step 1): who they are, why Lanyard picked them (the
  * explanation and the exact evidence), their hard-filter badges, whether
  * they're looking for someone like you too, and a "synthetic" label on
  * demo profiles. Readable as a whole by screen readers (an article named
@@ -23,7 +23,7 @@ export function MatchCard({ match, position }: { match: MatchResult; position: s
       className="overflow-hidden rounded-2xl bg-surface shadow-[var(--popover-shadow)] ring-1 ring-border"
     >
       <div className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[var(--badge-ink)]">
-        <span>Convo</span>
+        <span>Lanyard</span>
         <span id={`${nameId}-pos`} className="font-normal">
           {position}
         </span>

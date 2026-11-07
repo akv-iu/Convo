@@ -26,3 +26,6 @@ export function isBadgeColour(value: unknown): value is BadgeColour {
 export function colourHex(id: BadgeColour): string {
   return badgeColours.find((c) => c.id === id)?.hex ?? badgeColours[0].hex;
 }
+
+/** The cookie that previews the user's badge colour before their profile loads. */
+export const BADGE_COOKIE = "convo_badge";

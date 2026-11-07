@@ -5,6 +5,7 @@ import {
   aboutYouMissing,
   missingAnswers,
   NAME_MAX,
+  sameName,
   saveErrorMessage,
   SHOW_ALL,
   toFilters,
@@ -152,5 +153,12 @@ describe("aboutFromProfile (restoring a saved profile)", () => {
     // ...but never saves that placeholder as the workplace's name.
     const body = toProfileBody({ ...about, hiring: false }, "sunflower", SHOW_ALL);
     expect(body).toMatchObject({ filters: { rorId: stanford.id }, workplaceName: null });
+  });
+});
+
+describe("sameName (no 'Use …' option for a name already listed)", () => {
+  it("ignores case and extra spaces", () => {
+    expect(sameName("University of Utah", "  university  of utah ")).toBe(true);
+    expect(sameName("University of Utah", "University of Utah Health")).toBe(false);
   });
 });

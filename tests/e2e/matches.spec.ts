@@ -70,7 +70,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
   test("Find people on the refine screen opens the cards, best match first, with the question", async ({ page }) => {
     await page.setExtraHTTPHeaders({ "x-demo-user": ME });
     await page.goto("/ask");
-    await page.getByRole("textbox", { name: "Your question" }).fill("how does the Kubernetes scheduler do preemption");
+    await page.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
     await page.getByRole("button", { name: "Sharpen my question" }).click();
     await page.getByRole("link", { name: "Find people" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
@@ -199,7 +199,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     }
     // Cutoff 2 keeps only ranks 0-1, already seen, so the deck ends and says why.
     await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
-    await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
+    await expect(page.getByText("You've passed on three people, so Lanyard hid everyone ranked below them.")).toBeVisible();
     expect(passed).toEqual([0, 1, 2]);
   });
 
@@ -216,7 +216,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     // Cutoff 4 keeps ranks 0-3: the deck moves on to Person 2 of the 4 left.
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
     await expect(card(page)).toContainText("2 of 4");
-    await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
+    await expect(page.getByText("You've passed on three people, so Lanyard hid everyone ranked below them.")).toBeVisible();
   });
 
   test("a held arrow key acts once, not on every repeat", async ({ page, isMobile }) => {

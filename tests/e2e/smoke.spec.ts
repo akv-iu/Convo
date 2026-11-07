@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 
 test("home page loads and has no accessibility violations", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Convo");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lanyard");
+  // Developer notes stay on /dev/routes, not the front door.
+  await expect(page.getByText("FAKE_API")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "API contract" })).toHaveCount(0);
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(results.violations).toEqual([]);
 });

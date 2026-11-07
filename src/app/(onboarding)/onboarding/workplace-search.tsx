@@ -17,7 +17,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { RorMatch } from "@/contracts/types";
 import { countryName } from "@/components/ui/countries";
-import type { Workplace } from "./answers";
+import { sameName, type Workplace } from "./answers";
 
 const MAX_QUERY = 200;
 const DEBOUNCE_MS = 300;
@@ -87,8 +87,11 @@ export function WorkplaceSearch({
 
   const results = search.state === "done" ? search.results : [];
   // The last option is always the name as typed.
-  const optionCount = search.state === "done" ? results.length + 1 : 0;
-  const customIndex = results.length;
+  // The name as typed is offered last, unless it already is one of the results (ignoring case and spacing).
+  const typedIsListed = results.some((r) => sameName(r.name, trimmed));
+  const offerTyped = search.state === "done" && !typedIsListed;
+  const optionCount = search.state === "done" ? results.length + (offerTyped ? 1 : 0) : 0;
+  const customIndex = offerTyped ? results.length : -1;
   const showPanel = open && trimmed.length > 0 && search.state !== "idle";
   const showList = showPanel && optionCount > 0;
 
@@ -261,6 +264,7 @@ export function WorkplaceSearch({
                   <span className="text-sm text-muted">{countryName(org.country)}</span>
                 </li>
               ))}
+              {offerTyped && (
               <li
                 id={`${id}-opt-${customIndex}`}
                 role="option"
@@ -273,6 +277,7 @@ export function WorkplaceSearch({
                 <span className="font-semibold break-words">Use &ldquo;{trimmed}&rdquo;</span>
                 <span className="text-sm text-muted">Not listed? Add it as you typed it.</span>
               </li>
+              )}
             </ul>
           )}
         </div>

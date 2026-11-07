@@ -50,8 +50,8 @@ export function refineFailure(status: number, body: unknown): RefineFailure {
   if (status === 409) return { message: "Finish setting up your badge first.", action: { label: "Set up your badge", href: "/signin" } };
   if (status === 401 || status === 404) return { message: "Your sign-in has expired.", action: { label: "Sign in again", href: "/signin" } };
   if (status === 400) return { message: "Write a few words about what you want to ask.", action: null };
-  if (status === 503) return { message: server ?? "Convo couldn't sharpen that just now. Try again in a moment.", action: null };
-  return { message: "Convo couldn't sharpen that just now. Try again in a moment.", action: null };
+  if (status === 503) return { message: server ?? "Lanyard couldn't sharpen that just now. Try again in a moment.", action: null };
+  return { message: "Lanyard couldn't sharpen that just now. Try again in a moment.", action: null };
 }
 
 export const SavedAsk = z.object({ askId: z.string().min(1), rawText: z.string(), refined: RefinedAsk });
@@ -82,10 +82,3 @@ export function rememberAsk(ask: SavedAsk): void {
 export function recallAsk(askId: string): SavedAsk | null {
   return readAll().find((a) => a.askId === askId) ?? null;
 }
-
-/** Starters for the empty box; tapping one fills it in. */
-export const examples = [
-  "how does Raft do the voting thing",
-  "I want to work on Kubernetes networking",
-  "looking for someone to co-author a paper on eBPF",
-] as const;

@@ -38,7 +38,7 @@ export function Badge({
           data-badge-stripe
           className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[var(--badge-ink)] transition-colors duration-200 motion-reduce:transition-none"
         >
-          <span>Convo</span>
+          <span>Lanyard</span>
           <span className="font-normal">{label ?? "Salt Lake City"}</span>
         </div>
 
