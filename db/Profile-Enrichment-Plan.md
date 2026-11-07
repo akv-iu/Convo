@@ -1,20 +1,20 @@
 # Profile enrichment: shared delivery brief
 
-Status: user journey and four independent source permissions confirmed; API remains a proposal. Feature code has not started. Owner: Person B. Updated: 7 November 2026, America/Denver.
+Status: Google/GitHub authentication and four independent imports confirmed; revised foundation is a proposal awaiting Claude's CONTRACT ACK. Real enrichment is not implemented. Owner: Person B. Updated: 7 November 2026, America/Denver.
 
 This is the shared context for the user's separate Codex and Claude sessions. Read it together with `AGENTS.md`, `docs/Build-Plan.md` and `docs/Quality-Gates.md`. The user requested frontend and backend delivery of the complete bounded feature below. Existing folder ownership and approval rules still apply. This document proposes the API; it does not freeze or approve a contract change by itself.
 
 ## 1. What we are building
 
-The user first enters their basic details and chooses permitted sources. On page two they sign in with GitHub, preview possible research/public-profile matches, confirm the links that belong to them, optionally upload a CV, and can turn sources off again. Continuing starts collection and synthesis while they finish badge and availability choices. The user reviews and edits the resulting evidence-backed bio before it replaces their public profile.
+The user first enters their basic details and chooses permitted sources. On page two they sign in with Google or GitHub, preview possible research/public-profile matches, confirm the links that belong to them, optionally upload a CV, and can turn sources off again. Continuing starts collection and synthesis while they finish badge and availability choices. The user reviews and edits the resulting evidence-backed bio before it replaces their public profile.
 
-Confirmed decisions from the user: Public/university profile is a separate fourth source permission. GitHub authentication remains mandatory even when GitHub data import is off. This details-first, source-confirmation-second flow supersedes the earlier sign-in-first recommendation in this document. Do not move authorization ahead of page one or combine public-profile permission with Research/CV.
+Confirmed decisions from the user: Public/university profile is a separate fourth source permission. Authentication with Google or GitHub is required; GitHub data import is optional. No ORCID sign-in. A Google-only attendee needs no GitHub account. This details-first, source-confirmation-second flow supersedes the earlier sign-in-first recommendation in this document. Do not move authorization ahead of page one or combine public-profile permission with Research/CV. The 7 November Google/GitHub decision supersedes every earlier GitHub-only instruction.
 
 Four optional data sources ship together:
 
 | Source | First-release behavior |
 | --- | --- |
-| GitHub | Existing public bio/repository/language/organisation permissions. GitHub authenticates every user on page two; importing its optional data happens only when still selected at final source confirmation. |
+| GitHub | Existing public bio/repository/language/organisation permissions. GitHub is an optional authentication/connection provider on page two; importing its optional data happens only when still selected at final source confirmation. |
 | Research | OpenAlex API; prefer an optional ORCID, otherwise search using confirmed name and workplace/ROR. Show up to four author candidates with affiliations, sample papers and clickable links; require a selection or Skip. Import up to ten papers from the selected author. |
 | Public professional profile | Use a supported search API to find candidates from name and workplace. Show **at most four** deduplicated candidates with title, visible domain, plain-text snippet and clickable HTTPS URL. Select one, choose None of these, or provide a URL. Fetch the chosen page only. |
 | CV | One text-based PDF or DOCX, at most 2 MiB. Extract plain text, show filename/result/warnings, and allow replacement/removal. Support pasting CV text as the fallback for scans or unreadable files. |
@@ -37,25 +37,13 @@ Scanned PDFs requiring OCR, encrypted documents, old `.doc` files, private/login
 
 ## 3. User journey
 
-1. **Page one — About you and source choices:** name, workplace/ROR and country, with optional ORCID. Four independent import controls: GitHub, Research, University/public profile and CV. Keep granular GitHub bio/repository/organisation choices. Explain AI processing of selected information. Source permissions are optional; authentication is not. Preserve this unsaved draft across the GitHub round trip without making provider requests before authorization.
-2. **Page two — Connect and confirm:** show Continue with GitHub when authentication is needed, even if GitHub import is off. Return to this same page after OAuth, retaining page-one answers and choices. Only then discover selected sources and allow uploads. Show up to four research-author candidates and separately up to four public-profile candidates, with clickable links and enough preview information to identify them. Choose one from each list, None of these, Skip, or a permitted manual fallback. Opening a link is separate from selecting it. A failed lookup is not presented as zero matches. Source controls remain editable here: turning one off clears its candidate selection/input and excludes it from collection/AI. CV can be uploaded, replaced or removed on this page. Final Continue snapshots the chosen permissions, links and CV, saves the job, and starts import/synthesis. If all sources are off, continue to a manual profile without an AI call.
-3. **Page three — Badge:** hiring answer, badge colour and visibility; preserve country/workplace from page one. Background collection and synthesis continue. Show per-source progress without blocking these choices.
-4. **Page four — Availability:** free-time entry while enrichment continues. A small progress indicator follows the persisted job. Poll only while relevant; stop on terminal states or navigation.
-5. **Page five — Review and approve bio:** show the proposed bio and expertise, confirmed source links, evidence selection and incomplete-source warnings. Allow editing, removing wrongly attributed evidence, retry and manual continuation. If the job is not finished, show actual progress; completion by this page is a target, not a guarantee. Approval saves only accepted fields/evidence, preserving current onboarding choices and newer edits. Never silently publish. A signed-in returning user can keep their approved profile and skip enrichment.
+1. **Page one - Details and permissions:** name (at most 80), country, typed workplace and optional ORCID; four independent import controls. Keep unsaved safe answers across authentication. Pilot proposal: directory/ROR confirmation is offered after sign-in, because /api/ror is authenticated; name/workplace matching can start with a null ROR ID.
+2. **Page two - Sign in, connect and confirm:** Google or GitHub, returning to this same page. Authentication does not start optional imports. Google-only users need no GitHub unless they select its import; Connect GitHub attaches it to the existing account. Refuse already-owned connections; cancel/deny/reconnect returns here without discarding selections or switching the owner. After authentication, privately save page-one identity through PUT /api/profile-enrichment so another tab can resume before final Continue. Discover Research and Public profile independently. Each has at most four clickable candidates, no automatic selection, one confirmed choice or Skip. Public profile also allows a different HTTPS URL or at most 30,000 pasted characters. CV accepts a PDF/DOCX or pasted text and can be replaced/removed. All controls remain editable.
+3. **Page three - Badge:** Final Continue snapshots confirmed sources and starts import/synthesis, while hiring, colour and visibility are chosen. All sources off returns manual mode without AI. Synthesis omits country/workplace/hiring claims regardless of later display choices.
+4. **Page four - Availability:** save free time while the job runs. Poll only active jobs; show stalled/partial/failure honestly and provide explicit retry.
+5. **Page five - Review:** proposed bio/expertise, linked supporting excerpts, source snapshots and warnings. CV excerpts start unselected. Allow editing, removing wrong evidence and manual continuation. Generated bio is not published until approved. Preserve newer text edits and current badge/time settings. A returning user can keep their accepted profile without enrichment.
 
-```mermaid
-flowchart TD
-  A[Page 1: details and four source choices] --> B[Page 2: required GitHub sign-in and return]
-  B --> C[Page 2: preview links, confirm sources and optional CV]
-  C --> D[Save import job]
-  D --> E[Collect selected evidence in parallel]
-  D --> F[Pages 3 and 4: badge and free times]
-  E --> G[One cached AI synthesis]
-  G --> H[Page 5: review and edit bio with source links]
-  F --> H
-  H --> I[Approve profile and evidence]
-  I --> J[Postgres save and revision-ordered search sync]
-```
+The four sources only decide what fills the Lanyard profile. ORCID helps OpenAlex lookup and is not authentication or proof of authorship. Nothing is written to OpenAlex/ORCID/GitHub.
 
 ## 4. Concrete implementation proposal
 
@@ -93,7 +81,8 @@ The user requested instructions for allowing an import when access is blocked. S
 | Known result | User-facing meaning and action |
 | --- | --- |
 | Import source off | Not selected / Not imported. Enable that source and its desired subchoices to include it. This is not a failure; keep GitHub sign-in active. |
-| GitHub sign-in cancelled/not completed | GitHub sign-in is required to continue. Offer Continue with GitHub again and preserve page-one details; optional data imports may stay off. |
+| Google/GitHub sign-in cancelled | Return to page two with a sanitized code and preserve details; offer both sign-in providers again. Imports may stay off. |
+| GitHub connection cancelled or already linked | Keep the current Lanyard session. Offer retry/turn off import, or explain that the GitHub already belongs to another account; never merge or switch accounts silently. |
 | Selected source permission off in Lanyard | Show which import choice is disabled and where to enable it. Never broaden requested OAuth scopes automatically. |
 | GitHub credential revoked/expired, or confirmed authorization failure | Offer Reconnect GitHub. Explain GitHub Settings > Applications > Authorized OAuth Apps as the place to inspect the app's access. Use the app's actual OAuth registration name, which may still be Convo. Do not tell users to revoke unrelated apps. |
 | No public GitHub bio/repos/organisations returned | Say no public information was found for that category. Let users use another source or manual bio. Public organisation membership can be checked using GitHub's documented visibility controls; changing privacy remains optional. Do not call an empty public list a permission failure or request private-repository access. |
@@ -117,28 +106,29 @@ Authentication and import status must remain distinct in the API and UI: signed 
 - AI receives external text as untrusted data, without tools or credentials. Output includes a two/three-sentence bio (at most 600 characters), at most eight expertise labels (60 characters each) and supporting evidence IDs. Validate the shape, ownership and references; those checks do not establish truth, so preserve human review. Do not infer expert/maintainer/current-employment claims from a repo language, coauthorship or old affiliation alone.
 - Country, workplace and hiring keep their existing display controls. Prevent generated public bio text from automatically reintroducing facts the user hid. Keep private visibility settings, CV contents and unsupported/sensitive claims out of cards and diagnostics.
 
-## 5. Proposed shared API (Codex writes; Claude reviews before implementation)
+## 5. Revised shared API (Codex writes; Claude reviews)
 
-Exact schemas, bounds, error codes and fake/real parity must be agreed and committed in the foundation PR. Route names below are the proposed interface, not endpoints that exist today.
+The current executable proposal and full handoff are on [b2/profile-enrichment-contract](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-contract/db/Profile-Enrichment-Contract.md). Its schemas/fake/tests supersede this brief's original combined-discovery route table. Claude's complete requests 1-29 plus the later public-profile-text/nullable-handle clarification have been reconciled.
 
-| Route | Request | Response / behavior |
-| --- | --- | --- |
-| `POST /api/profile-enrichment/discover` | Authenticated page-two request: page-one name/workplace/ROR, optional ORCID, explicitly selected discovery sources | Owner-bound `discoveryId`, at most four authors and four public pages, per-source `ok/no_matches/unavailable/not_selected`, safe warnings/reason codes. Each public candidate has `id/title/url/domain/snippet`. No scraping of candidate pages yet. |
-| `POST /api/profile-enrichment/cv` | Authenticated multipart request with one permitted file and explicit upload consent | Owner-bound `uploadId`, filename, extracted-character count, warnings and expiry. Binary and raw extracted text do not appear in the response. |
-| `POST /api/profile-enrichment` | Discovery ID and selected author/page IDs, optional validated manual URL, CV upload ID, source permissions and client-generated idempotency key | `jobId`, state, selection generation. No client-selected user ID; repeated starts with the same key return the same job. All source IDs are checked against the owner and current selections. |
-| `GET /api/profile-enrichment/:id` | Job ID | State/phase, per-source progress, sanitized reason/help codes and supported retry cooldown, and owner-only draft/evidence when ready; draft/text versions and whether approval needs refreshed review. Never raw credentials or full CV input. |
-| `POST /api/profile-enrichment/:id/retry` | Job ID and permitted retry/source choice | Same job or a new draft version, with atomic lease ownership. No duplicate work, and no forced retry while a valid lease is running. |
-| `POST /api/profile-enrichment/:id/accept` | Expected draft and base text versions, edited bio/expertise, selected evidence IDs | Latest saved `Person` and synchronization result. Stale edits/consent are 409; a committed save with unconfirmed indexing returns a structured retryable outcome carrying the saved identity/version, not an ID hidden in error text. Repeat acceptance is safe. |
-| `POST /api/profile-enrichment/:id/cancel` | Job ID | Confirmed cancellation and removal of temporary private input; late work cannot publish. |
-| `POST /api/profile-enrichment/sources/:id/remove` | Owner-bound source ID | Persisted withdrawal and explicit search-sync result. Repeat removal is safe. |
+- GET /api/profile-enrichment: owner state, authentication provider, GitHub connection, onboarded flag, saved identity, latest job and pending CV. Works before onboarding.
+- PUT /api/profile-enrichment: stage private identity after authentication, before any source work. Do not publish or require hiring yet.
+- POST /api/profile-enrichment/github/connect: protected connection flow; preserve owner, same-site return to page two; refuse an already-linked identity.
+- POST /api/profile-enrichment/discover: one source per request, bounded independent author/page previews and owner/input-bound discovery IDs.
+- POST /api/profile-enrichment/cv: multipart consent plus file or text, metadata only; one pending CV per owner.
+- POST /api/profile-enrichment/cv/:id/remove: idempotent unaccepted-input removal.
+- POST /api/profile-enrichment: identity, idempotency key and separate Github/research/page/CV choices. New choices supersede old unaccepted work.
+- GET /api/profile-enrichment/:id: state, phase, source snapshots/progress and owner-only evidence-linked draft.
+- POST /api/profile-enrichment/:id/retry: same sources, no duplicate valid lease.
+- POST /api/profile-enrichment/:id/accept: draft/text versions, approved fields/evidence. 200 after a committed save; structured sync plus saved revision, including not_onboarded.
+- POST /api/profile-enrichment/:id/cancel; GET /api/profile-enrichment/sources; POST /api/profile-enrichment/sources/:id/remove.
 
-The operational CV cleanup endpoint is authenticated with `CRON_SECRET` and outside the screen contract, like `/api/health`. It returns counts only. Its scheduler must be configured before production CV is enabled.
+Same key with changed normalized input (including pasted text) returns 409/idempotency_conflict. No provider errors or private source text in responses/logs. Error codes and retry cooldowns are shared; source off is a status, not failure.
 
-- Extend `Person`/`CardPerson` with optional bounded `expertise` (default to an empty list for older data), and `EvidenceKind` with the needed page/CV kinds. Preserve the meaning of `languages` and the existing `MatchResult`/request routes.
-- Add all screen endpoints to `routes.ts`, update the fake and `contract.test.ts` in the same PR, and cover the real route adapters with recorded providers. Every new route respects `FAKE_API=1`; it never contacts a provider in fake mode. Read application switches only in `src/server/config.ts`.
-- The existing `api()` wrapper reads JSON bodies. The multipart route needs an explicit contract and a thin multipart adapter that performs the same authentication, fake/real dispatch and schema checks. Do not pretend the JSON wrapper accepts files; agree any shared-helper changes in the foundation PR.
-- All endpoints are authenticated and owner-scoped. Cap strings, arrays, file counts and source URLs at the trust boundary. Distinguish 400/413/415/422 invalid input, 401/404 ownership, 409 stale/running work, 429 user limits and sanitized retryable provider/storage failures.
-- Discovery, upload and job/status endpoints must work before onboarding filters are complete. Read the authenticated identity/owner record rather than calling `getProfile()`, which currently returns 409 while filters are null. Index the accepted profile only once its required onboarding fields are complete.
+Person.githubLogin is nullable and server-owned; Person.expertise remains optional with no .default through partial updates. CardPerson inherits both. EvidenceDoc URLs are HTTPS and kinds include profile_page/cv; owner/kind/external-ID namespaces never collide with the reserved person:profile document.
+
+Before merging the nullable type, #44 and Claude's a1/nullable-handle compatibility patch must land, or be present in an explicitly approved integration. Codex changes no screen files to hide that dependency.
+
+The operational expired-input cleanup is authenticated, outside the screen contract, and must ship/configure before real CV enablement. Source providers, durable state, parsing isolation and actual OAuth/linking are not implemented by a passing foundation fake.
 
 ## 6. Work split: two external sessions, one writer per file
 
@@ -147,7 +137,7 @@ The operational CV cleanup endpoint is authenticated with `CRON_SECRET` and outs
 | Existing #44/#45 | Review their latest pushed changes; no competing screen edits | Verify #44's latest fixes and #45's dependent changes with the existing frontend owner, finish remaining findings/regressions, and signal READY FOR PERSON B REVIEW |
 | Shared foundation | Sole writer of schemas, route definitions, fake/fixtures/contract tests; proposed config, dependency and deployment files | Review request/response semantics and UI feasibility; do not edit the same shared files |
 | Backend | B2: `src/server/profile/`, auth, requests' pending filters, `src/server/real.ts`, `src/app/api/`, `db/`; profile synthesis stays in this B2 service | Consume the agreed endpoints; no B2 edits |
-| Frontend | Review behavior/contracts; no competing screen changes | A1/A2 folders and `src/components/ui/`, `tests/e2e/`: page-one details/permissions; page-two mandatory GitHub authorization, candidate previews/selection, source toggles, help blocks and CV; badge, availability, progress, review/editor and expertise display |
+| Frontend | Review behavior/contracts; no competing screen changes | A1/A2 folders and `src/components/ui/`, `tests/e2e/`: page-one details/permissions; page-two Google/GitHub authentication and optional GitHub connection, candidate previews/selection, source toggles, help blocks and CV; badge, availability, progress, review/editor and expertise display |
 | Search compatibility | Provide the accepted full Person/evidence snapshot via the existing ingest interface | B1: add expertise to Elastic/in-memory profile matching and synthetic defaults where necessary, and prove seed/rebuild restores all accepted sources. Keep this a separate small B1 PR; coordinate schema assumptions with Codex |
 
 The user has two separate accounts/sessions; do not assume messages or files in one agent's memory are visible to the other. The repository document, agreed contract commit and PR descriptions are the shared record. This brief does not spawn agents or send messages to Claude automatically.
@@ -158,7 +148,7 @@ Keep Person A's other agent from editing these same screen files while the assig
 
 ## 7. PR and release order
 
-1. **Review this brief and settle #44/#45 separately.** Codex can prepare the contract/fake while Claude coordinates the existing frontend PRs and reviews the proposal. Record any agreed change to this document before either implements against a different shape. Do not run two frontend sessions against the same files.
+1. **Review this brief and settle #44 plus nullable-handle compatibility; coordinate #45 separately.** Codex can prepare the contract/fake while Claude coordinates the existing frontend PRs and reviews the proposal. Record any agreed change to this document before either implements against a different shape. Do not run two frontend sessions against the same files.
 2. **Foundation PR:** `b2/profile-enrichment-contract`. Prepare the shared schemas/fake/tests, explicit multipart behavior, feature flag/capability handling and agreed dependencies/setup locally. Signal ready and obtain the user's permission to open the PR, as previously requested. Both people approve and the user merges. Keep production behavior unchanged with the new feature disabled.
 3. From that exact updated main commit, work in parallel: Codex `b2/profile-enrichment-backend`; Claude `a1/profile-enrichment`. Claude uses the fake immediately. Backend services have recorded-provider tests. No agent edits the other's files to work around an API problem; raise a concrete contract proposal.
 4. Claude's separate B1 compatibility PR, `b1/profile-enrichment-search`, uses the agreed types and existing `syncProfile` entry point. Backend and B1 maintain compatibility while the new feature flag is off. Confirm actual dependencies before choosing the merge order; no import may point at a function available only in an unmerged branch.
@@ -173,7 +163,7 @@ No keys are needed to agree schemas or build the fake. Before live acceptance:
 
 1. OpenAlex: create an API key and set server-only `OPENALEX_API_KEY` locally and in the intended Vercel environment. Confirm current usage limits in its dashboard.
 2. Brave Web Search: create a compatible API key/subscription and set server-only `BRAVE_SEARCH_API_KEY`. Confirm allowed display/retention of search results; use it for candidate discovery and retain only the selected actual source page as evidence.
-3. Reuse existing GitHub OAuth, OpenAI, Neon, Elasticsearch and Dash0 settings. No new blob account is proposed because original CV files are discarded after parsing.
+3. Add a Google OAuth web client (openid profile only, no email/offline scope), with exact localhost and production callback URLs at /api/auth/callback/google. Codex supplies the reviewed setup before live testing. Reuse existing GitHub OAuth, OpenAI, Neon, Elasticsearch and Dash0 settings. No new blob account is proposed because original CV files are discarded after parsing.
 4. Generate `CRON_SECRET` privately; configure the authenticated daily expired-input cleanup in `vercel.json`, verify its deployment schedule, and verify the deletion window. Never paste keys or secrets into chat, screenshots or PR bodies.
 5. Apply the reviewed additive/backfill migration to the intended Neon database. Existing user data and migrations are preserved; no drop/reset of shared or production tables. Codex supplies the exact command and verification checklist when the migration exists.
 6. Redeploy after environment changes. Enable the feature flag only after the live checklist. Existing app fake/real switches remain a separate decision.
@@ -184,7 +174,7 @@ All automated tests use local file fixtures, fake APIs, mocked providers/DB and 
 
 Cover at least:
 
-- Source consent off means no discovery/fetch/model input from that source. GitHub sign-in still works with optional imports off. Errors on enrichment do not lock sign-in out. Page-one drafts survive authorization returning to page two; GitHub import does not start just because authentication finished. CV upload waits until after the redirect/authentication.
+- Source consent off means no discovery/fetch/model input from that source. Both sign-in providers work with imports off, including Google-only users with no GitHub connection. Errors on enrichment do not lock sign-in out. Page-one drafts survive either provider returning to page two; GitHub import does not start just because authentication finished. CV upload waits until after the redirect/authentication.
 - Each of the four source controls is independent on both pages. Turning one off on page two invalidates pending discovery, clears its unaccepted input/selections and prevents final collection. All-off skips model calls. Permission errors, empty public data, rate limits and unknown failures select the right help text, with no invented privacy diagnosis and no unnecessary OAuth scope expansion.
 - Name collisions, ORCID mismatch, changed workplace, no candidates, provider failure vs no matches, at most four deduplicated clickable profiles, no automatic selection, and keyboard selection/open-link independence.
 - Only confirmed page URLs fetched; malicious URLs, redirects, DNS rebinding, large bodies, wrong content types and injected instructions cannot escape the fetch/model boundary.
@@ -211,35 +201,27 @@ MERGE: <ready / blocked, with named approval or gate still needed>
 
 Do not merge a PR yourself unless the user explicitly authorizes that merge. Do not invent approvals, silently retarget dependencies or treat a green Gitar check as proof that all review findings are closed.
 
-## 10. Copy-paste session prompts
+## 10. Session instructions and PRD amendments
 
 ### Claude
+Fetch origin/main, origin/b2/profile-enrichment-plan and origin/b2/profile-enrichment-contract. Read this brief, the revised contract handoff, AGENTS.md and the build plan. Google or GitHub authenticates; four optional imports populate Lanyard. No ORCID sign-in. Confirm the nullable, server-owned githubLogin shape, staged private identity, independent discovery, owner-only pasted text, idempotency-conflict behavior and structured synchronization outcome. Return CONTRACT ACK or precise remaining changes.
 
-```text
-We are delivering Lanyard profile enrichment as one complete pilot feature: GitHub imports, confirmed OpenAlex research, one public professional profile selected from up to four clickable candidates, and optional PDF/DOCX CV upload. The user confirmed four independent source permissions and mandatory GitHub authentication even with its imports off. Page one collects details/permissions. Page two authorizes GitHub and returns to the same source-confirmation page, shows up to four research and four public-page candidates, permits changing source choices, and accepts the CV. Continue starts imports/AI; badge and time follow; then the user reviews and approves the bio.
+You own UI/e2e and the separate B1 compatibility PR. Settle #44 and your nullable-handle patch before the foundation's nullable type merges; coordinate other frontend branches before touching overlapping files. B1 work includes shared memory-search state across route modules, expertise matching, the reserved evidence-ID guard and complete-evidence seed/rebuild recovery. Do not edit B2 or shared contract/fake files.
 
-First read AGENTS.md, docs/Build-Plan.md, docs/Quality-Gates.md and db/Profile-Enrichment-Plan.md on origin/b2/profile-enrichment-plan. That document is the shared source of truth, including the API proposal, limits, owners and release gates. Fetch and read it explicitly; do not assume your chat contains the latest version. State its commit before starting.
-
-You own frontend A1/A2, shared UI/e2e, plus a separate narrowly scoped B1 search-compatibility PR. Codex owns B2 and is the sole writer of shared contracts/fakes and dependency/config files. First inspect the latest #44 head against the four requested fixes and coordinate #45 with the existing frontend session. Finish any remaining fixes/regressions and signal ready for B review. Do not redo fixes already pushed or duplicate another session's edits; keep those PRs separate from this feature.
-
-Review the proposed API and return CONTRACT ACK or a specific requested change. Before the foundation contract/fake is approved and merged, you can work on #44 and identify UI requirements; do not create an alternative contract or fake endpoint. After it merges, create a separate worktree/branch from that exact main commit and build against FAKE_API=1. Preserve the confirmed page order, authentication/import separation, independent source toggles on page two, links separate from selection, CV validation/error states, cause-specific help, persisted progress and editable source-backed approval. No real-provider calls in tests. No edits to B2 or silent contract changes.
-
-For B1, include expertise in Elastic/in-memory matching and verify complete accepted evidence survives seed/rebuild. Reuse existing interfaces and ask for the required owner approval before any out-of-scope edit. Keep this separate from screen commits.
-
-Test and critically review changes twice, fix findings and retest regressions. Supply one complete manual checklist and the READY FOR REVIEW handoff from the shared brief. Ask before live tests; do not merge without the user's approval. If the brief is unavailable, ask for its content instead of guessing.
-```
+No new onboarding screens until contract ACK and a common merged foundation commit. Flag-on browser configuration/specs require the agreed config writer and owner approval. Ask before live providers; supply one full manual checklist; no PR creation or merge without the user's applicable approval.
 
 ### Codex
+You own B2 and shared-foundation writing. Keep real endpoints honestly unavailable until implementation. Migration 0005 makes the GitHub handle nullable and adds provider/account-ID ownership with a numeric-ID backfill; do not apply it without user authorization. Real Google/linking must use atomic identity ownership and preserve existing user IDs. Do not infer account ownership from handles, matching emails, names, CVs or selected authors. Keep Google tokens separate from the private GitHub credential path.
 
-```text
-Read AGENTS.md and the latest db/Profile-Enrichment-Plan.md from origin/b2/profile-enrichment-plan, plus the build plan and quality gates. The user confirmed details/permissions on page one, mandatory GitHub authorization on page two regardless of import choices, then up to four research and four public-profile previews plus source toggles/CV upload on that same page. Continue starts import/synthesis while badge and availability follow, before bio review. Public-profile lookup is the independent fourth permission. Use one confirmed author and one confirmed public page per run.
+Update all approved-evidence persistence/indexing readers in the real backend, preserve edits and use separate text/consent versions. No B1/screen edits as a workaround. Test/review twice; ask before live providers. Keep the feature off and wait for contract approvals and user PR authorization.
 
-You own B2/backend and the sole writing of the agreed shared foundation: contracts, fake, contract tests and approved dependency/config changes. Claude owns A1/A2 UI/e2e and a separate B1 compatibility PR. Keep profile synthesis in the B2 profile service; do not modify B1 AI/search/pipeline files to work around a dependency.
-
-Prepare the small foundation contract/fake PR, obtain both approvals, and record the exact common main commit. Then implement source discovery and owner-bound selection, bounded safe retrieval, private CV extraction, persisted jobs with honest after()/retry limits, cached single-call synthesis, human approval and source withdrawal. Preserve profile edits, source evidence, consent generations and revision-ordered indexing. Update all GitHub-only storage/validation/pending readers as described, and coordinate rebuild coverage with Claude. Do not drop/reset shared data or alter production flags. Do not invent a different API while Claude builds the agreed one.
-
-Use an isolated worktree from fresh origin/main. Test and critically review twice. Unit/contract tests use fixtures and mocks; ask before live providers. Provide the exact manual account/env/migration steps privately without requesting keys, one full acceptance checklist, and the READY FOR REVIEW handoff. Wait for user approval before opening feature PRs or merging; the document branch is not an approval of implementation.
-```
+### PRD amendments (user decisions recorded 7 November 2026)
+- FR-1 and section 8 originally specify GitHub OAuth. Pilot adds Google as an alternative; neither provider grants optional import consent.
+- The original future ORCID sign-in item is not part of this release. ORCID remains an optional OpenAlex lookup identifier.
+- Research/OpenAlex, CV and one selected public professional page are approved pilot enrichment sources alongside GitHub. The selected bounded public-page fetch extends the original "no scraping" scope; it is not permission for broad crawling, private access or login bypass.
+- Connected GitHub can authenticate the same account. Already-owned provider identity is refused; account merging is out of v1.
+- Missing GitHub means no handle/link on cards or resolve. No fake handles for Google users.
+- Keep the original PRD PDF/DOCX as historical requirements; these explicit amendments and approved contract PR document the change, not a silent rewrite.
 
 ## 11. Sources checked for this proposal
 
