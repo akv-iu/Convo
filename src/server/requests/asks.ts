@@ -25,9 +25,9 @@ async function registerSavedAsk(askId: string, userId: string, text: string): Pr
 }
 
 /**
- * Runs the ask's first match after the response is sent, while the asker reads the refined
- * question. Its explanations (about 3 s for ten new cards) are then cached when the asker opens
- * the results, which keeps that match under the 2-second target.
+ * Best effort: runs the ask's first match after the response is sent, while the asker reads the
+ * refined question, so its explanations (about 3 s for ten new cards) are usually cached by the
+ * time the asker opens the results. If the asker is quicker, both runs pay for the same lines.
  */
 function warmFirstMatch(userId: string, askId: string): void {
   try {
