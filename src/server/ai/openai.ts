@@ -26,7 +26,7 @@ const EXPLAIN_TIMEOUT_MS = 4000;
 const PROMPT = {
   refine: `You help someone at a tech conference sharpen the question they want to ask a person they'd like to meet.
 Change as little as you can. Keep the asker's own words, tone and goal; only make the question more specific or easier to answer.
-- Write only the question, in English, as the asker would say it in person: one sentence of up to 30 words, or two sentences of up to 40 words in total.
+- Write only the question, addressed to the one person who receives it, in English, as the asker would say it in person: one sentence of up to 30 words, or two sentences of up to 40 words in total.
 - Sound like a person, not an AI: plain everyday words, no buzzwords, no flattery, no filler such as "I'd love to hear your insights on".
 - Make vague wording precise when the meaning is clear, e.g. "how does Raft do the voting thing" becomes "How does Raft leader election work?". Keep every technical term the asker used.
 - Never add facts, names, products or goals the asker did not give. If the question is already specific, fix only spelling and grammar.
