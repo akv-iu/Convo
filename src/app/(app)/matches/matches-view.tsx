@@ -140,14 +140,17 @@ export function MatchesView() {
                 body: JSON.stringify({ askId, toPersonId: current.person.id }),
               });
         const body = await res.json().catch(() => null);
-        if (deckGen.current !== gen) {
-          // The deck reloaded meanwhile (e.g. the switch changed); the server's list already reflects this save.
-          if (res.ok) setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
-          return;
-        }
+        // If the deck reloaded meanwhile (Search, Refresh or the switch), only the deck stays as it is:
+        // the result, a failure, and who was sent the ask still count.
+        const stale = deckGen.current !== gen;
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
           setActionFailure({ failure, retrySend: kind === "send" && res.status !== 401 && res.status !== 404 });
+          return;
+        }
+        if (stale) {
+          if (kind === "send") setSent((s) => [...s, who]);
+          setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
           return;
         }
         if (kind === "send") {
@@ -478,11 +481,11 @@ export function MatchesView() {
             )}
 
             <div className="sticky bottom-0 -mx-4 mt-5 grid grid-cols-2 gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-              <Button variant="secondary" onClick={() => void act("pass")} disabled={busy !== null} className="text-lg">
+              <Button variant="secondary" onClick={() => void act("pass")} disabled={busy !== null || blockerSaving} className="text-lg">
                 <span aria-hidden="true">←&nbsp;</span>
                 {busy === "pass" ? "Passing…" : "Pass"}
               </Button>
-              <Button onClick={() => void act("send")} disabled={busy !== null} className="text-lg">
+              <Button onClick={() => void act("send")} disabled={busy !== null || blockerSaving} className="text-lg">
                 {busy === "send" ? "Sending…" : "Send request"}
                 <span aria-hidden="true">&nbsp;→</span>
               </Button>
