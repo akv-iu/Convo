@@ -5,7 +5,7 @@
  * `filters` object (db/Profile-API.md).
  */
 import type { BadgeColour, HardFilters, ProfileVisibility, RorMatch } from "@/contracts/types";
-import { isCountryCode } from "./countries";
+import { isCountryCode } from "@/components/ui/countries";
 
 /**
  * No choice yet, a workplace from the directory (ROR), one the user typed

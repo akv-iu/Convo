@@ -267,12 +267,47 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await open(page, "made-up");
     await passButton(page).click();
     await expect(alertWithText(page)).toContainText("Do not resubmit.");
+    // The pass may have been saved, and each one counts: Pass and Send stay off on this card.
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(sendButton(page)).toHaveAttribute("aria-disabled", "true");
+    // A person can still press them (they stay focusable); the presses must do nothing.
+    await passButton(page).click({ force: true });
+    await sendButton(page).click({ force: true });
+    await page.getByRole("heading", { level: 1 }).click();
+    await page.keyboard.press("ArrowLeft");
     await page.waitForTimeout(500);
     expect(passes).toBe(1);
     const reloading = page.waitForRequest((r) => r.url().endsWith("/api/match"));
     await page.getByRole("button", { name: "Refresh matches" }).click();
     await reloading;
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("Pass and Send keep keyboard focus while they save", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
+    await page.route("**/api/requests", (route) => route.fulfill({ json: { id: "r1" } }));
+    await open(page, "made-up");
+    await passButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(passButton(page)).toBeFocused();
+    await sendButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 3");
+    await expect(sendButton(page)).toBeFocused();
+  });
+
+  test("evidence with angle brackets is shown as written", async ({ page }) => {
+    const [one] = fakeMatches(1);
+    await page.route("**/api/match", (route) =>
+      route.fulfill({ json: [{ ...one, highlights: ["Returns Option<T> from a <em>Vec<u8></em> parser"] }] }),
+    );
+    await open(page, "made-up");
+    await expect(card(page)).toContainText("Returns Option<T> from a Vec<u8> parser");
+    await expect(card(page).locator("mark")).toHaveText("Vec<u8>");
   });
 
   test("a failed send keeps the card, and can be tried again", async ({ page }) => {
@@ -390,10 +425,42 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       await held2;
       return route.fulfill({ status: 503, json: { error: "Your request may not have been sent." } });
     });
+    const pending = (await card(page).getByRole("heading", { level: 2 }).textContent())!;
     await sendButton(page).click();
     await page.getByRole("button", { name: "Search", exact: true }).click();
     release2();
-    await expect(alertWithText(page)).toContainText("Your request may not have been sent.");
+    // The failure names who it was for, since the card on screen may be someone else now.
+    await expect(alertWithText(page)).toContainText(`${pending}: Your request may not have been sent.`);
+    await expect(sendButton(page)).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("a pass answered after a reload still applies to the new deck", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/rejections", async (route) => {
+      await held;
+      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
+    });
+    await open(page, "made-up");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await passButton(page).click();
+    await page.getByRole("button", { name: "Search", exact: true }).click(); // reload answered before the pass is saved
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    release();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(card(page)).toContainText("1 of 2");
+  });
+
+  test("the switch doesn't claim a setting this tab never saw", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(1) }));
+    await page.route("**/api/soft-blocker", (route) => route.fulfill({ json: { askId: "made-up", enabled: true } }));
+    await open(page, "made-up");
+    await expect(page.getByText("New questions start with this on. If you changed it in another tab, set it again here.")).toBeVisible();
+    await expect(page.getByText(/^On: people you passed on/)).toHaveCount(0);
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await blocker.click({ force: true }); // once saved, the server's reply decides what the hint says
+    await expect(page.getByText(/^On: people you passed on/)).toBeVisible();
   });
 
   test("Pass and Send are disabled while the switch saves", async ({ page }) => {
@@ -406,10 +473,10 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     });
     await open(page, "made-up");
     await page.getByRole("switch", { name: "Keep people I pass on hidden" }).click({ force: true });
-    await expect(passButton(page)).toBeDisabled();
-    await expect(sendButton(page)).toBeDisabled();
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(sendButton(page)).toHaveAttribute("aria-disabled", "true");
     release();
-    await expect(sendButton(page)).toBeEnabled();
+    await expect(sendButton(page)).not.toHaveAttribute("aria-disabled", "true");
   });
 
   test("the switch keeps keyboard focus while saving, and waits for a pass in flight", async ({ page, isMobile }) => {
