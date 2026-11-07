@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { people } from "@/contracts/fixtures";
 import { routes } from "@/contracts/routes";
-import { visibleCard } from "./visibility";
+import { visibleCard, visiblePerson } from "./visibility";
 
 const match = {
   person: { ...people[0], workplaceName: "Acme", filters: { country: "US", rorId: "ror-acme", hiring: true } },
@@ -30,5 +30,15 @@ describe("card visibility", () => {
   });
   it("rejects malformed visibility rather than showing private fields", () => {
     expect(() => visibleCard(match, JSON.parse('{"country":null}'))).toThrow();
+  });
+});
+
+describe("person visibility (request badges)", () => {
+  it("uses the person's own settings, hides those sections and keeps the settings private", () => {
+    const person = { ...match.person, visibility: { country: true, workplace: false, hiring: false } };
+    const badge = visiblePerson(person);
+    expect(badge).toMatchObject({ workplaceName: null, filters: { country: "US", rorId: null, hiring: null } });
+    expect(badge).not.toHaveProperty("visibility");
+    expect(person.workplaceName).toBe("Acme");
   });
 });
