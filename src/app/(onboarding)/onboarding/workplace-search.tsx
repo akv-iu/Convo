@@ -16,7 +16,7 @@
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { RorMatch } from "@/contracts/types";
-import { countryName } from "./countries";
+import { countryName } from "@/components/ui/countries";
 import type { Workplace } from "./answers";
 
 const MAX_QUERY = 200;
