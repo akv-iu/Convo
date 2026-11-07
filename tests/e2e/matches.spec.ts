@@ -310,6 +310,40 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(blocker).toBeEnabled();
   });
 
+  test("Mark as answered resolves the ask, and suggests staying in touch with the people sent requests", async ({ page }) => {
+    const askId = await newAsk(page);
+    const [first] = await serverMatches(page, askId);
+    await open(page, askId);
+    await sendButton(page).click();
+    await expect(page.getByRole("status").filter({ hasText: "Request sent" })).toBeVisible();
+    const resolving = page.waitForRequest((r) => r.url().endsWith(`/api/asks/${askId}/resolve`) && r.method() === "POST");
+    await page.getByRole("button", { name: "Mark as answered" }).click();
+    await resolving;
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Marked as answered");
+    const link = page.getByRole("link", { name: new RegExp(`${first.person.name}.*@${first.person.githubLogin} on GitHub`) });
+    await expect(link).toHaveAttribute("href", `https://github.com/${first.person.githubLogin}`);
+    await expect(link).toHaveAttribute("target", "_blank");
+    // Saved: resolving again (safe to repeat) reports it resolved.
+    const again = await page.request.post(`/api/asks/${askId}/resolve`, { headers: { "x-demo-user": ME } });
+    expect((await again.json()).status).toBe("resolved");
+  });
+
+  test("a failed resolve can be tried again", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(1) }));
+    let calls = 0;
+    await page.route("**/resolve", (route) => {
+      calls++;
+      return calls === 1
+        ? route.fulfill({ status: 503, json: { error: "Search sync failed; retry the same ID." } })
+        : route.fulfill({ json: { id: "made-up", status: "resolved" } });
+    });
+    await open(page, "made-up");
+    await page.getByRole("button", { name: "Mark as answered" }).click();
+    await expect(alertWithText(page)).toHaveText("Search sync failed; retry the same ID.");
+    await page.getByRole("button", { name: "Mark as answered" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Marked as answered");
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });

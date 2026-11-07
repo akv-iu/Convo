@@ -126,6 +126,56 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await empty.context().close();
   });
 
+  test("after accepting, picking a time books the meeting, and the server keeps it", async ({ browser }) => {
+    // A request to yourself (the fake allows it) always has shared free time, without changing anyone's saved times.
+    const me = "p_002";
+    const page = await asPerson(browser, me);
+    const refine = await page.request.post("/api/refine", { data: { text: "a self-check on booking: how do slots work" } });
+    const { askId } = await refine.json();
+    const sent = await (await page.request.post("/api/requests", { data: { askId, toPersonId: me } })).json();
+    const slots = await (await page.request.get(`/api/requests/${sent.id}/slots`)).json();
+    expect(slots.length).toBeGreaterThan(0);
+
+    await page.goto("/inbox");
+    const mine = card(page, sent.id);
+    await mine.getByRole("button", { name: "Accept this request" }).click();
+    const picker = mine.getByRole("region", { name: "Pick a time to meet" });
+    await expect(picker.getByRole("button", { name: /Book$/ })).toHaveCount(slots.length);
+    const booking = page.waitForRequest((r) => r.url().endsWith(`/api/requests/${sent.id}/schedule`));
+    await picker.getByRole("button", { name: /Book$/ }).first().click();
+    expect((await booking).postDataJSON()).toEqual({ slot: slots[0] });
+    await expect(mine).toContainText("Meeting booked:");
+    const saved = ((await (await page.request.get("/api/inbox")).json()) as { id: string; status: string; slot: unknown }[]).find(
+      (r) => r.id === sent.id,
+    );
+    expect(saved).toMatchObject({ status: "scheduled", slot: slots[0] });
+    await page.context().close();
+  });
+
+  test("a taken time loads fresh ones; no shared time points to free times", async ({ page, browser }) => {
+    const { id } = await sendTo(page, "p_001", "how do leases work in etcd");
+    const receiver = await asPerson(browser, "p_001");
+    const t = (h: number) => ({ start: `2026-11-09T${h}:00:00-07:00`, end: `2026-11-09T${h}:15:00-07:00` });
+    let slotLoads = 0;
+    await receiver.route(`**/api/requests/${id}/slots`, (route) => {
+      slotLoads++;
+      return route.fulfill({ json: slotLoads === 1 ? [t(10), t(11)] : slotLoads === 2 ? [t(12)] : [] });
+    });
+    await receiver.route(`**/api/requests/${id}/schedule`, (route) =>
+      route.fulfill({ status: 409, json: { error: "That slot is no longer available." } }),
+    );
+    await receiver.goto("/inbox");
+    const mine = card(receiver, id);
+    await mine.getByRole("button", { name: "Accept this request" }).click();
+    const picker = mine.getByRole("region", { name: "Pick a time to meet" });
+    await picker.getByRole("button", { name: /10:00 AM.*Book$/ }).click();
+    await expect(mine.getByRole("alert")).toContainText("Here are fresh times.");
+    await expect(picker.getByRole("button", { name: /Book$/ })).toHaveCount(1);
+    await expect(picker.getByRole("button", { name: /12:00 PM/ })).toBeVisible();
+    expect(slotLoads).toBe(2);
+    await receiver.context().close();
+  });
+
   test("the header links Ask and Requests", async ({ page }) => {
     await page.goto("/ask");
     await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Requests" }).click();

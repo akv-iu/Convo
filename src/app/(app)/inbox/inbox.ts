@@ -70,3 +70,21 @@ export function inboxOrder(requests: Request[]): Request[] {
   const isNew = (r: Request) => (r.status === "sent" ? 0 : 1);
   return requests.map((r, i) => ({ r, i })).sort((a, b) => isNew(a.r) - isNew(b.r) || a.i - b.i).map(({ r }) => r);
 }
+
+/** A failed GET /api/requests/:id/slots. */
+export function slotsFailure(status: number, body: unknown): Failure {
+  if (status === 401) return { message: "Your sign-in has expired.", action: { label: "Sign in again", href: "/signin" } };
+  if (status === 403 || status === 404) return { message: "This request is no longer yours to book.", action: null };
+  return { message: serverMessage(body) ?? "Times didn't load.", action: null };
+}
+
+/** A failed POST /api/requests/:id/schedule (db/Scheduling.md). */
+export function bookFailure(status: number, body: unknown): Failure {
+  if (status === 401) return { message: "Your sign-in has expired.", action: { label: "Sign in again", href: "/signin" } };
+  if (status === 409) return { message: "That time was just taken or is too soon. Here are fresh times.", action: null };
+  if (status === 403 || status === 404) return { message: "This request is no longer yours to book.", action: null };
+  return {
+    message: serverMessage(body) ?? "The booking may have been saved. Reload your requests to check before booking again.",
+    action: null,
+  };
+}

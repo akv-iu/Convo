@@ -4,11 +4,13 @@ import {
   badgeLabels,
   blockerFailure,
   cardColour,
+  githubProfile,
   highlightParts,
   matchFailure,
   passFailure,
   recallBlocker,
   rememberBlocker,
+  resolveFailure,
   sendFailure,
   SWIPE_DISTANCE,
   swipeOutcome,
@@ -147,5 +149,19 @@ describe("soft blocker (A2 step 3)", () => {
     expect(blockerFailure(401, null).action?.label).toBe("Sign in again");
     expect(blockerFailure(404, null).action?.href).toBe("/ask");
     expect(blockerFailure(503, null).message).toMatch(/wasn't saved/);
+  });
+});
+
+describe("resolve and connect (A2 step 5)", () => {
+  it("explains a failed resolve, which is safe to try again", () => {
+    expect(resolveFailure(503, { error: "Search sync failed; retry the same ID." }).message).toBe("Search sync failed; retry the same ID.");
+    expect(resolveFailure(0, null)).toEqual({ message: "That wasn't saved. Try again.", action: null });
+    expect(resolveFailure(404, null).action?.href).toBe("/ask");
+    expect(resolveFailure(401, null).action?.label).toBe("Sign in again");
+  });
+
+  it("links to a person's public GitHub profile, safely encoded", () => {
+    expect(githubProfile("ada")).toBe("https://github.com/ada");
+    expect(githubProfile("a/b?c")).toBe("https://github.com/a%2Fb%3Fc");
   });
 });

@@ -131,3 +131,15 @@ export function rememberBlocker(askId: string, enabled: boolean): void {
     // Storage unavailable: the switch shows the default next time.
   }
 }
+
+/** A failed POST /api/asks/:id/resolve. Repeating it is safe (db/Frontend-Support.md), so Try again is offered. */
+export function resolveFailure(status: number, body: unknown): Failure {
+  if (status === 401) return { message: "Your sign-in has expired.", action: signIn };
+  if (status === 404) return { message: "That question isn't yours or no longer exists.", action: { label: "Ask a question", href: "/ask" } };
+  return { message: serverMessage(body) ?? "That wasn't saved. Try again.", action: null };
+}
+
+/** A person's public GitHub profile, for the "stay in touch" prompt. */
+export function githubProfile(login: string): string {
+  return `https://github.com/${encodeURIComponent(login)}`;
+}

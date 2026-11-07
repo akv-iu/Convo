@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { Request } from "@/contracts/types";
-import { inboxFailure, inboxOrder, REPLY_MAX, replyProblem, respondFailure, statusLabel, venueRange, venueTime } from "./inbox";
+import {
+  bookFailure,
+  inboxFailure,
+  inboxOrder,
+  REPLY_MAX,
+  replyProblem,
+  respondFailure,
+  slotsFailure,
+  statusLabel,
+  venueRange,
+  venueTime,
+} from "./inbox";
 
 const req = (id: string, status: Request["status"]): Request => ({
   id,
@@ -56,5 +67,21 @@ describe("inboxOrder", () => {
   it("puts new requests first and otherwise keeps the API's newest-first order", () => {
     const ordered = inboxOrder([req("1", "accepted"), req("2", "sent"), req("3", "declined"), req("4", "sent")]);
     expect(ordered.map((r) => r.id)).toEqual(["2", "4", "1", "3"]);
+  });
+});
+
+describe("booking failures (A2 step 5)", () => {
+  it("a taken or stale time (409) loads fresh times; a 503 says to check before booking again", () => {
+    expect(bookFailure(409, null).message).toMatch(/fresh times/);
+    expect(bookFailure(503, null).message).toMatch(/Reload your requests to check/);
+    expect(bookFailure(503, { error: "Booking saved, but the reply was unreadable." }).message).toBe("Booking saved, but the reply was unreadable.");
+    expect(bookFailure(403, null).message).toMatch(/no longer yours/);
+    expect(bookFailure(401, null).action?.label).toBe("Sign in again");
+  });
+
+  it("explains a failed slot load", () => {
+    expect(slotsFailure(404, null).message).toMatch(/no longer yours/);
+    expect(slotsFailure(401, null).action?.href).toBe("/signin");
+    expect(slotsFailure(503, null).message).toMatch(/didn't load/);
   });
 });
