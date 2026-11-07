@@ -27,6 +27,12 @@ export function badgesFor(person: Person): string[] {
 
 /** How many people one match shows. */
 const SHOWN = 10;
+/**
+ * How many people are ranked every time, however many are hidden: Elasticsearch's whole window.
+ * Growing the pool per hidden person let a mutual match from further down jump above people
+ * already ranked, moving them. ponytail: after 40 hidden people fewer than ten show; widen it then.
+ */
+const POOL = 50;
 
 export interface MatchInput {
   ask: Ask;
@@ -56,7 +62,7 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
     search.searchCandidates(input.query ? `${refined.text} ${input.query}` : refined.text, {
       excludeIds: [input.requester.id, ...input.excludeIds],
       freeTimes: input.requester.freeTimes,
-    }, SHOWN + hide.size), // hidden people still take ranked places
+    }, POOL),
   );
 
   // Mutual: the candidate's own asks match the requester. One reverse search covers every candidate.
