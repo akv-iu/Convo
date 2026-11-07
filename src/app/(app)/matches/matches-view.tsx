@@ -414,7 +414,8 @@ export function MatchesView() {
               setApplied("");
               setAttempt((n) => n + 1);
             }}
-            className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            aria-disabled={busy !== null}
+            className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
           >
             Show everyone
           </button>
@@ -527,7 +528,12 @@ export function MatchesView() {
                     {actionFailure.action.label}
                   </a>
                 ) : (
-                  <button type="button" onClick={refresh} className="underline underline-offset-4">
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    aria-disabled={busy !== null}
+                    className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                  >
                     Refresh matches
                   </button>
                 )}
