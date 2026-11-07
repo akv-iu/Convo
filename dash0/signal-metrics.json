@@ -1,0 +1,459 @@
+{
+  "items": [
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.ai.tokens.input",
+        "labels": {
+          "dash0.com/origin": "convo-convo-ai-tokens-input"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.ai.tokens.input"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "gen_ai.usage.input_tokens",
+              "operator": "is_set"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.ai.tokens.input",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "attributes[\"gen_ai.usage.input_tokens\"]",
+          "monotonic": true,
+          "keepSignalAttributes": [
+            {
+              "operator": "is",
+              "value": "gen_ai.request.model"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.ai.tokens.output",
+        "labels": {
+          "dash0.com/origin": "convo-convo-ai-tokens-output"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.ai.tokens.output"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "gen_ai.usage.output_tokens",
+              "operator": "is_set"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.ai.tokens.output",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "attributes[\"gen_ai.usage.output_tokens\"]",
+          "monotonic": true,
+          "keepSignalAttributes": [
+            {
+              "operator": "is",
+              "value": "gen_ai.request.model"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.ai.cache.hits",
+        "labels": {
+          "dash0.com/origin": "convo-convo-ai-cache-hits"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.ai.cache.hits"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "convo.ai.cache_hits",
+              "operator": "is_set"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.ai.cache.hits",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "attributes[\"convo.ai.cache_hits\"]",
+          "monotonic": true
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.ai.cache.misses",
+        "labels": {
+          "dash0.com/origin": "convo-convo-ai-cache-misses"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.ai.cache.misses"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "convo.ai.cache_misses",
+              "operator": "is_set"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.ai.cache.misses",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "attributes[\"convo.ai.cache_misses\"]",
+          "monotonic": true
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.match.duration",
+        "labels": {
+          "dash0.com/origin": "convo-convo-match-duration"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.match.duration"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "dash0.operation.name",
+              "operator": "is",
+              "value": "POST /api/match"
+            },
+            {
+              "key": "next.span_type",
+              "operator": "is",
+              "value": "BaseServer.handleRequest"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.match.duration",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.ask.created",
+        "labels": {
+          "dash0.com/origin": "convo-convo-ask-created"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.ask.created"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "dash0.operation.name",
+              "operator": "is",
+              "value": "POST /api/refine"
+            },
+            {
+              "key": "http.response.status_code",
+              "operator": "is",
+              "value": {
+                "intValue": "200"
+              }
+            },
+            {
+              "key": "next.span_type",
+              "operator": "is",
+              "value": "BaseServer.handleRequest"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.ask.created",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "1",
+          "monotonic": true
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.match.requests",
+        "labels": {
+          "dash0.com/origin": "convo-convo-match-requests"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.match.requests"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "dash0.operation.name",
+              "operator": "is",
+              "value": "POST /api/match"
+            },
+            {
+              "key": "next.span_type",
+              "operator": "is",
+              "value": "BaseServer.handleRequest"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.match.requests",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "1",
+          "monotonic": true
+        }
+      }
+    },
+    {
+      "kind": "Dash0SignalToMetrics",
+      "metadata": {
+        "name": "convo.match.fast",
+        "labels": {
+          "dash0.com/origin": "convo-convo-match-fast"
+        }
+      },
+      "spec": {
+        "enabled": true,
+        "display": {
+          "name": "convo.match.fast"
+        },
+        "match": {
+          "signal": "spans",
+          "filters": [
+            {
+              "key": "service.name",
+              "operator": "is",
+              "value": "convo"
+            },
+            {
+              "key": "deployment.environment.name",
+              "operator": "is",
+              "value": "production"
+            },
+            {
+              "key": "dash0.operation.name",
+              "operator": "is",
+              "value": "POST /api/match"
+            },
+            {
+              "key": "otel.span.duration",
+              "operator": "lt",
+              "value": {
+                "intValue": "2000000000"
+              }
+            },
+            {
+              "key": "next.span_type",
+              "operator": "is",
+              "value": "BaseServer.handleRequest"
+            }
+          ]
+        },
+        "output": {
+          "name": "convo.match.fast",
+          "interval": "60s",
+          "keepResourceAttributes": [
+            {
+              "operator": "is",
+              "value": "service.name"
+            },
+            {
+              "operator": "is",
+              "value": "deployment.environment.name"
+            }
+          ],
+          "type": "sum",
+          "value": "1",
+          "monotonic": true
+        }
+      }
+    }
+  ]
+}

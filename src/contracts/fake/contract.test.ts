@@ -112,15 +112,70 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(r.hiddenBelowRank).toBeNull();
     const afterOne = await api.match(ctx(DEMO_USER_A, { askId }));
     expect(afterOne.some((x) => x.person.id === first[0].person.id)).toBe(false);
+    // Everyone else keeps their rank, so the rank sent with a later rejection means the same place.
+    for (const card of afterOne) {
+      const before = first.find((x) => x.person.id === card.person.id);
+      if (before) expect(card.rank).toBe(before.rank);
+    }
+
+    // A repeat (retry, double tap) is not counted again.
+    r = await api.reject(ctx(DEMO_USER_A, { askId, personId: first[0].person.id, rank: 0 }));
+    expect(r.rejections).toBe(1);
 
     await api.reject(ctx(DEMO_USER_A, { askId, personId: first[1].person.id, rank: 1 }));
     r = await api.reject(ctx(DEMO_USER_A, { askId, personId: first[2].person.id, rank: 2 }));
     expect(r.rejections).toBe(3);
     expect(r.hiddenBelowRank).toBe(2);
+    // Ranks 0-2 were passed on and everyone ranked below the last of them is hidden: no one is left.
+    expect(await api.match(ctx(DEMO_USER_A, { askId }))).toEqual([]);
 
     await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: false }));
     const off = await api.match(ctx(DEMO_USER_A, { askId }));
-    expect(off.some((x) => x.person.id === first[0].person.id)).toBe(true);
+    expect(off.map((x) => [x.person.id, x.rank])).toEqual(first.slice(0, 2).map((x) => [x.person.id, x.rank]));
+  });
+
+  it("sends one request per person per ask and leaves them out of later matches", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const first = await api.match(ctx(DEMO_USER_A, { askId }));
+    expect(first.length).toBeGreaterThanOrEqual(2);
+    const to = first[0].person.id;
+
+    const sent = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: to }));
+    expect(await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: to }))).toEqual(sent);
+    expect((await api.inbox(ctx(to))).filter((x) => x.askId === askId)).toHaveLength(1);
+
+    const after = await api.match(ctx(DEMO_USER_A, { askId }));
+    expect(after.some((x) => x.person.id === to)).toBe(false);
+    expect(after.find((x) => x.person.id === first[1].person.id)?.rank).toBe(first[1].rank);
+  });
+
+  it("shows each side the other person's badge, and lets the asker follow the reply and booking", async () => {
+    const { askId, refined } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const asker = await api.putMe(ctx(DEMO_USER_A, { visibility: { country: false, workplace: true, hiring: true } }));
+    const sent = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: DEMO_USER_B }));
+
+    // The receiver sees who is asking (with the asker's hidden sections left out) and what kind of ask it is.
+    const [received] = routes.inbox.response.parse(await api.inbox(ctx(DEMO_USER_B)));
+    expect(received).toMatchObject({ id: sent.id, type: refined.type });
+    expect(received.person).toMatchObject({ id: DEMO_USER_A, name: asker.name, filters: { country: null } });
+    expect(received.person).not.toHaveProperty("visibility");
+
+    // The asker sees the receiver's badge, then their answer.
+    let [mine] = routes.sentRequests.response.parse(await api.sentRequests(ctx(DEMO_USER_A)));
+    expect(mine).toMatchObject({ id: sent.id, status: "sent", type: refined.type, person: { id: DEMO_USER_B } });
+    await api.respond(ctx(DEMO_USER_B, { action: "reply", reply: "Use priority classes." }, { id: sent.id }));
+    [mine] = await api.sentRequests(ctx(DEMO_USER_A));
+    expect(mine).toMatchObject({ status: "answered", reply: "Use priority classes." });
+    expect(await api.sentRequests(ctx(DEMO_USER_B))).toEqual([]);
+  });
+
+  it("reads back the caller's own ask, including its soft-blocker setting", async () => {
+    const { askId, refined } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    expect(routes.getAsk.response.parse(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))))
+      .toMatchObject({ id: askId, userId: DEMO_USER_A, refined, status: "open", softBlocker: true });
+    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: false }));
+    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))).toMatchObject({ softBlocker: false });
+    await expect(api.getAsk(ctx(DEMO_USER_B, undefined, { id: askId }))).rejects.toMatchObject({ status: 404 });
   });
 
   it("runs the whole flow: send, receive, accept, slot, book, resolve", async () => {

@@ -48,3 +48,47 @@ describe("batch reject", () => {
     expect(ai.explain).toHaveBeenLastCalledWith(ask.refined, [expect.objectContaining({ person: onlyWanted })]);
   });
 });
+
+describe("people already passed on or sent a request", () => {
+  const third = structuredClone(people[3]);
+  const ranked = () => [
+    { person: onlyWanted, highlights: ["a"], score: 3 },
+    { person: alsoLooking, highlights: ["b"], score: 2 },
+    { person: third, highlights: ["c"], score: 1 },
+  ];
+
+  it("are ranked but not shown, so everyone else keeps their rank and is searched with room for them", async () => {
+    search.searchCandidates.mockResolvedValueOnce(ranked());
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+
+    const results = await runMatch({ ask, requester, excludeIds: [], hideIds: [onlyWanted.id], hiddenBelowRank: null });
+
+    expect(results.map((r) => [r.person.id, r.rank])).toEqual([[alsoLooking.id, 1], [third.id, 2]]);
+    expect(search.searchCandidates).toHaveBeenLastCalledWith(expect.any(String), expect.anything(), 11);
+    expect(ai.explain).toHaveBeenLastCalledWith(ask.refined, [
+      expect.objectContaining({ person: alsoLooking }), expect.objectContaining({ person: third }),
+    ]);
+  });
+
+  it("leave nobody below the cutoff: only ranks above it can show", async () => {
+    search.searchCandidates.mockResolvedValueOnce(ranked());
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+
+    // Ranks 0 and 1 passed on (cutoff 1): rank 2 is below the last rejection, so nothing shows.
+    const results = await runMatch({ ask, requester, excludeIds: [], hideIds: [onlyWanted.id, alsoLooking.id], hiddenBelowRank: 1 });
+
+    expect(results).toEqual([]);
+  });
+});
+
+describe("evidence highlights", () => {
+  it("keeps <em> marks on the card but gives the model plain text", async () => {
+    search.searchCandidates.mockResolvedValueOnce([{ person: onlyWanted, highlights: ["Maintains <em>preemption</em> code"], score: 1 }]);
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+
+    const [result] = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null });
+
+    expect(result.highlights).toEqual(["Maintains <em>preemption</em> code"]);
+    expect(ai.explain).toHaveBeenLastCalledWith(ask.refined, [expect.objectContaining({ highlights: ["Maintains preemption code"] })]);
+  });
+});

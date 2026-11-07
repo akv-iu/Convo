@@ -177,10 +177,11 @@ function hybrid(query: string, filters: SearchFilters): estypes.RetrieverContain
   };
 }
 
+/** One evidence line for the card. Matched words keep Elasticsearch's <em> marks; the screen renders them as text. */
 function highlightLine(hit: estypes.SearchHit<EvidenceSource>): string | undefined {
   const doc = hit._source;
   if (!doc) return undefined;
-  const snippet = hit.highlight?.text?.[0]?.replace(/<\/?em>/g, "");
+  const snippet = hit.highlight?.text?.[0];
   if (doc.kind === "profile") return snippet ?? (doc.text.length > 160 ? `${doc.text.slice(0, 157)}...` : doc.text);
   return snippet ? `${doc.title}: ${snippet}` : doc.title;
 }
@@ -223,6 +224,16 @@ export const elasticSearch: SearchService = {
       if (hasStatus(error, 404)) return undefined;
       throw error;
     }
+  },
+
+  async getPeople(ids) {
+    if (!ids.length) return [];
+    const { docs } = await client().mget<{ person: unknown }>({ index: INDEX.people, ids, _source_includes: ["person"] });
+    return docs.flatMap((doc) => {
+      if ("error" in doc) throw new Error(`People lookup failed for ${doc._id}`);
+      const person = doc.found ? parsePerson(doc._source?.person) : undefined;
+      return person ? [person] : [];
+    });
   },
 
   async ingestPerson(person, evidence, revision) {
