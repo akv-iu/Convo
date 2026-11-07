@@ -381,6 +381,8 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await page.getByRole("button", { name: "Search", exact: true }).click(); // reloads while the send is in flight
     release();
     await expect(page.getByRole("status").filter({ hasText: "Request sent" })).toHaveText("Request sent to Person 1.");
+    // The reloaded deck leaves Person 1 out, so they can't be sent the question twice.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
 
     fail = true;
     let release2: () => void = () => {};

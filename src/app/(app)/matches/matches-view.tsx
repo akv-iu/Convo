@@ -126,6 +126,7 @@ export function MatchesView() {
       const who = current.person.name;
       const login = current.person.githubLogin;
       const gen = deckGen.current;
+      const sentTo = { id: current.person.id, name: who, githubLogin: login };
       try {
         const res =
           kind === "pass"
@@ -149,12 +150,16 @@ export function MatchesView() {
           return;
         }
         if (stale) {
-          if (kind === "send") setSent((s) => [...s, who]);
+          if (kind === "send") {
+            setSent(rememberSent(askId, sentTo));
+            // The reload may have been answered before this send was saved: drop them from the new deck.
+            setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: withoutSent(cur.matches, [sentTo]) } : cur));
+          }
           setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
           return;
         }
         if (kind === "send") {
-          setSent(rememberSent(askId, { id: current.person.id, name: who, githubLogin: login }));
+          setSent(rememberSent(askId, sentTo));
           setAnnounce(`Request sent to ${who}.`);
           setIndex((i) => i + 1);
         } else {
