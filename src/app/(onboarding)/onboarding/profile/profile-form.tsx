@@ -18,7 +18,7 @@ import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { saveErrorMessage } from "../answers";
-import { countryName } from "../countries";
+import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
 import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
