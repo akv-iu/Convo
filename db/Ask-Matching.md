@@ -12,7 +12,10 @@ Production stays in fake mode until the integration checkpoint.
   AI reply, saves the original/refined question under the authenticated user,
   and registers the refined text through B1's search interface. It returns
   `{ askId, refined: { text, type, minutes } }`. Caller-supplied identity fields
-  are ignored. Whitespace-only questions return 400.
+  are ignored. Whitespace-only questions return 400. An ask that OpenAI's
+  moderation check flags returns 422 with `{ error }`, a message the screen can
+  show as it is, and nothing is saved. With `FAKE_API=1` or `FAKES=ai`, any ask
+  containing the word "idiot" gets the same 422, for building that screen.
 - Each refinement submission creates a new ask. Keep its ID for subsequent
   matching requests. Disable duplicate submissions while a save is pending.
 - `/api/match` accepts `{ askId, query? }`, loads the owned ask and current

@@ -9,8 +9,13 @@ import type { Candidate } from "@/server/search";
 import { cannedAi } from "./canned";
 import { openAi } from "./openai";
 
+export { AskBlockedError } from "./blocked";
+
 export interface AiService {
-  /** Make a vague ask specific and answerable in a short conversation; classify it; suggest a length. */
+  /**
+   * Make a vague ask specific and answerable in a short conversation; classify it; suggest a length.
+   * Throws AskBlockedError (422) for an offensive ask.
+   */
   refineAsk(rawText: string, requester: Person): Promise<RefinedAsk>;
   /** ONE batched call: a "why this person" line per candidate, from their highlights. */
   explain(ask: RefinedAsk, candidates: Candidate[]): Promise<string[]>;

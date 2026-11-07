@@ -3,12 +3,13 @@ import { people } from "@/contracts/fixtures";
 import type { RefinedAsk } from "@/contracts/types";
 import type { Candidate } from "@/server/search";
 
-const { create, query } = vi.hoisted(() => ({ create: vi.fn(), query: vi.fn() }));
-vi.mock("openai", () => ({ default: class { responses = { create }; } }));
+const { create, moderate, query } = vi.hoisted(() => ({ create: vi.fn(), moderate: vi.fn(), query: vi.fn() }));
+vi.mock("openai", () => ({ default: class { responses = { create }; moderations = { create: moderate }; } }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
 
+import { AskBlockedError } from "./blocked";
 import { openAi } from "./openai";
 
 const requester = people[0];
@@ -28,6 +29,7 @@ const sentPeople = () => JSON.parse(create.mock.calls[0][0].input).people;
 
 beforeEach(() => {
   create.mockReset();
+  moderate.mockReset().mockResolvedValue({ results: [{ flagged: false }] });
   query.mockReset().mockResolvedValue({ rows: [] });
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -50,6 +52,7 @@ describe("refineAsk", () => {
       model: "gpt-5.4-mini", input: "k8s preemption?", store: false, reasoning: { effort: "none" },
       text: { format: { type: "json_schema", name: "refined_ask", strict: true } },
     });
+    expect(moderate).toHaveBeenCalledWith({ model: "omni-moderation-latest", input: "k8s preemption?" }, { timeout: 3000, maxRetries: 0 });
     expect(statements("insert")).toHaveLength(1);
     expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify(modelReply)]));
   });
@@ -60,6 +63,18 @@ describe("refineAsk", () => {
     await expect(openAi.refineAsk("k8s preemption?", requester)).resolves.toEqual(ask);
 
     expect(create).not.toHaveBeenCalled();
+    expect(moderate).not.toHaveBeenCalled();
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("blocks an ask that moderation flags with a 422, and caches nothing", async () => {
+    moderate.mockResolvedValueOnce({ results: [{ flagged: true }] });
+    create.mockRejectedValueOnce(new Error("The model refused too")); // moderation's verdict still wins
+
+    const error = await openAi.refineAsk("something hateful", requester).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AskBlockedError);
+    expect(error).toMatchObject({ status: 422 });
     expect(statements("insert")).toHaveLength(0);
   });
 
@@ -81,8 +96,9 @@ describe("refineAsk", () => {
     expect(statements("insert")).toHaveLength(0);
   });
 
-  it("still refines when the cache is down", async () => {
+  it("still refines when the cache or moderation is down", async () => {
     query.mockRejectedValue(new Error("Neon is down"));
+    moderate.mockRejectedValueOnce(new Error("Moderation timed out"));
     create.mockResolvedValueOnce(reply(modelReply));
 
     await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);

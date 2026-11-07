@@ -6,7 +6,7 @@ import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contract
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
 import { visibleCard } from "@/server/profile/visibility";
-import { ai } from "@/server/ai";
+import { ai, AskBlockedError } from "@/server/ai";
 import { search } from "@/server/search";
 import { runMatch } from "@/server/pipeline";
 import { getExclusions } from "./rejections";
@@ -22,7 +22,8 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
   try {
     refined = RefinedAsk.parse(await ai.refineAsk(text, requester));
     if (!refined.text.trim()) throw new Error("Empty refined question");
-  } catch {
+  } catch (error) {
+    if (error instanceof AskBlockedError) throw error; // 422 with a message for the screen; nothing is saved
     throw new AskError("Question refinement is unavailable. Try again.", 503);
   }
 
