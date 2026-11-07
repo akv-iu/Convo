@@ -1,31 +1,49 @@
 /**
  * Load everything searchable into Elasticsearch through the same ingestion path
- * real sign-ups use (B1): the fixture people, every signed-up user who finished
- * onboarding, and every open ask from Postgres. Safe to re-run: newer saves win.
- * Run after `es/rebuild.ts`:
- *   node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/seed.ts
+ * real sign-ups use (B1): the fixture people, the 500 synthetic attendees, every
+ * signed-up user who finished onboarding (with the GitHub evidence saved in
+ * Postgres), and every open ask. Safe to re-run: newer saves win.
+ * Run from the repo root, after `es/rebuild.ts` when the indices are new:
+ *   npm run seed
  */
-import { eq } from "drizzle-orm";
+import { readFile } from "node:fs/promises";
+import { eq, isNotNull } from "drizzle-orm";
+import { z } from "zod";
 import { evidence, people } from "@/contracts/fixtures";
-import { getProfile } from "@/server/profile/service";
+import { EvidenceDoc, Person } from "@/contracts/types";
+import { syncProfile } from "@/server/profile/service";
 import { askDocument, client, elasticSearch, INDEX } from "@/server/search/elastic";
 import { db } from "../db";
 import { asks, users } from "../db/schema";
 
+const SYNTHETIC = "scripts/synthetic/people.json";
+const PARALLEL = 8;
+
+/** A few at a time: each ingest waits for a refresh (about a second), so one by one takes minutes for 500. */
+async function eachInParallel<T>(items: readonly T[], ingest: (item: T) => Promise<unknown>): Promise<void> {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    if (next >= items.length) return;
+    await ingest(items[next++]);
+    return worker();
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, worker));
+}
+
+async function seedSynthetic(): Promise<number> {
+  const file = z.object({ people: Person.array(), evidence: EvidenceDoc.array() })
+    .parse(JSON.parse(await readFile(SYNTHETIC, "utf8")));
+  const docs = new Map<string, EvidenceDoc[]>();
+  for (const doc of file.evidence) docs.set(doc.personId, [...(docs.get(doc.personId) ?? []), doc]);
+  await eachInParallel(file.people, (person) => elasticSearch.ingestPerson(person, docs.get(person.id) ?? []));
+  return file.people.length;
+}
+
 async function seedUsers(): Promise<number> {
-  const rows = await db().select({ id: users.id, revision: users.revision }).from(users);
-  let loaded = 0;
-  for (const { id, revision } of rows) {
-    const person = await getProfile(id).catch((error: { status?: number }) => {
-      if (error.status === 409) return undefined; // onboarding not finished yet: nothing to search
-      throw error;
-    });
-    if (person) {
-      await elasticSearch.ingestPerson(person, undefined, revision);
-      loaded += 1;
-    }
-  }
-  return loaded;
+  // syncProfile ingests the GitHub evidence saved in Postgres, so a rebuilt index gets it back.
+  const onboarded = await db().select().from(users).where(isNotNull(users.filters));
+  await eachInParallel(onboarded, syncProfile);
+  return onboarded.length;
 }
 
 async function seedAsks(): Promise<number> {
@@ -43,11 +61,9 @@ async function seedAsks(): Promise<number> {
 }
 
 async function main() {
-  // One person at a time: each ingest is several Elasticsearch calls, and Phase 3 adds 500 people.
-  for (const person of people) {
-    await elasticSearch.ingestPerson(person, evidence.filter((e) => e.personId === person.id));
-  }
+  await eachInParallel(people, (person) => elasticSearch.ingestPerson(person, evidence.filter((e) => e.personId === person.id)));
   console.log(`ingested ${people.length} fixture people`);
+  console.log(`ingested ${await seedSynthetic()} synthetic attendees`);
   if (process.env.DATABASE_URL) {
     console.log(`ingested ${await seedUsers()} signed-up users`);
     console.log(`registered ${await seedAsks()} open asks`);
@@ -55,7 +71,6 @@ async function main() {
     console.log("DATABASE_URL not set: skipped signed-up users and open asks");
   }
   await client().indices.refresh({ index: [INDEX.people, INDEX.evidence, INDEX.asks] });
-  // TODO (B1, Phase 3): generate 500 synthetic people with evidence and free times, labelled synthetic, and ingest them here.
 }
 
 main().catch((err) => {

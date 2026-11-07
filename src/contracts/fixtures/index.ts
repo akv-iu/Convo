@@ -1,7 +1,7 @@
 /**
  * Hand-written fixtures for the fake API and the contract tests.
- * Day 0 task for A and B: grow this to 20 people and 10 sample asks.
- * The 500 generated profiles live in scripts/seed and only go to Elasticsearch.
+ * Each sample ask names the one person who should rank first, here and against the
+ * 500 generated attendees, which live in scripts/synthetic and only go to Elasticsearch.
  */
 import type { EvidenceDoc, Person, RorMatch } from "../types";
 
@@ -128,6 +128,28 @@ export const people: Person[] = [
     synthetic: true,
     freeTimes: [block("13:00", "14:30")],
   },
+  {
+    id: "p_007",
+    name: "Kwame Mensah",
+    githubLogin: "kmensah",
+    bio: "Cilium contributor working on the eBPF datapath and kube-proxy replacement.",
+    languages: ["Go", "C"],
+    organisations: ["cilium"],
+    filters: { country: "GB", rorId: "https://ror.org/01f80g185", hiring: false },
+    synthetic: true,
+    freeTimes: [block("09:30", "10:30"), block("15:00", "16:00")],
+  },
+  {
+    id: "p_008",
+    name: "Sofia Ramos",
+    githubLogin: "sramos",
+    bio: "Sigstore maintainer. Signs containers with cosign and checks them at admission.",
+    languages: ["Go"],
+    organisations: ["sigstore"],
+    filters: { country: "ES", rorId: null, hiring: true },
+    synthetic: true,
+    freeTimes: [block("11:00", "12:00"), block("14:30", "15:30")],
+  },
 ];
 
 // Older callers may omit these fields; fixture profiles expose the database defaults.
@@ -182,6 +204,13 @@ export const evidence: EvidenceDoc[] = [
     text: "Collector processors and exporters; tail sampling; OTLP exporter retry and queueing.",
   },
   {
+    id: "e_003_2",
+    personId: "p_003",
+    kind: "commit_area",
+    title: "Maintains exporterhelper sending queue and retry",
+    text: "Queue sizing, retry on failure and the memory limiter: the settings that stop an OTel collector dropping spans under load.",
+  },
+  {
     id: "e_004_1",
     personId: "p_004",
     kind: "abstract",
@@ -202,6 +231,20 @@ export const evidence: EvidenceDoc[] = [
     title: "Gang scheduling for ML training on Kubernetes",
     text: "Compares scheduler plugins for gang scheduling and preemption of ML training jobs.",
   },
+  {
+    id: "e_007_1",
+    personId: "p_007",
+    kind: "commit_area",
+    title: "Maintains bpf/lib/lb.h service load balancing",
+    text: "Socket-level and XDP load balancing that lets Cilium replace kube-proxy; Maglev hashing and session affinity in the eBPF datapath.",
+  },
+  {
+    id: "e_008_1",
+    personId: "p_008",
+    kind: "repo",
+    title: "sigstore/cosign",
+    text: "Keyless signing with Fulcio certificates and Rekor transparency log entries; verifying container signatures in CI and at admission.",
+  },
 ];
 
 /** Which people are themselves looking for someone like a given user (mutual interest). */
@@ -217,4 +260,11 @@ export const sampleAsks = [
   },
   { raw: "I want a job at Grafana Labs", expectedTop: "p_001" },
   { raw: "How does etcd compaction interact with Raft snapshots?", expectedTop: "p_002" },
+  { raw: "my otel collector keeps dropping spans under load", expectedTop: "p_003" },
+  { raw: "How should I prepare for a platform engineering interview at Netflix?", expectedTop: "p_004" },
+  { raw: "How do Argo CD sync waves and hooks order a rollout?", expectedTop: "p_005" },
+  { raw: "Looking for a collaborator to co-author research on gang scheduling for ML training jobs", expectedTop: "p_006" },
+  { raw: "How does Cilium use eBPF to replace kube-proxy?", expectedTop: "p_007" },
+  { raw: "Anyone want to work together on verifying cosign container signatures in CI?", expectedTop: "p_008" },
+  { raw: "We're looking for an SRE who has been on call for Loki", expectedTop: "p_001" },
 ];
