@@ -132,12 +132,15 @@ export function MatchesView() {
           const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
           setAnnounce(`Passed on ${who}.`);
           if (cutoff !== null) {
-            // Everyone ranked at or below the cutoff is hidden from now on; keep the cards before it.
+            // The cutoff is the highest rank passed on (db/Rejections.md): only ranks below it stay,
+            // which are usually cards already seen, so the deck often ends here. Say why.
             const kept = withinCutoff(matches, cutoff);
             if (kept.length < matches.length) setCutoffNote(true);
             setLoad({ state: "ready", matches: kept });
+            setIndex((i) => Math.min(i + 1, kept.length));
+          } else {
+            setIndex((i) => i + 1);
           }
-          setIndex((i) => i + 1);
         }
       } catch {
         const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
@@ -154,7 +157,8 @@ export function MatchesView() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
-      if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      // A held key repeats; acting on repeats would pass on or message people never seen.
+      if (e.repeat || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
       if (target && (target.closest("input, textarea, select, [contenteditable=true]") || target.isContentEditable)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -216,6 +220,7 @@ export function MatchesView() {
     setCutoffNote(false);
     setLoad({ state: "loading" });
     setApplied(query.trim());
+    setAttempt((n) => n + 1); // reload even when the query didn't change
   }
 
   if (!askId) {
@@ -266,6 +271,7 @@ export function MatchesView() {
               setCutoffNote(false);
               setLoad({ state: "loading" });
               setApplied("");
+              setAttempt((n) => n + 1);
             }}
             className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
           >
@@ -403,6 +409,11 @@ export function MatchesView() {
             <h2 className="text-2xl font-extrabold tracking-tight">
               {matches.length === 0 ? "No one matches yet" : "That's everyone for now"}
             </h2>
+            {cutoffNote && (
+              <p className="mt-2 font-medium">
+                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+              </p>
+            )}
             <p className="mt-2 text-muted">
               {sent.length > 0
                 ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.join(", ")}. They'll see your question in their inbox.`
