@@ -126,6 +126,43 @@ describe("refineAsk", () => {
   });
 });
 
+describe("moderate", () => {
+  it("lets a clean ask through after one moderation call, without the model, and caches the verdict", async () => {
+    await expect(openAi.moderate("  how does Raft leader election work?  ")).resolves.toBeUndefined();
+    expect(moderate).toHaveBeenCalledWith({ model: "omni-moderation-latest", input: "how does Raft leader election work?" }, { timeout: 3000, maxRetries: 1 });
+    expect(create).not.toHaveBeenCalled();
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["moderate", JSON.stringify({ blocked: false })]));
+  });
+
+  it("blocks a flagged ask with a 422 and caches that verdict", async () => {
+    moderate.mockResolvedValueOnce({ results: [{ flagged: true }] });
+    const error = await openAi.moderate("something hateful").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AskBlockedError);
+    expect(error).toMatchObject({ status: 422 });
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["moderate", JSON.stringify({ blocked: true })]));
+  });
+
+  it("answers a repeat from the cache without calling OpenAI", async () => {
+    cacheHolds({ blocked: false });
+    await expect(openAi.moderate("k8s preemption?")).resolves.toBeUndefined();
+    cacheHolds({ blocked: true });
+    await expect(openAi.moderate("something hateful")).rejects.toBeInstanceOf(AskBlockedError);
+    expect(moderate).not.toHaveBeenCalled();
+  });
+
+  it("rethrows when moderation is down, and caches nothing", async () => {
+    moderate.mockRejectedValueOnce(new Error("Moderation timed out"));
+    await expect(openAi.moderate("k8s?")).rejects.toThrow("Moderation timed out");
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("still checks the ask when the cache is down", async () => {
+    query.mockRejectedValue(new Error("Neon is down"));
+    await expect(openAi.moderate("k8s?")).resolves.toBeUndefined();
+    expect(moderate).toHaveBeenCalledOnce();
+  });
+});
+
 describe("explain", () => {
   it("explains every uncached card in one call, in card order, and caches each line", async () => {
     const cards = [card("a", ["kube-scheduler: preemption"]), card("b", []), card("c", ["sched-sim: a simulator"])];
