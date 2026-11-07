@@ -84,6 +84,13 @@ export function workplaceName(w: Workplace): string | null {
 /** Everything visible by default (true = shown on other people's cards). */
 export const SHOW_ALL: ProfileVisibility = { country: true, workplace: true, hiring: true };
 
+/** The parts of a badge a person can hide, in the order the switches list them. */
+export const VISIBILITY_SECTIONS = [
+  { id: "country", label: "Country" },
+  { id: "workplace", label: "Workplace" },
+  { id: "hiring", label: "Hiring status" },
+] as const;
+
 /**
  * The whole PUT /api/me body for step 2 (db/Frontend-Support.md): name,
  * complete filters, the workplace label, badge colour and the complete

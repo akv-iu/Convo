@@ -52,24 +52,29 @@ test.describe("your details (step 4)", () => {
   });
 
   test("shows your row as other people see it, and hiding a section saves and updates it", async ({ page, isMobile }) => {
-    const person = isMobile ? "p_006" : "p_004"; // one per project, so runs can't overlap
+    // People no other spec reads or saves, one per project, since every test shares one fake server.
+    const person = isMobile ? "p_007" : "p_008";
     const all = { country: true, workplace: true, hiring: true };
-    await page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: all } });
-    await open(page, person);
-    const preview = page.getByTestId("seen-preview");
-    const me = await stored(page, person);
-    await expect(preview).toContainText(me.name);
-    const row = page.getByRole("group", { name: "Show in your row" });
-    const country = row.getByRole("switch", { name: "Country" });
-    await expect(country).toBeChecked();
-    const shown = await preview.textContent();
-    const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
-    await row.locator("label").filter({ has: page.getByRole("switch", { name: "Country" }) }).click(); // the visible row, hit-tested like a tap
-    expect((await saving).postDataJSON()).toEqual({ visibility: { ...all, country: false } });
-    await expect(country).not.toBeChecked();
-    await expect.poll(() => preview.textContent()).not.toBe(shown);
-    expect((await stored(page, person)).visibility).toEqual({ ...all, country: false });
-    await page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: all } });
+    const reset = () => page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: all } });
+    expect((await reset()).ok()).toBe(true);
+    try {
+      await open(page, person);
+      const preview = page.getByTestId("seen-preview");
+      const me = await stored(page, person);
+      await expect(preview).toContainText(me.name);
+      const row = page.getByRole("group", { name: "Show in your row" });
+      const country = row.getByRole("switch", { name: "Country" });
+      await expect(country).toBeChecked();
+      const shown = await preview.textContent();
+      const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
+      await row.locator("label").filter({ has: page.getByRole("switch", { name: "Country" }) }).click(); // the visible row, hit-tested like a tap
+      expect((await saving).postDataJSON()).toEqual({ visibility: { ...all, country: false } });
+      await expect(country).not.toBeChecked();
+      await expect.poll(() => preview.textContent()).not.toBe(shown);
+      expect((await stored(page, person)).visibility).toEqual({ ...all, country: false });
+    } finally {
+      await reset(); // even after a failure, so the person isn't left hidden for later tests or runs
+    }
   });
 
   test("Yes finishes without saving anything", async ({ page }) => {

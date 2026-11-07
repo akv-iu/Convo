@@ -10,15 +10,10 @@
  */
 import { useState } from "react";
 import { MatchSummary } from "@/components/ui/match-summary";
+import { Switch } from "@/components/ui/switch";
 import type { Person, ProfileVisibility } from "@/contracts/types";
-import { saveErrorMessage } from "../answers";
-import { asSeenByOthers, SHOW_ALL } from "./edits";
-
-const sections = [
-  { id: "country", label: "Country" },
-  { id: "workplace", label: "Workplace" },
-  { id: "hiring", label: "Hiring status" },
-] as const;
+import { saveErrorMessage, SHOW_ALL, VISIBILITY_SECTIONS } from "../answers";
+import { asSeenByOthers } from "./edits";
 
 export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p: Person) => void }) {
   const visibility = person.visibility ?? SHOW_ALL;
@@ -66,25 +61,14 @@ export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p:
         <fieldset className="border-0 p-0">
           <legend className="mb-2 text-base font-semibold">Show in your row</legend>
           <div className="flex flex-col gap-1.5">
-            {sections.map((v) => (
-              <label
+            {VISIBILITY_SECTIONS.map((v) => (
+              <Switch
                 key={v.id}
-                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border-2 border-border bg-surface px-3 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
-              >
-                <span className="flex-1 font-semibold">{v.label}</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={visibility[v.id]}
-                  aria-disabled={saving}
-                  onChange={(e) => void save({ ...visibility, [v.id]: e.target.checked })}
-                  className="peer sr-only"
-                />
-                <span
-                  aria-hidden="true"
-                  className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-aria-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
-                />
-              </label>
+                label={v.label}
+                checked={visibility[v.id]}
+                busy={saving}
+                onChange={(on) => void save({ ...visibility, [v.id]: on })}
+              />
             ))}
           </div>
           {failure && (

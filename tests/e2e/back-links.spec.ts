@@ -15,7 +15,7 @@ const screens = [
   { path: "/onboarding/free-time", label: "Back to Your badge", target: "/onboarding" },
   { path: "/onboarding/profile", label: "Back to Free time", target: "/onboarding/free-time" },
   { path: "/ask", label: "Back to Your details", target: "/onboarding/profile" },
-  { path: "/matches?ask=made-up", label: "Back to your question", target: "/ask" },
+  { path: "/matches?ask=made-up", label: "Back to Ask", target: "/ask" },
   { path: "/inbox", label: "Back to Ask", target: "/ask" },
 ] as const;
 

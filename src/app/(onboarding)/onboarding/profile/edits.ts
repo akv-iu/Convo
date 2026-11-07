@@ -105,5 +105,3 @@ export function asSeenByOthers(person: Person, visibility: ProfileVisibility): C
   };
 }
 
-/** Everything shown, for profiles saved before show/hide existed. */
-export const SHOW_ALL: ProfileVisibility = { country: true, workplace: true, hiring: true };

@@ -11,7 +11,7 @@ export default function MatchesPage() {
     // The view reads ?ask= on the client; Suspense lets the rest of the page render first.
     <>
       <div className="mx-auto flex max-w-xl flex-col">
-        <BackLink href="/ask" label="Back to your question" />
+        <BackLink href="/ask" label="Back to Ask" />
       </div>
       <Suspense fallback={<p className="mx-auto max-w-xl">Finding people…</p>}>
         <MatchesView />

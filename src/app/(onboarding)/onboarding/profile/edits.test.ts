@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
 import { people } from "@/contracts/fixtures";
-import { addChip, addPending, asSeenByOthers, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip, SHOW_ALL } from "./edits";
+import { addChip, addPending, asSeenByOthers, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip } from "./edits";
+import { SHOW_ALL } from "../answers";
 
 const person = people[0];
 
