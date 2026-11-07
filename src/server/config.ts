@@ -15,6 +15,8 @@ export const config = {
   fakeApi: process.env.FAKE_API === "1",
   fakeSearch: fakes.has("search"),
   fakeAi: fakes.has("ai"),
+  /** Keep the complete enrichment flow off until all implementation PRs land. */
+  profileEnrichmentEnabled: process.env.PROFILE_ENRICHMENT_ENABLED === "1",
   /** Rejections for one ask before lower-ranked results are hidden too. */
   batchRejectAfter: 3,
   /** A suggested slot is never closer than this. */

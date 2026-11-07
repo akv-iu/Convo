@@ -5,6 +5,10 @@
  */
 import { z } from "zod";
 import {
+  AcceptEnrichment, AcceptedEnrichment, CvUpload, DiscoverEnrichment, EnrichmentDiscovery,
+  EnrichmentJob, EnrichmentSync, SavedEnrichmentSource, StartEnrichment, UploadCv,
+} from "./enrichment";
+import {
   Ask,
   MatchResult,
   Person,
@@ -25,6 +29,7 @@ export interface RouteDef {
   /** Who builds the screen that calls it. */
   usedBy: "A1" | "A2";
   body?: z.ZodTypeAny;
+  contentType?: "multipart/form-data";
   response: z.ZodTypeAny;
 }
 
@@ -34,6 +39,52 @@ function def<const D extends RouteDef>(d: D): D {
 }
 
 export const routes = {
+  discoverEnrichment: def({
+    method: "POST", path: "/api/profile-enrichment/discover", usedBy: "A1",
+    description: "Find up to four research authors and four public profiles; nothing is selected automatically.",
+    body: DiscoverEnrichment, response: EnrichmentDiscovery,
+  }),
+  uploadCv: def({
+    method: "POST", path: "/api/profile-enrichment/cv", usedBy: "A1", contentType: "multipart/form-data",
+    description: "Stage one consented PDF/DOCX or pasted CV text; no raw contents in the response.",
+    body: UploadCv, response: CvUpload,
+  }),
+  removeCv: def({
+    method: "POST", path: "/api/profile-enrichment/cv/:id/remove", usedBy: "A1",
+    description: "Discard an unaccepted upload, including when its source is switched off.",
+    response: z.object({ removed: z.literal(true) }),
+  }),
+  startEnrichment: def({
+    method: "POST", path: "/api/profile-enrichment", usedBy: "A1",
+    description: "Confirm source choices and start one idempotent import/synthesis job, before onboarding is complete.",
+    body: StartEnrichment, response: EnrichmentJob,
+  }),
+  getEnrichment: def({
+    method: "GET", path: "/api/profile-enrichment/:id", usedBy: "A1",
+    description: "Owner-only progress, sanitized source failures and reviewable draft/evidence.", response: EnrichmentJob,
+  }),
+  retryEnrichment: def({
+    method: "POST", path: "/api/profile-enrichment/:id/retry", usedBy: "A1",
+    description: "Retry failed or interrupted work; a running job cannot be claimed twice.", response: EnrichmentJob,
+  }),
+  acceptEnrichment: def({
+    method: "POST", path: "/api/profile-enrichment/:id/accept", usedBy: "A1",
+    description: "Approve edited bio/expertise and evidence; stale drafts conflict, saved but unindexed results are explicit.",
+    body: AcceptEnrichment, response: AcceptedEnrichment,
+  }),
+  cancelEnrichment: def({
+    method: "POST", path: "/api/profile-enrichment/:id/cancel", usedBy: "A1",
+    description: "Cancel an unaccepted job and discard private temporary inputs.", response: EnrichmentJob,
+  }),
+  enrichmentSources: def({
+    method: "GET", path: "/api/profile-enrichment/sources", usedBy: "A1",
+    description: "List the owner's approved sources so returning users can remove them.", response: z.array(SavedEnrichmentSource).max(4),
+  }),
+  removeEnrichmentSource: def({
+    method: "POST", path: "/api/profile-enrichment/sources/:id/remove", usedBy: "A1",
+    description: "Withdraw one source, invalidate old work and report search synchronization.",
+    response: z.object({ removed: z.literal(true), reviewBio: z.boolean(), sync: EnrichmentSync }),
+  }),
   getMe: def({
     method: "GET",
     path: "/api/me",
@@ -46,7 +97,7 @@ export const routes = {
     path: "/api/me",
     description: "Save edits to the profile card and the onboarding answers.",
     usedBy: "A1",
-    body: Person.partial().omit({ id: true, synthetic: true }),
+    body: Person.partial().omit({ id: true, synthetic: true, expertise: true }),
     response: Person,
   }),
   searchRor: def({

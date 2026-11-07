@@ -13,6 +13,7 @@ import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
 import type { Request, RequestView } from "@/contracts/types";
 import { visibleCard, visiblePerson } from "@/server/profile/visibility";
+import { enrichmentFake, noteProfileChange } from "./enrichment";
 
 const now = () => new Date().toISOString();
 
@@ -27,6 +28,7 @@ function withBadge(request: Request, otherId: string): RequestView {
 }
 
 export const fake: Api = {
+  ...enrichmentFake,
   async getMe({ userId }) {
     return store.person(userId);
   },
@@ -39,7 +41,8 @@ export const fake: Api = {
       ...(patch.filters && patch.workplaceName === undefined && patch.filters.rorId !== me.filters.rorId ? { workplaceName: null } : {}),
     };
     store.get().people.set(userId, updated);
-    await search.ingestPerson(updated, fixtures.evidence.filter((e) => e.personId === userId));
+    noteProfileChange(userId, patch.bio !== undefined && patch.bio !== me.bio);
+    await search.ingestPerson(updated, store.get().enrichment.evidence.get(userId) ?? []);
     return updated;
   },
 
@@ -56,6 +59,7 @@ export const fake: Api = {
   async putAvailability({ userId, body }) {
     const me = store.person(userId);
     me.freeTimes = body;
+    noteProfileChange(userId);
     return me.freeTimes;
   },
 

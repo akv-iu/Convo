@@ -11,7 +11,22 @@ import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/serv
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
 
+// Foundation only: do not advertise real imports before the backend release.
+const enrichmentUnavailable = async (): Promise<never> => {
+  throw Object.assign(new Error("Real profile enrichment is not available yet."), { status: 501 });
+};
+
 export const real: Api = {
+  discoverEnrichment: enrichmentUnavailable,
+  uploadCv: enrichmentUnavailable,
+  removeCv: enrichmentUnavailable,
+  startEnrichment: enrichmentUnavailable,
+  getEnrichment: enrichmentUnavailable,
+  retryEnrichment: enrichmentUnavailable,
+  acceptEnrichment: enrichmentUnavailable,
+  cancelEnrichment: enrichmentUnavailable,
+  enrichmentSources: enrichmentUnavailable,
+  removeEnrichmentSource: enrichmentUnavailable,
   getMe: ({ userId }) => getProfile(userId),
   putMe: ({ userId, body }) => updateProfile(userId, body),
   searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),

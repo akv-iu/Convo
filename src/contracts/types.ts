@@ -43,6 +43,8 @@ export const Person = z.object({
   githubLogin: z.string(),
   bio: z.string(),
   languages: z.array(z.string()),
+  /** Professional/research topics; absent on older profiles. */
+  expertise: z.array(z.string().trim().min(1).max(60)).max(8).optional(),
   organisations: z.array(z.string()),
   filters: HardFilters,
   /** Display name for either a listed or unlisted workplace; null clears it. */
@@ -63,7 +65,7 @@ export const CardPerson = Person.extend({
 });
 export type CardPerson = z.infer<typeof CardPerson>;
 
-export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract"]);
+export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract", "profile_page", "cv"]);
 
 export const EvidenceDoc = z.object({
   id: z.string(),
