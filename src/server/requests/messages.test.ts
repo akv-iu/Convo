@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { query, getPerson } = vi.hoisted(() => ({ query: vi.fn(), getPerson: vi.fn() }));
-vi.mock("@/server/search", () => ({ search: { getPerson } }));
+const { query, getPerson, getPeople } = vi.hoisted(() => ({ query: vi.fn(), getPerson: vi.fn(), getPeople: vi.fn() }));
+vi.mock("@/server/search", () => ({ search: { getPerson, getPeople } }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
-import { sendRequest, getInbox, respondToRequest } from "./messages";
+import { sendRequest, getInbox, getSentRequests, respondToRequest } from "./messages";
 import { people } from "@/contracts/fixtures";
 
 const request = {
@@ -17,6 +17,7 @@ const row = (changes: Partial<typeof request> = {}) => Object.values({ ...reques
 beforeEach(() => {
   query.mockReset().mockResolvedValue({ rows: [] });
   getPerson.mockReset().mockResolvedValue(undefined);
+  getPeople.mockReset().mockResolvedValue([]);
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Unexpected live request")));
 });
@@ -125,8 +126,8 @@ afterEach(() => {
 describe("saved inbox", () => {
   it("reads only the receiver's requests in descending time order with a stable tie-breaker", async () => {
     query.mockResolvedValueOnce({ rows: [row()] });
-    expect(await getInbox("receiver")).toEqual([request]);
-    expect(query).toHaveBeenCalledOnce();
+    expect(await getInbox("receiver")).toEqual([{ ...request, type: null, person: null }]);
+    expect(query).toHaveBeenCalledTimes(3); // requests, then accounts and ask types together
     const [statement, params] = query.mock.calls[0];
     expect(statement).toContain('where "requests"."to_person_id" = $1');
     expect(statement).toContain('order by "requests"."created_at" desc, "requests"."id" desc');
@@ -145,6 +146,62 @@ describe("saved inbox", () => {
   it("sanitizes database errors", async () => {
     query.mockRejectedValueOnce(new Error("private-db-password"));
     await expect(getInbox("receiver")).rejects.toMatchObject({ status: 503, message: "Inbox storage is unavailable. Try again." });
+  });
+});
+
+describe("badges on requests", () => {
+  const asker = people[0];
+  // A users row in column order, as the Neon driver returns it.
+  const account = (p: (typeof people)[number], visibility = { country: true, workplace: true, hiring: true }) => [
+    p.id, p.githubLogin, p.name, p.bio, JSON.stringify(p.languages), JSON.stringify(p.organisations), JSON.stringify(p.filters),
+    JSON.stringify(p.freeTimes), "2026-11-05T12:00:00Z", 1, p.workplaceName ?? null, p.badgeColour ?? "sunflower",
+    JSON.stringify(visibility), "[]", false,
+  ];
+
+  it("shows the asker's badge from their account, with their show/hide choices, and the ask's type", async () => {
+    query.mockResolvedValueOnce({ rows: [row({ fromUserId: asker.id })] })
+      .mockResolvedValueOnce({ rows: [account(asker, { country: false, workplace: true, hiring: false })] })
+      .mockResolvedValueOnce({ rows: [[request.askId, JSON.stringify({ text: "Q", type: "career", minutes: 10 })]] });
+    const [view] = await getInbox("receiver");
+    expect(view).toMatchObject({ ...request, fromUserId: asker.id, type: "career" });
+    expect(view.person).toMatchObject({ id: asker.id, name: asker.name, filters: { country: null, hiring: null } });
+    expect(view.person).not.toHaveProperty("visibility");
+    expect(query.mock.calls[1][0]).toContain('from "users" where "users"."id" in ($1)');
+    expect(query.mock.calls[1][1]).toEqual([asker.id]);
+    expect(query.mock.calls[2][1]).toEqual([request.askId]);
+    expect(getPeople).toHaveBeenCalledExactlyOnceWith([]); // everyone had an account
+  });
+
+  it("reads people without an account in one search call, and fails closed for a real account found only in search", async () => {
+    const synthetic = { ...people[1], synthetic: true, visibility: { country: false, workplace: true, hiring: true } };
+    const searchOnly = { ...people[2], synthetic: false };
+    query.mockResolvedValueOnce({ rows: [
+      row({ id: "r1", toPersonId: synthetic.id }), row({ id: "r2", toPersonId: searchOnly.id }), row({ id: "r3", toPersonId: "gone" }),
+    ] });
+    getPeople.mockResolvedValueOnce([synthetic, searchOnly]);
+    const views = await getSentRequests("sender");
+    expect(query.mock.calls[0][0]).toContain('where "requests"."from_user_id" = $1');
+    expect(getPeople).toHaveBeenCalledExactlyOnceWith([synthetic.id, searchOnly.id, "gone"]);
+    expect(views.map((v) => v.person?.id ?? null)).toEqual([synthetic.id, searchOnly.id, null]);
+    expect(views[0].person?.filters).toEqual({ ...synthetic.filters, country: null });
+    expect(views[1].person).toMatchObject({ workplaceName: null, filters: { country: null, rorId: null, hiring: null } });
+  });
+
+  it("gives no badge for an unfinished saved profile instead of guessing one", async () => {
+    const unfinished = account(asker);
+    unfinished[6] = null; // no onboarding answers yet
+    query.mockResolvedValueOnce({ rows: [row({ fromUserId: asker.id })] }).mockResolvedValueOnce({ rows: [unfinished] });
+    const [view] = await getInbox("receiver");
+    expect(view.person).toBeNull();
+    expect(getPeople).toHaveBeenCalledExactlyOnceWith([]); // they have an account, so search isn't asked
+  });
+
+  it("reports a failed badge lookup as unavailable, without provider details", async () => {
+    query.mockResolvedValueOnce({ rows: [row()] });
+    getPeople.mockRejectedValueOnce(new Error("private-search-token"));
+    const error = await getSentRequests("sender").catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503, message: "Sent requests are unavailable. Try again." });
+    expect(String(error)).not.toContain("private-search-token");
   });
 });
 

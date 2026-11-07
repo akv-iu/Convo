@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEMO_USER_A, DEMO_USER_B } from "@/contracts/fixtures";
 import { routes, type RouteBody } from "@/contracts/routes";
-import type { Request as SavedRequest } from "@/contracts/types";
+import { Request as RequestSchema, type Request as SavedRequest } from "@/contracts/types";
 import { store } from "@/contracts/fake/store";
 
 const { query, runtime, identity } = vi.hoisted(() => ({
@@ -16,9 +16,11 @@ vi.mock("next/server", async (importOriginal) => ({
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
+import { GET as readAsk } from "../asks/[id]/route";
 import { GET as inbox } from "../inbox/route";
 import { POST as respond } from "./[id]/respond/route";
 import { POST as send } from "./route";
+import { GET as sent } from "./sent/route";
 
 const saved: SavedRequest = {
   id: "saved-request", askId: "saved-ask", fromUserId: DEMO_USER_A, toPersonId: DEMO_USER_B,
@@ -30,6 +32,8 @@ const request = (body: unknown) => new Request("http://localhost:3000/api/reques
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 const get = () => new Request("http://localhost:3000/api/inbox");
+/** The request fields of inbox items (the schema drops the rest); badges and ask types are checked separately. */
+const plain = (views: unknown[]) => views.map((view) => RequestSchema.parse(view));
 beforeEach(() => {
   runtime.fakeApi = false;
   identity.userId = DEMO_USER_B;
@@ -73,7 +77,7 @@ describe.each(["fake", "real"] as const)("%s request HTTP contract", (mode) => {
     if (mode === "real") query.mockResolvedValueOnce({ rows: [Object.values(sent)] });
     const received = await inbox(get(), context());
     expect(received.status).toBe(200);
-    expect(routes.inbox.response.parse(await received.json())).toContainEqual(sent);
+    expect(plain(routes.inbox.response.parse(await received.json()))).toContainEqual(sent);
   });
 
   it("rejects an unknown recipient", async () => {
@@ -109,7 +113,7 @@ describe.each(["fake", "real"] as const)("%s request HTTP contract", (mode) => {
     else store.get().requests.set(newest.id, newest);
     const response = await inbox(get(), context());
     expect(response.status).toBe(200);
-    expect(routes.inbox.response.parse(await response.json())).toEqual([newest, saved]);
+    expect(plain(routes.inbox.response.parse(await response.json()))).toEqual([newest, saved]);
   });
 
   it("does not show outgoing requests in the sender's inbox", async () => {
@@ -118,6 +122,42 @@ describe.each(["fake", "real"] as const)("%s request HTTP contract", (mode) => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([]);
     if (mode === "real") expect(query.mock.calls[0][1]).toEqual([DEMO_USER_A]);
+  });
+
+  it("lists the asker's sent requests with each receiver's badge", async () => {
+    identity.userId = DEMO_USER_A;
+    if (mode === "real") query.mockResolvedValueOnce({ rows: [Object.values(saved)] }); // then no account row: search has B
+    const response = await sent(new Request("http://localhost:3000/api/requests/sent"), context());
+    expect(response.status).toBe(200);
+    const views = routes.sentRequests.response.parse(await response.json());
+    expect(plain(views)).toEqual([saved]);
+    expect(views[0].person?.id).toBe(DEMO_USER_B);
+    expect(views[0].person).not.toHaveProperty("visibility");
+    if (mode === "real") {
+      expect(query.mock.calls[0][0]).toContain('where "requests"."from_user_id" = $1');
+      expect(query.mock.calls[0][1]).toEqual([DEMO_USER_A]);
+    }
+  });
+
+  it("does not list someone else's sent requests", async () => {
+    identity.userId = DEMO_USER_B;
+    const response = await sent(new Request("http://localhost:3000/api/requests/sent"), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+
+  it("reads back the caller's own ask and reports anyone else's as missing", async () => {
+    const ask = { id: saved.askId, userId: DEMO_USER_A, rawText: saved.question, refined: null,
+      status: "open" as const, softBlocker: false, createdAt: saved.createdAt };
+    store.get().asks.set(ask.id, ask);
+    identity.userId = DEMO_USER_A;
+    if (mode === "real") query.mockResolvedValueOnce({ rows: [[ask.id, ask.userId, ask.rawText, null, ask.status, ask.softBlocker, ask.createdAt]] });
+    const own = await readAsk(new Request(`http://localhost:3000/api/asks/${ask.id}`), context(ask.id));
+    expect(own.status).toBe(200);
+    expect(routes.getAsk.response.parse(await own.json())).toEqual(ask);
+    if (mode === "real") expect(query.mock.calls[0][1]).toEqual([ask.id, DEMO_USER_A, 1]);
+    identity.userId = DEMO_USER_B;
+    expect((await readAsk(new Request(`http://localhost:3000/api/asks/${ask.id}`), context(ask.id))).status).toBe(404);
   });
 
   it("allows accept, decline and reply with the same state changes as the frozen fake", async () => {
@@ -134,7 +174,7 @@ describe.each(["fake", "real"] as const)("%s request HTTP contract", (mode) => {
       expect(routes.respond.response.parse(await response.json())).toEqual(expected);
     }
     if (mode === "real") query.mockResolvedValueOnce({ rows: [Object.values(expected)] });
-    expect(await (await inbox(get(), context())).json()).toEqual([expected]);
+    expect(plain(await (await inbox(get(), context())).json())).toEqual([expected]);
   });
 
   it.each([DEMO_USER_A, "unrelated-user"])("refuses a response by %s, even with a forged receiver in the body", async (userId) => {
