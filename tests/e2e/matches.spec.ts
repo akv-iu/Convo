@@ -40,6 +40,12 @@ async function open(page: Page, askId: string) {
   await page.setExtraHTTPHeaders({ "x-demo-user": ME });
   await page.goto(`/matches?ask=${askId}`);
 }
+/** A saved ask for tests that mock the matches of a made-up ask (the switch shows only once its setting is known). */
+async function savedAsk(page: Page, askId: string, softBlocker = true) {
+  await page.route(`**/api/asks/${askId}`, (route) =>
+    route.fulfill({ json: { id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" } }),
+  );
+}
 
 /** Made-up results for screens the fake's data can't reach (many people, hidden fields). */
 function fakeMatches(n: number) {
@@ -354,9 +360,23 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(blocker).not.toBeChecked();
   });
 
+  test("a new tab shows the saved question and switch setting, read back from the server", async ({ page, browser }) => {
+    const askId = await newAsk(page);
+    const saved = await page.request.put("/api/soft-blocker", { headers: { "x-demo-user": ME }, data: { askId, enabled: false } });
+    expect(saved.ok()).toBe(true);
+    const ask = await (await page.request.get(`/api/asks/${askId}`, { headers: { "x-demo-user": ME } })).json();
+    // A fresh context has none of this tab's copies: everything comes from GET /api/asks/:id.
+    const fresh = await (await browser.newContext()).newPage();
+    await open(fresh, askId);
+    await expect(fresh.getByRole("switch", { name: "Keep people I pass on hidden" })).not.toBeChecked();
+    await expect(fresh.getByText(ask.refined.text)).toBeVisible();
+    await fresh.context().close();
+  });
+
   test("a failed soft-blocker save leaves the switch as it was", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
     await page.route("**/api/soft-blocker", (route) => route.fulfill({ status: 503, json: { error: "Storage unavailable" } }));
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
     await blocker.click({ force: true });
@@ -406,6 +426,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       await held;
       return route.fulfill({ json: { askId: "made-up", enabled: false } });
     });
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     await page.getByRole("switch", { name: "Keep people I pass on hidden" }).click({ force: true });
     await expect(passButton(page)).toBeDisabled();
@@ -428,6 +449,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       puts++;
       return route.fulfill({ json: { askId: "made-up", enabled: false } });
     });
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
 

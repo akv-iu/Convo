@@ -5,7 +5,9 @@
  * be changed later; a failed write may still have committed, so nothing is
  * retried automatically and the screen reloads the inbox to check.
  */
-import type { Request, RequestStatus } from "@/contracts/types";
+import type { CardPerson, Request, RequestStatus } from "@/contracts/types";
+import { colourHex, isBadgeColour } from "../../(onboarding)/_components/badge-prefs";
+import { countryName } from "../../(onboarding)/onboarding/countries";
 
 export const REPLY_MAX = 500;
 
@@ -23,6 +25,30 @@ export const statusLabel: Record<RequestStatus, string> = {
   answered: "Replied",
   scheduled: "Meeting booked",
 };
+
+/** The same statuses from the asker's side ("You asked"). */
+export const sentStatusLabel: Record<RequestStatus, string> = {
+  sent: "Waiting for an answer",
+  accepted: "Accepted",
+  declined: "Declined",
+  answered: "Replied",
+  scheduled: "Meeting booked",
+};
+
+/** The short facts under a person's name. Sections they chose to hide come back null and simply aren't listed. */
+export function badgeFacts(person: CardPerson): string[] {
+  const facts: string[] = [];
+  if (person.workplaceName) facts.push(person.workplaceName);
+  if (person.filters.country) facts.push(countryName(person.filters.country));
+  if (person.filters.hiring !== null) facts.push(person.filters.hiring ? "Hiring" : "Not hiring");
+  return facts;
+}
+
+/** A badge's stripe colour: the person's own, sunflower when they have none (or can't be found). */
+export function badgeColour(person: CardPerson | null): string {
+  const colour = person?.badgeColour;
+  return colourHex(isBadgeColour(colour) ? colour : "sunflower");
+}
 
 /** Venue time (Salt Lake City), so everyone at the conference sees the same clock. */
 const VENUE_TZ = "America/Denver";
@@ -66,7 +92,7 @@ export function respondFailure(status: number, body: unknown): Failure {
 }
 
 /** Newest first, as the API sends them; new ones float to the top. */
-export function inboxOrder(requests: Request[]): Request[] {
+export function inboxOrder<R extends Request>(requests: R[]): R[] {
   const isNew = (r: Request) => (r.status === "sent" ? 0 : 1);
   return requests.map((r, i) => ({ r, i })).sort((a, b) => isNew(a.r) - isNew(b.r) || a.i - b.i).map(({ r }) => r);
 }

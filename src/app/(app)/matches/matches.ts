@@ -7,7 +7,7 @@
  * time, never an automatic retry of a POST (a timed-out save may have gone
  * through), and a 503 after a saved rejection says not to resubmit.
  */
-import type { MatchResult } from "@/contracts/types";
+import type { Ask, MatchResult } from "@/contracts/types";
 import { colourHex, isBadgeColour } from "../../(onboarding)/_components/badge-prefs";
 import { countryName, isCountryCode } from "../../(onboarding)/onboarding/countries";
 
@@ -103,32 +103,17 @@ export function blockerFailure(status: number, body: unknown): Failure {
   return { message: serverMessage(body) ?? "That setting wasn't saved. Try again.", action: null };
 }
 
-const BLOCKER_KEY = "convo_soft_blocker";
-
-function readBlockers(): Record<string, unknown> {
-  try {
-    const saved: unknown = JSON.parse(sessionStorage.getItem(BLOCKER_KEY) ?? "{}");
-    return typeof saved === "object" && saved !== null ? (saved as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-
 /**
- * The soft blocker's last saved value for an ask, kept in this tab. New
- * asks start with it on, and there's no route to read it back, so this is
- * only what this tab last saved.
+ * The saved ask (GET /api/asks/:id): its question and soft-blocker setting, so
+ * a new tab or device shows them too. Null when it can't be read; the match
+ * load reports why.
  */
-export function recallBlocker(askId: string): boolean {
-  const value = readBlockers()[askId];
-  return typeof value === "boolean" ? value : true;
-}
-
-export function rememberBlocker(askId: string, enabled: boolean): void {
+export async function loadAsk(askId: string): Promise<Ask | null> {
   try {
-    sessionStorage.setItem(BLOCKER_KEY, JSON.stringify({ ...readBlockers(), [askId]: enabled }));
+    const res = await fetch(`/api/asks/${encodeURIComponent(askId)}`, { cache: "no-store" });
+    return res.ok ? ((await res.json()) as Ask) : null;
   } catch {
-    // Storage unavailable: the switch shows the default next time.
+    return null;
   }
 }
 

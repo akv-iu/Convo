@@ -1,16 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MatchResult } from "@/contracts/types";
 import {
   badgeLabels,
   blockerFailure,
   cardColour,
   githubProfile,
+  loadAsk,
   highlightParts,
   matchFailure,
   passFailure,
-  recallBlocker,
   recallSent,
-  rememberBlocker,
   rememberSent,
   resolveFailure,
   sendFailure,
@@ -116,38 +115,7 @@ describe("failures", () => {
 });
 
 describe("soft blocker (A2 step 3)", () => {
-  class MemoryStorage {
-    private items = new Map<string, string>();
-    getItem(k: string) {
-      return this.items.get(k) ?? null;
-    }
-    setItem(k: string, v: string) {
-      this.items.set(k, v);
-    }
-  }
-  beforeEach(() => {
-    (globalThis as { sessionStorage?: unknown }).sessionStorage = new MemoryStorage();
-  });
-  afterEach(() => {
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-  });
-
-  it("starts on for a new ask and remembers what this tab saved, per ask", () => {
-    expect(recallBlocker("a1")).toBe(true);
-    rememberBlocker("a1", false);
-    rememberBlocker("a2", true);
-    expect(recallBlocker("a1")).toBe(false);
-    expect(recallBlocker("a2")).toBe(true);
-  });
-
-  it("falls back to on with broken or missing storage", () => {
-    sessionStorage.setItem("convo_soft_blocker", "{broken");
-    expect(recallBlocker("a1")).toBe(true);
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-    expect(() => rememberBlocker("a1", false)).not.toThrow();
-    expect(recallBlocker("a1")).toBe(true);
-  });
-
+  // The switch's setting now comes from GET /api/asks/:id (covered by the e2e tests), not this tab.
   it("explains a failed save", () => {
     expect(blockerFailure(401, null).action?.label).toBe("Sign in again");
     expect(blockerFailure(404, null).action?.href).toBe("/ask");
@@ -200,5 +168,24 @@ describe("people already sent the ask (no duplicate requests)", () => {
     expect(recallSent("a1")).toEqual([]);
     delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
     expect(rememberSent("a1", { id: "p0", name: "Ada", githubLogin: "ada" })).toHaveLength(1);
+  });
+});
+
+describe("the saved ask (GET /api/asks/:id)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ask = { id: "a1", userId: "u", rawText: "q", refined: null, status: "open", softBlocker: false, createdAt: "2026-11-05T12:00:00Z" };
+
+  it("returns the saved ask, so the switch shows its real setting", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(ask)));
+    vi.stubGlobal("fetch", fetch);
+    expect(await loadAsk("a 1")).toEqual(ask);
+    expect(fetch).toHaveBeenCalledWith("/api/asks/a%201", { cache: "no-store" });
+  });
+
+  it("returns null when it can't be read, instead of guessing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 404 })));
+    expect(await loadAsk("a1")).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    expect(await loadAsk("a1")).toBeNull();
   });
 });

@@ -29,11 +29,10 @@ import { MatchCard } from "./match-card";
 import {
   blockerFailure,
   githubProfile,
+  loadAsk,
   matchFailure,
   passFailure,
-  recallBlocker,
   recallSent,
-  rememberBlocker,
   rememberSent,
   resolveFailure,
   sendFailure,
@@ -74,9 +73,26 @@ export function MatchesView() {
   /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
   const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
-  const [blocker, setBlocker] = useState(true);
+  /** The saved soft-blocker setting; null until GET /api/asks/:id answers, so the switch never shows a guess. */
+  const [blocker, setBlocker] = useState<boolean | null>(null);
   const [blockerSaving, setBlockerSaving] = useState(false);
   const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
+
+  // The saved ask: its question and the switch's real setting, so a new tab or another device shows them too.
+  useEffect(() => {
+    if (!askId) return;
+    let live = true;
+    void (async () => {
+      setQuestion(recallAsk(askId)?.refined.text ?? null); // this tab's copy, shown until the server answers
+      const ask = await loadAsk(askId);
+      if (!live || !ask) return; // the match load reports any problem; the switch stays hidden until known
+      setQuestion(ask.refined?.text ?? ask.rawText);
+      setBlocker(ask.softBlocker);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [askId]);
 
   useEffect(() => {
     if (!askId) return;
@@ -91,9 +107,6 @@ export function MatchesView() {
         });
         const body = await res.json().catch(() => null);
         if (!live) return;
-        // The question and switch come from this tab's copies (there's no route to read an ask back).
-        setQuestion(recallAsk(askId)?.refined.text ?? null);
-        setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         // Leave out people this tab already sent the ask to: a second send would be a duplicate request.
         const already = recallSent(askId);
@@ -240,7 +253,6 @@ export function MatchesView() {
       }
       const saved = (body as { enabled: boolean }).enabled;
       setBlocker(saved);
-      rememberBlocker(askId, saved);
       setAnnounce(saved ? "People you passed on are hidden." : "People you passed on are back in the list.");
       refresh();
     } catch {
@@ -375,6 +387,7 @@ export function MatchesView() {
         </p>
       )}
 
+      {blocker !== null && (
       <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
         <label className="flex min-h-11 cursor-pointer items-center gap-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-accent">
           <span className="flex-1 font-semibold">Keep people I pass on hidden</span>
@@ -411,6 +424,7 @@ export function MatchesView() {
           </p>
         )}
       </div>
+      )}
 
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
