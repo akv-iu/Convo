@@ -45,10 +45,10 @@ async function open(page: Page, askId: string) {
   await page.setExtraHTTPHeaders({ "x-demo-user": ME });
   await page.goto(`/matches?ask=${askId}`);
   const first = rows(page).first();
-  await first
-    .waitFor({ timeout: 10_000 })
-    .then(() => first.click())
-    .catch(() => {});
+  // Whichever the list settles on: a person, the end panel (no one, or everyone answered), or an error.
+  const settled = first.or(list(page).getByRole("heading", { level: 2 })).or(list(page).getByRole("alert"));
+  await expect(settled.first()).toBeVisible({ timeout: AFTER_SUBMIT });
+  if (await first.isVisible()) await first.click();
 }
 const askJson = (askId: string, softBlocker: boolean) =>
   ({ id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" });
@@ -324,7 +324,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(1)).toBeFocused();
   });
 
-  test("passing everyone on a short list ends with \"That's everyone\", See them again, and focus on it", async ({ page, isMobile }) => {
+  test("passing everyone on a short list ends with \"That's everyone\" and focus on it", async ({ page, isMobile }) => {
     // Two people, no sends and no cutoff (fewer than three passes).
     await savedAsk(page, "made-up");
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
@@ -342,9 +342,103 @@ test.describe("match list (A2 steps 1-2)", () => {
     const done = list(page).getByRole("heading", { level: 2 });
     await expect(done).toHaveText("That's everyone for now");
     await expect(list(page)).toContainText("You passed on everyone Lanyard found.");
-    await expect(page.getByRole("button", { name: "See them again" })).toBeVisible();
+    // With the switch on, a reload brings no one back, so the panel points at the switch instead.
+    await expect(list(page)).toContainText("turn off “Keep people I pass on hidden”");
+    await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
     // The Pass button went with the list; the keyboard lands on the end panel, not the page body.
     if (!isMobile) await expect(done).toBeFocused();
+  });
+
+  test("a person locked by a failed pass explains why, with Refresh, even after other actions succeed", async ({ page }) => {
+    await savedAsk(page, "made-up");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let failNext = true;
+    await page.route("**/api/rejections", (route) => {
+      if (failNext) {
+        failNext = false;
+        return route.fulfill({ status: 503, json: { error: "Rejection saved, but the count could not be read. Do not resubmit." } });
+      }
+      return route.fulfill({ json: { rejections: 2, hiddenBelowRank: null } });
+    });
+    await open(page, "made-up");
+    await passButton(page).click(); // Person 1's pass fails
+    await expect(alertWithText(page)).toContainText("Person 1");
+    await rows(page).nth(1).click();
+    await passButton(page).click(); // Person 2's succeeds, and clears the alert at the top
+    await expect(page.getByRole("status").filter({ hasText: "Passed" })).toHaveText("Passed on Person 2.");
+    // Back to Person 1: still locked, and the open profile says why, with a way out.
+    await rows(page).nth(0).click();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(card(page)).toContainText("couldn't confirm your pass on Person 1");
+    const reloading = page.waitForRequest((r) => r.url().endsWith("/api/match"));
+    await card(page).getByRole("button", { name: "refresh the matches" }).click();
+    await reloading;
+    await rows(page).first().click();
+    await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("passing the top three ends on the cutoff, not on \"You passed on everyone\"", async ({ page }) => {
+    await savedAsk(page, "made-up");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(5) }));
+    let passes = 0;
+    await page.route("**/api/rejections", (route) => {
+      passes++;
+      return route.fulfill({ json: { rejections: passes, hiddenBelowRank: passes >= 3 ? 2 : null } });
+    });
+    await open(page, "made-up");
+    for (const name of ["Person 1", "Person 2", "Person 3"]) {
+      await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(name);
+      await passButton(page).click();
+    }
+    await expect(rows(page)).toHaveCount(0);
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
+    await expect(list(page)).toContainText("Lanyard hid everyone ranked below them");
+    await expect(list(page)).toContainText("Try asking it another way");
+    await expect(list(page)).not.toContainText("You passed on everyone");
+    await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0); // the cutoff stays either way
+  });
+
+  test("a search that finds no one says so, even after earlier requests", async ({ page }) => {
+    await savedAsk(page, "made-up");
+    const sentView = (n: number) => ({
+      id: `r-earlier-${n}`, askId: "made-up", fromUserId: ME, toPersonId: `x_${n}`, question: "q", minutes: 5,
+      status: "sent", reply: null, slot: null, createdAt: "2026-11-05T12:00:00Z", type: "knowledge",
+      person: fakeMatches(n + 1)[n].person,
+    });
+    await page.route("**/api/requests/sent", (route) => route.fulfill({ json: [sentView(0), sentView(1)] }));
+    await page.route("**/api/match", (route) => route.fulfill({ json: [] })); // everyone was sent the ask; the search finds no one
+    await open(page, "made-up");
+    // No search: the earlier requests explain the empty list.
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
+    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Haskell");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches yet");
+    await expect(list(page)).toContainText("Try a different search, or show everyone.");
+    await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
+  });
+
+  test("after a save, focus stays where the user moved it", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/api/requests", async (route) => {
+      await held;
+      return route.fulfill({ json: { id: "r-held" } });
+    });
+    await open(page, "made-up");
+    await sendButton(page).click(); // Person 1's send waits
+    await rows(page).nth(2).click(); // meanwhile the user opens Person 3
+    await rows(page).nth(2).focus();
+    release();
+    await expect(rows(page).nth(0)).toContainText("Request sent");
+    // Person 3 stays open and focused: the save doesn't pull the user back to Person 2.
+    await expect(rows(page).nth(2)).toHaveAttribute("aria-expanded", "true");
+    await expect(rows(page).nth(2)).toBeFocused();
+    // A later, unrelated change (closing a row) doesn't jump focus anywhere.
+    await rows(page).nth(2).click();
+    await expect(rows(page).nth(2)).toBeFocused();
   });
 
   test("a second failed pass keeps the first person locked too, until Refresh matches", async ({ page }) => {
@@ -639,7 +733,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     expect(puts).toBe(1);
   });
 
-  test("See them again leaves out recipients on the server, including after reload", async ({ page }) => {
+  test("recipients stay left out on the server, and a reload still says who has the question", async ({ page }) => {
     const askId = await newAsk(page);
     const picks = (await serverMatches(page, askId)).slice(0, 2);
     expect(picks).toHaveLength(2);
@@ -656,10 +750,8 @@ test.describe("match list (A2 steps 1-2)", () => {
       await sendButton(page).click();
     }
     await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
-    await page.getByRole("button", { name: "See them again" }).click();
-    // The server leaves them out now; the screen still says who has the question.
-    await expect(rows(page)).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
+    // A reload wouldn't bring them back (the server leaves out people sent the question), so it isn't offered.
+    await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
     await page.evaluate(() => sessionStorage.clear());
     await page.reload();
     await expect(rows(page)).toHaveCount(0);
