@@ -349,7 +349,8 @@ export function MatchesView() {
             role="switch"
             checked={blocker ?? true}
             aria-disabled={blockerSaving || busy !== null}
-            onChange={(e) => void toggleBlocker(e.target.checked)}
+            // While unknown, the first press confirms the default (on) rather than turning it off.
+            onChange={(e) => void toggleBlocker(blocker === null ? true : e.target.checked)}
             aria-describedby="blocker-hint"
             className="peer sr-only"
           />
@@ -360,7 +361,7 @@ export function MatchesView() {
         </label>
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
           {blocker === null
-            ? "New questions start with this on. If you changed it in another tab, set it again here."
+            ? "New questions start with this on. If you changed it in another tab, press to confirm it's on."
             : blocker
               ? "On: people you passed on stay out of this list, and you're kept out of theirs."
               : "Off: people you passed on can show up again."}
