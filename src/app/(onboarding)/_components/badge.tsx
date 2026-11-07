@@ -7,17 +7,36 @@ import type { CSSProperties, ReactNode } from "react";
  * surrounding element (step 1's picker). Decorative for screen readers; each
  * screen's form carries the meaning.
  */
-export function Badge({ children, label, colour }: { children?: ReactNode; label?: string; colour?: string }) {
+export function Badge({
+  children,
+  label,
+  colour,
+  name = "Your name",
+  handle = "your-github",
+  onName,
+}: {
+  children?: ReactNode;
+  label?: ReactNode;
+  colour?: string;
+  name?: string;
+  handle?: string;
+  /**
+   * When set, tapping the name calls this (the profile card opens its name
+   * field). A click handler, not a <label>: the badge is aria-hidden, and a
+   * label would add the badge's text to the field's accessible name.
+   */
+  onName?: () => void;
+}) {
   const style = colour ? ({ "--badge": colour } as CSSProperties) : undefined;
   return (
     <div aria-hidden="true" style={style} className="relative mx-auto w-full max-w-[19rem] lg:mt-16">
       <div className="absolute -top-16 left-1/2 hidden h-20 w-6 -translate-x-1/2 rounded-b-sm bg-accent lg:block" />
       <div className="absolute -top-2 left-1/2 hidden h-5 w-10 -translate-x-1/2 rounded-md border-4 border-foreground/70 lg:block" />
 
-      <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[0_18px_40px_-18px_rgb(20_33_61/0.45)] ring-1 ring-border lg:rotate-[-2.5deg]">
+      <div className="relative overflow-hidden rounded-2xl bg-surface shadow-[var(--popover-shadow)] ring-1 ring-border lg:rotate-[-2.5deg]">
         <div
           data-badge-stripe
-          className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[#14213d] transition-colors duration-200 motion-reduce:transition-none"
+          className="flex h-9 items-center justify-between bg-[var(--badge)] px-4 text-[13px] font-semibold text-[var(--badge-ink)] transition-colors duration-200 motion-reduce:transition-none"
         >
           <span>Convo</span>
           <span className="font-normal">{label ?? "Salt Lake City"}</span>
@@ -27,8 +46,18 @@ export function Badge({ children, label, colour }: { children?: ReactNode; label
           <div className="flex items-center gap-3">
             <span className="size-14 shrink-0 rounded-full bg-accent/80" />
             <div className="min-w-0 flex-1">
-              <p className="text-2xl font-extrabold leading-tight tracking-tight [font-stretch:85%]">Your name</p>
-              <p className="text-sm text-muted">@your-github</p>
+              {onName ? (
+                <span
+                  role="presentation"
+                  onClick={onName}
+                  className="-mx-1 block cursor-pointer rounded-md px-1 text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%] hover:bg-accent/10"
+                >
+                  {name}
+                </span>
+              ) : (
+                <p className="text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%]">{name}</p>
+              )}
+              <p className="truncate text-sm text-muted">@{handle}</p>
             </div>
           </div>
           {children}

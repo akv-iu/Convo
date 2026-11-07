@@ -1,11 +1,10 @@
 /**
- * How the user's badge looks: its colour, and a workplace name typed in
- * when the workplace search had no match. Kept in the browser in the
+ * How the user's badge looks: its colour. Kept in the browser in the
  * `convo_badge` cookie.
  *
- * Frontend-only. The backend doesn't read this cookie, and none of it is
- * in the Person contract yet, so other people never see these choices.
- * Showing them to others needs a contract field from B (see PR notes).
+ * Frontend-only. The backend doesn't read this cookie, and the colour isn't
+ * in the Person contract, so other people never see it. Showing it to
+ * others needs a contract field from B.
  */
 import { z } from "zod";
 
@@ -27,7 +26,6 @@ const colourIds = badgeColours.map((c) => c.id) as [BadgeColour, ...BadgeColour[
 
 const Prefs = z.object({
   colour: z.enum(colourIds).catch(DEFAULT_COLOUR).default(DEFAULT_COLOUR),
-  workplace: z.string().trim().min(1).max(200).optional().catch(undefined),
 });
 export type BadgePrefs = z.infer<typeof Prefs>;
 
@@ -69,15 +67,41 @@ export function serializeBadgePrefs(prefs: BadgePrefs): string {
 
 export const badgeCookieOptions = { path: "/", sameSite: "lax" as const, maxAge: ONE_YEAR };
 
-/** Browser-side update, merging into what's already saved. */
-export function writeBadgePrefs(patch: Partial<BadgePrefs>): BadgePrefs {
-  const current = parseBadgePrefs(
+/** Reads the prefs from document.cookie (browser only). */
+export function readBadgePrefs(): BadgePrefs {
+  return parseBadgePrefs(
     document.cookie
       .split("; ")
       .find((c) => c.startsWith(`${BADGE_COOKIE}=`))
       ?.slice(BADGE_COOKIE.length + 1),
   );
-  const next = Prefs.parse({ ...current, ...patch });
+}
+
+/**
+ * A tiny script for the onboarding layout: sets --badge on its parent
+ * element from the cookie before first paint, so a fresh page load never
+ * flashes the default colour. Built from the same colour list.
+ */
+export function badgeColourScript(): string {
+  const hexes = JSON.stringify(Object.fromEntries(badgeColours.map((c) => [c.id, c.hex])));
+  return `(function(){try{var el=document.currentScript&&document.currentScript.parentElement;var m=document.cookie.match(/(?:^|; )${BADGE_COOKIE}=([^;]*)/);if(!el||!m)return;var p=JSON.parse(decodeURIComponent(m[1]));var c=${hexes}[p.colour];if(c)el.style.setProperty("--badge",c)}catch(e){}})();`;
+}
+
+/** Browser-side update, merging into what's already saved. */
+export function writeBadgePrefs(patch: Partial<BadgePrefs>): BadgePrefs {
+  const next = Prefs.parse({ ...readBadgePrefs(), ...patch });
   document.cookie = `${BADGE_COOKIE}=${encodeURIComponent(serializeBadgePrefs(next))}; path=/; max-age=${ONE_YEAR}; samesite=lax`;
+  return next;
+}
+
+/**
+ * Shows a saved profile's colour on this page and keeps it for the next
+ * steps. The profile (GET /api/me badgeColour) is the source of truth;
+ * the cookie is only how the colour reaches the first paint of each step.
+ */
+export function showSavedColour(colour: BadgeColour | undefined): BadgeColour {
+  const next = colour ?? DEFAULT_COLOUR;
+  writeBadgePrefs({ colour: next });
+  document.querySelector<HTMLElement>(".onb")?.style.setProperty("--badge", colourHex(next));
   return next;
 }

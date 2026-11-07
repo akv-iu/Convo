@@ -1,152 +1,173 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+/** Step 1, "About you": name, workplace, country and where Convo should look. Fake API. */
+
 /** A form submit on a busy test server can take a few seconds before the redirect. */
 const AFTER_SUBMIT = 15_000;
 
+const nameField = (page: Page) => page.getByRole("textbox", { name: "Your name" });
+const search = (page: Page) => page.getByRole("combobox", { name: "Search for your workplace" });
+const country = (page: Page) => page.getByRole("combobox", { name: "Country" });
+const continueButton = (page: Page) => page.getByRole("button", { name: "Continue", exact: true });
 const consentCookie = async (page: Page) =>
   (await page.context().cookies()).find((c) => c.name === "convo_consent");
+const draft = (page: Page) => page.evaluate(() => sessionStorage.getItem("convo_onboarding_draft"));
 
-/** The frontend-only badge preferences cookie, decoded. */
-const badgeCookie = async (page: Page) => {
-  const raw = (await page.context().cookies()).find((c) => c.name === "convo_badge")?.value;
-  return raw ? (JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>) : undefined;
-};
+async function answerAll(page: Page) {
+  await nameField(page).fill("Ada Lovelace");
+  await search(page).fill("oxford");
+  await page
+    .getByRole("listbox", { name: "Workplaces" })
+    .getByRole("option", { name: /University of Oxford/ })
+    .click({ timeout: 10_000 });
+}
 
-/** Background colour of the badge stripe that's on screen (phone and laptop each have one). */
-const stripeColour = (page: Page) =>
-  page
-    .locator("[data-badge-stripe]")
-    .evaluateAll((els) => els.filter((el) => el.checkVisibility()).map((el) => getComputedStyle(el).backgroundColor)[0]);
+test.describe("about you (step 1)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/signin");
+    await expect(nameField(page)).toBeVisible();
+  });
 
-/**
- * Height of a badge row's clipping box, found by its caption; 0 when the row
- * is folded away. offsetHeight ignores the laptop badge's tilt, which would
- * otherwise give a zero-height row a non-zero on-screen box. Max over both
- * badges, as one is always display:none.
- */
-const badgeRowHeight = (page: Page, caption: string) =>
-  page
-    .getByText(caption, { exact: true })
-    .evaluateAll((els) =>
-      Math.max(...els.map((el) => (el.closest(".overflow-hidden") as HTMLElement | null)?.offsetHeight ?? 0)),
-    );
-
-test.describe("sign-in and consent (A1 step 1)", () => {
-  test("home page leads to sign-in", async ({ page }) => {
+  test("home page leads to step 1", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("link", { name: "Get started" }).click();
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make your badge");
+    await expect(page.getByText("Convo fills it in from your public info such as GitHub.")).toBeVisible();
   });
 
-  test("every source is offered and switched on to start with", async ({ page }) => {
-    await page.goto("/signin");
-    const sources = page.getByRole("group", { name: "What goes on your badge" }).getByRole("checkbox");
-    await expect(sources).toHaveCount(3);
-    for (const box of await sources.all()) await expect(box).toBeChecked();
+  test("shows no badge, and offers GitHub with the other sources coming soon", async ({ page }) => {
+    await expect(page.locator("[data-badge-stripe]")).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 1 of 4");
+    const sources = page.getByRole("group", { name: "Where should we look?" });
+    await expect(sources.getByRole("checkbox", { name: /^GitHub/ })).toBeChecked();
+    await expect(sources.getByRole("checkbox", { name: /Research papers/ })).toBeDisabled();
+    await expect(sources.getByRole("checkbox", { name: /CV or LinkedIn/ })).toBeDisabled();
+    await expect(sources.getByText("Coming soon")).toHaveCount(2);
+    await expect(page.getByText("Your name, username and avatar are always on it.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Continue with GitHub" })).toHaveCount(0);
   });
 
-  test("tapping a tile switches the source off and folds its row on the badge", async ({ page }) => {
-    await page.goto("/signin");
-    expect(await badgeRowHeight(page, "Can help with")).toBeGreaterThan(0);
-
-    await page.getByText("Repos and languages", { exact: true }).click();
-    await expect(page.getByRole("checkbox", { name: /Repos and languages/ })).not.toBeChecked();
-    await expect.poll(() => badgeRowHeight(page, "Can help with")).toBe(0);
-
-    await page.getByText("Repos and languages", { exact: true }).click();
-    await expect.poll(() => badgeRowHeight(page, "Can help with")).toBeGreaterThan(0);
+  test("Continue with nothing filled in names each missing answer and stays put", async ({ page }) => {
+    await continueButton(page).click();
+    await expect(page.getByText("Add the name people should see.")).toBeVisible();
+    await expect(page.getByText("Choose where you work, or pick Not with an organisation.")).toBeVisible();
+    await expect(page.getByText("Choose the country you're based in.")).toBeVisible();
+    await expect(nameField(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/signin$/);
+    expect(await draft(page)).toBeNull();
   });
 
-  test("switched-off sources are left out of the saved consent", async ({ page }) => {
-    await page.goto("/signin");
-    await page.getByText("Organisations", { exact: true }).click();
-    await page.getByRole("button", { name: "Continue with GitHub" }).click();
+  test("picking a workplace fills in the country", async ({ page }) => {
+    await answerAll(page);
+    await expect(country(page)).toHaveValue("GB");
+    await expect(page.getByText(/Filled in from your workplace/)).toBeVisible();
+  });
 
+  test("a country the user chose is not overwritten by the workplace", async ({ page }) => {
+    await country(page).selectOption("US");
+    await answerAll(page);
+    await expect(country(page)).toHaveValue("US");
+  });
+
+  test("GitHub has to stay on for now", async ({ page }) => {
+    await answerAll(page);
+    await page.getByText("GitHub", { exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: /GitHub/ })).not.toBeChecked();
+    await continueButton(page).click();
+    await expect(page.getByText("For now GitHub is how you sign in, so keep it on.")).toBeVisible();
+    await expect(page).toHaveURL(/\/signin$/);
+  });
+
+  test("Continue keeps the answers in the tab, saves GitHub consent, and goes to step 2", async ({ page }) => {
+    await answerAll(page);
+    await continueButton(page).click();
     await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("About you");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
+
+    expect(JSON.parse((await draft(page)) ?? "null")).toEqual({
+      name: "Ada Lovelace",
+      country: "GB",
+      workplace: { kind: "org", org: { id: "https://ror.org/052gg0110", name: "University of Oxford", country: "GB" } },
+    });
     const consent = await consentCookie(page);
-    expect(decodeURIComponent(consent?.value ?? "")).toBe("profile,repos");
+    expect(decodeURIComponent(consent?.value ?? "")).toBe("profile,repos,orgs");
     expect(consent?.httpOnly).toBe(true);
     expect(consent?.sameSite).toBe("Lax");
-    expect(consent?.path).toBe("/");
   });
 
-  test("switching everything off saves an empty consent (identity only)", async ({ page }) => {
-    await page.goto("/signin");
-    for (const label of ["Bio", "Repos and languages", "Organisations"]) {
-      await page.getByText(label, { exact: true }).click();
+  test("each GitHub source can be declined, and only the ticked ones are saved", async ({ page }) => {
+    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    for (const name of [/^Bio/, /^Repos and languages/, /^Organisations/]) {
+      await expect(choices.getByRole("checkbox", { name })).toBeChecked();
     }
-    await page.getByRole("button", { name: "Continue with GitHub" }).click();
+    await choices.getByRole("checkbox", { name: /^Repos and languages/ }).uncheck();
+    await answerAll(page);
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
+    expect(decodeURIComponent((await consentCookie(page))?.value ?? "")).toBe("profile,orgs");
+  });
 
+  test("declining every GitHub source still signs in, with an empty consent", async ({ page }) => {
+    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    for (const box of await choices.getByRole("checkbox").all()) await box.uncheck();
+    await answerAll(page);
+    await continueButton(page).click();
     await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
     const consent = await consentCookie(page);
     expect(consent).toBeDefined();
     expect(consent?.value).toBe("");
   });
 
-  test("works with the keyboard alone", async ({ page, isMobile }) => {
-    test.skip(isMobile, "keyboard path is checked on the laptop project");
-    await page.goto("/signin");
-    const repos = page.getByRole("checkbox", { name: /Repos and languages/ });
-    await repos.focus();
-    await page.keyboard.press("Space");
-    await expect(repos).not.toBeChecked();
-
-    await page.keyboard.press("Tab"); // organisations
-    await page.keyboard.press("Tab"); // colour swatches (one tab stop for the group)
-    await expect(page.getByRole("radio", { name: "Sunflower" })).toBeFocused();
-    await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("radio", { name: "Mint" })).toBeChecked();
-    await page.keyboard.press("Tab"); // continue
-    await expect(page.getByRole("button", { name: "Continue with GitHub" })).toBeFocused();
-    await page.keyboard.press("Enter");
-
-    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
-    expect(decodeURIComponent((await consentCookie(page))?.value ?? "")).toBe("profile,orgs");
-    expect(await badgeCookie(page)).toMatchObject({ colour: "mint" });
+  test("turning GitHub off hides its choices", async ({ page }) => {
+    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toBeVisible();
+    await page.getByText("GitHub", { exact: true }).click();
+    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toHaveCount(0);
   });
 
-  test("the colour picker recolours the badge and is saved", async ({ page }) => {
-    await page.goto("/signin");
-    const swatches = page.getByRole("group", { name: "Badge colour" }).getByRole("radio");
-    await expect(swatches).toHaveCount(5);
-    await expect(page.getByRole("radio", { name: "Sunflower" })).toBeChecked();
-    await expect.poll(() => stripeColour(page)).toBe("rgb(255, 210, 63)");
-
-    await page.getByRole("radio", { name: "Lilac" }).check({ force: true });
-    await expect.poll(() => stripeColour(page)).toBe("rgb(196, 181, 253)");
-
-    await page.getByRole("button", { name: "Continue with GitHub" }).click();
+  test("'Not with an organisation' is enough for the workplace", async ({ page }) => {
+    await nameField(page).fill("Grace Hopper");
+    await page.getByRole("checkbox", { name: "Not with an organisation" }).check();
+    await country(page).selectOption("US");
+    await continueButton(page).click();
     await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
-    const saved = (await page.context().cookies()).find((c) => c.name === "convo_badge");
-    expect(saved?.httpOnly).toBe(false); // read by later screens in the browser
-    expect(await badgeCookie(page)).toMatchObject({ colour: "lilac" });
+    expect(JSON.parse((await draft(page)) ?? "null")).toMatchObject({ workplace: { kind: "none" }, country: "US" });
   });
 
-  test("tapping a badge row switches that source off, and its stub brings it back", async ({ page }) => {
-    await page.goto("/signin");
-    const repos = page.getByRole("checkbox", { name: /Repos and languages/ });
-    const visibleBadge = page.locator("[data-badge-stripe]:visible").locator("xpath=ancestor::div[@aria-hidden='true'][1]");
-
-    await visibleBadge.getByText("Can help with", { exact: true }).click();
-    await expect(repos).not.toBeChecked();
-    await expect.poll(() => badgeRowHeight(page, "Can help with")).toBe(0);
-
-    await visibleBadge.getByText("+ Repos", { exact: true }).click();
-    await expect(repos).toBeChecked();
-    await expect.poll(() => badgeRowHeight(page, "Can help with")).toBeGreaterThan(0);
-    await expect(visibleBadge.getByText("+ Repos", { exact: true })).toBeHidden();
+  test("a workplace that isn't listed can be used as typed", async ({ page }) => {
+    await nameField(page).fill("Grace Hopper");
+    await search(page).fill("Acme Robotics");
+    await page.getByRole("option", { name: /Use .Acme Robotics./ }).click({ timeout: 10_000 });
+    await expect(page.getByText("Added by you")).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: "Not with an organisation" })).toHaveCount(0);
+    await country(page).selectOption("US");
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
+    expect(JSON.parse((await draft(page)) ?? "null")).toMatchObject({ workplace: { kind: "custom", name: "Acme Robotics" } });
+    await expect(page.getByText("Acme Robotics").locator("visible=true").first()).toBeVisible(); // the badge on step 2
   });
 
   test("the data note stays tucked behind Your data until asked for", async ({ page }) => {
-    await page.goto("/signin");
-    const note = page.getByText(/Public data only, and nothing is posted to GitHub/);
+    const note = page.getByText(/We only use public info and anything you upload/);
     await expect(note).toBeHidden();
     await page.locator("summary", { hasText: "Your data" }).click();
     await expect(note).toBeVisible();
+  });
+
+  test("works with the keyboard alone", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await nameField(page).focus();
+    await page.keyboard.type("Ada Lovelace");
+    await page.keyboard.press("Tab");
+    await expect(search(page)).toBeFocused();
+    await page.keyboard.type("oxford");
+    await expect(page.getByRole("listbox", { name: "Workplaces" }).getByRole("option").first()).toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Enter");
+    await expect(country(page)).toHaveValue("GB");
+    await continueButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/onboarding$/, { timeout: AFTER_SUBMIT });
   });
 
   for (const scheme of ["light", "dark"] as const) {
@@ -154,15 +175,11 @@ test.describe("sign-in and consent (A1 step 1)", () => {
       await page.emulateMedia({ colorScheme: scheme });
       const scan = async (label: string) =>
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
-
-      await page.goto("/signin");
-      await scan("/signin");
+      await scan("empty");
+      await continueButton(page).click();
+      await expect(page.getByText("Add the name people should see.")).toBeVisible();
       await page.locator("summary", { hasText: "Your data" }).click();
-      await page.getByText("Repos and languages", { exact: true }).click(); // a stub showing
-      await expect.poll(() => badgeRowHeight(page, "Can help with")).toBe(0);
-      await scan("/signin with the data note open and a source off");
-      await page.goto("/onboarding");
-      await scan("/onboarding");
+      await scan("with errors and the data note open");
     });
   }
 });
