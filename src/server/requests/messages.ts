@@ -31,12 +31,9 @@ async function withBadges(rows: Request[], other: (request: Request) => string):
   ]);
   const people = new Map<string, CardPerson>();
   for (const user of accounts) {
-    try {
-      const person = toPerson(user);
-      people.set(person.id, visiblePerson(person));
-    } catch {
-      // An unfinished or invalid saved profile gets no badge rather than a guessed one.
-    }
+    if (user.filters === null) continue;
+    const person = toPerson(user);
+    people.set(person.id, visiblePerson(person));
   }
   // Synthetic people exist only in search. A search copy of a real account never decides what's shown.
   const withoutAccount = ids.filter((id) => !accounts.some((user) => user.id === id));

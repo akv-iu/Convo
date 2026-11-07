@@ -196,6 +196,21 @@ describe("badges on requests", () => {
     expect(getPeople).toHaveBeenCalledExactlyOnceWith([]); // they have an account, so search isn't asked
   });
 
+  it.each([
+    { read: getInbox, user: "receiver", message: "Inbox storage is unavailable. Try again." },
+    { read: getSentRequests, user: "sender", message: "Sent requests are unavailable. Try again." },
+  ])("reports a corrupt profile in $user's list as unavailable", async ({ read, user, message }) => {
+    const corrupt = account(asker);
+    corrupt[6] = JSON.stringify({ country: "private-invalid-country", rorId: null, hiring: true });
+    query.mockResolvedValueOnce({ rows: [row(user === "receiver" ? { fromUserId: asker.id } : { toPersonId: asker.id })] })
+      .mockResolvedValueOnce({ rows: [corrupt] });
+
+    const error = await read(user).catch((error: unknown) => error);
+    expect(error).toMatchObject({ status: 503, message });
+    expect(String(error)).not.toContain("private-invalid-country");
+    expect(getPeople).not.toHaveBeenCalled();
+  });
+
   it("reports a failed badge lookup as unavailable, without provider details", async () => {
     query.mockResolvedValueOnce({ rows: [row()] });
     getPeople.mockRejectedValueOnce(new Error("private-search-token"));
