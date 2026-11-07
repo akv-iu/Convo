@@ -31,7 +31,7 @@ export const asks = pgTable(
     rawText: text("raw_text").notNull(),
     refined: jsonb("refined").$type<RefinedAsk>(),
     status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
-    softBlocker: boolean("soft_blocker").notNull().default(true),
+    softBlocker: boolean("soft_blocker").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("asks_user_idx").on(t.userId)],

@@ -1,6 +1,7 @@
 import type { AskType } from "@/contracts/types";
 import type { AiService } from "./index";
 import { AskBlockedError } from "./blocked";
+import { MEETING_MINUTES } from "./minutes";
 
 function classify(text: string): AskType {
   const t = text.toLowerCase();
@@ -21,7 +22,7 @@ export const cannedAi: AiService = {
       type === "career"
         ? `${trimmed}: what does the hiring loop look like, and what would make my application stand out?`
         : `${trimmed}: can you walk me through the mechanism and the one thing people usually get wrong?`;
-    return { text, type, minutes: type === "knowledge" ? 10 : 15 };
+    return { text, type, minutes: MEETING_MINUTES };
   },
 
   async explain(ask, candidates) {

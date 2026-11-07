@@ -48,6 +48,13 @@ type Load =
   | { state: "ready"; matches: MatchResult[] }
   | { state: "failed"; failure: Failure };
 
+/** What an open profile says instead of Pass and Send once you've answered that person, or null. */
+function doneNote(name: string, sent: boolean, passed: boolean): string | null {
+  if (sent) return `You sent ${name} your question. They'll see it in their inbox.`;
+  if (passed) return `You passed on ${name}.`;
+  return null;
+}
+
 /** Keyed by the ask, so nothing from one ask (its switch setting, deck or answers) shows on another. */
 export function MatchesView() {
   const askId = useSearchParams().get("ask") ?? "";
@@ -82,6 +89,12 @@ function AskMatches({ askId }: { askId: string }) {
    */
   const [lockedIds, setLockedIds] = useState<ReadonlySet<string>>(() => new Set());
   const lock = (id: string) => setLockedIds((cur) => new Set(cur).add(id));
+  /**
+   * People passed on in this visit. With the switch on they leave the list; with it off they stay,
+   * marked "Passed", and count as done. A reload clears this: the server lists them again, unmarked,
+   * as the switch's own hint says ("people you passed on can show up again").
+   */
+  const [passedIds, setPassedIds] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * Set by a successful pass: an emptied list then means "you've seen everyone",
    * not "no one matches". A new search starts a new list, so it clears this.
@@ -167,6 +180,7 @@ function AskMatches({ askId }: { askId: string }) {
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setOpenId(null);
         setLockedIds(new Set());
+        setPassedIds(new Set());
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
       }
@@ -178,8 +192,8 @@ function AskMatches({ askId }: { askId: string }) {
 
   const matches = useMemo(() => (load.state === "ready" ? load.matches : []), [load]);
   const sentIds = useMemo(() => new Set(sent.flatMap((r) => (r.person ? [r.person.id] : [r.toPersonId]))), [sent]);
-  /** Nobody left to answer: the list is empty, or everyone still in it has your request. */
-  const allDone = matches.every((m) => sentIds.has(m.person.id));
+  /** Nobody left to answer: the list is empty, or everyone still in it has your request or was passed on. */
+  const allDone = matches.every((m) => sentIds.has(m.person.id) || passedIds.has(m.person.id));
   /** The list was emptied by you (sends, passes or the cutoff), not by a lack of people. */
   const reviewed = sent.length > 0 || cutoffNote || passedAny;
 
@@ -190,7 +204,8 @@ function AskMatches({ askId }: { askId: string }) {
       return `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${names}. They'll see your question in their inbox.`;
     }
     if (passedAny) {
-      const hint = blocker === false ? "" : " To see them again, turn off “Keep people I pass on hidden”.";
+      // Only while the switch is on are they gone; with it off, See them again lists them unmarked.
+      const hint = blocker === true ? " To see them again, turn off “Keep people I pass on hidden”." : "";
       return `You passed on everyone Lanyard found.${hint}`;
     }
     return applied ? "Try a different search, or show everyone." : "Try asking it another way, or check back as more people join.";
@@ -215,7 +230,9 @@ function AskMatches({ askId }: { askId: string }) {
       const gen = deckGen.current;
       /** After acting on someone, open the next person still waiting for an answer. */
       const openNext = (list: MatchResult[]) => {
-        const next = list.find((m) => m.rank > match.rank && m.person.id !== match.person.id && !sentIds.has(m.person.id));
+        const next = list.find(
+          (m) => m.rank > match.rank && m.person.id !== match.person.id && !sentIds.has(m.person.id) && !passedIds.has(m.person.id),
+        );
         focusAfterAction.current = true; // the buttons go with the closed row; keep the keyboard's place
         setOpenId(next ? next.person.id : null);
       };
@@ -253,6 +270,7 @@ function AskMatches({ askId }: { askId: string }) {
         const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
         setAnnounce(`Passed on ${who}.`);
         setPassedAny(true);
+        setPassedIds((cur) => new Set(cur).add(match.person.id));
         const passedId = match.person.id;
         const apply = (list: MatchResult[]) =>
           withinCutoff(blockerRef.current === false ? list : list.filter((m) => m.person.id !== passedId), cutoff);
@@ -273,7 +291,7 @@ function AskMatches({ askId }: { askId: string }) {
         setBusy(null);
       }
     },
-    [askId, blockerSaving, lockedIds, matches, sentIds],
+    [askId, blockerSaving, lockedIds, matches, passedIds, sentIds],
   );
 
   async function toggleBlocker(enabled: boolean) {
@@ -456,7 +474,7 @@ function AskMatches({ askId }: { askId: string }) {
           <input
             type="checkbox"
             role="switch"
-            checked={blocker ?? true}
+            checked={blocker ?? false}
             aria-disabled={blockerSaving || busy !== null}
             onChange={(e) => void toggleBlocker(e.target.checked)}
             aria-describedby="blocker-hint"
@@ -565,6 +583,8 @@ function AskMatches({ askId }: { askId: string }) {
               {matches.map((m) => {
                 const open = openId === m.person.id;
                 const isSent = sentIds.has(m.person.id);
+                const isPassed = passedIds.has(m.person.id);
+                const note = doneNote(m.person.name, isSent, isPassed);
                 const off = busy !== null || lockedIds.has(m.person.id) || blockerSaving;
                 const panelId = `match-${m.person.id}-panel`;
                 return (
@@ -580,7 +600,7 @@ function AskMatches({ askId }: { askId: string }) {
                       onClick={() => setOpenId(open ? null : m.person.id)}
                       className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                     >
-                      <MatchSummary match={m} sent={isSent} />
+                      <MatchSummary match={m} sent={isSent} passed={isPassed} />
                       <span aria-hidden="true" className={`mt-2 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}>
                         ▾
                       </span>
@@ -588,8 +608,8 @@ function AskMatches({ askId }: { askId: string }) {
                     {open && (
                       <div id={panelId} role="region" aria-labelledby={`match-${m.person.id}-name`} className="border-t-2 border-border px-4 pb-4 pt-4">
                         <MatchDetails match={m} nameId={`match-${m.person.id}-name`} />
-                        {isSent ? (
-                          <p className="mt-4 font-semibold">You sent {m.person.name} your question. They&apos;ll see it in their inbox.</p>
+                        {note ? (
+                          <p className="mt-4 font-semibold">{note}</p>
                         ) : (
                           <div className="mt-5 grid grid-cols-2 gap-3">
                             <Button

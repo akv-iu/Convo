@@ -6,6 +6,7 @@
 import * as fixtures from "@/contracts/fixtures";
 import { routes, type Api } from "@/contracts/routes";
 import { ai } from "@/server/ai";
+import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { config } from "@/server/config";
 import { runMatch } from "@/server/pipeline";
 import { findSlots } from "@/server/schedule/slots";
@@ -69,7 +70,7 @@ export const fake: Api = {
       rawText: body.text,
       refined,
       status: "open",
-      softBlocker: true,
+      softBlocker: false, // new asks start with "Keep people I pass on hidden" off
       createdAt: now(),
     });
     await search.registerAsk(id, userId, refined.text);
@@ -123,7 +124,7 @@ export const fake: Api = {
       fromUserId: userId,
       toPersonId: body.toPersonId,
       question: ask.refined?.text ?? ask.rawText,
-      minutes: ask.refined?.minutes ?? 10,
+      minutes: ask.refined?.minutes ?? MEETING_MINUTES,
       status: "sent" as const,
       reply: null,
       slot: null,

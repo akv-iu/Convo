@@ -31,7 +31,7 @@ test.describe("ask and refine (A1 step 5)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     await expect(page.locator("blockquote")).toContainText("how does Raft do the voting thing:");
     await expect(page.getByText("Learn something")).toBeVisible();
-    await expect(page.getByText("10-minute chat")).toBeVisible();
+    await expect(page.getByText("5-minute chat")).toBeVisible();
     await expect(page.getByText("You wrote:")).toBeVisible();
 
     const href = await page.getByRole("link", { name: "Find people" }).getAttribute("href");
@@ -42,12 +42,12 @@ test.describe("ask and refine (A1 step 5)", () => {
     expect(match.ok()).toBe(true);
   });
 
-  test("a career ask is labelled as one, with a longer chat", async ({ page }) => {
+  test("a career ask is labelled as one, and is a 5-minute chat like every new ask", async ({ page }) => {
     await open(page);
     await box(page).fill("I want a job at Stripe");
     await sharpen(page).click();
     await expect(page.getByText("Career move")).toBeVisible({ timeout: AFTER_SUBMIT });
-    await expect(page.getByText("15-minute chat")).toBeVisible();
+    await expect(page.getByText("5-minute chat")).toBeVisible();
   });
 
   test("too short is explained and nothing is sent", async ({ page }) => {

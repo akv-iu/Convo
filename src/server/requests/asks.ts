@@ -53,7 +53,8 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
 
   const askId = randomUUID();
   try {
-    await db().insert(asks).values({ id: askId, userId, rawText: text, refined });
+    // Set here as well as in the column default, so it doesn't depend on when the migration is applied.
+    await db().insert(asks).values({ id: askId, userId, rawText: text, refined, softBlocker: false });
   } catch {
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }

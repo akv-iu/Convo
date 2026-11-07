@@ -105,6 +105,7 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
 
   it("hides rejected people, batch-hides after three, and the soft blocker switches it off", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: true })); // new asks start with it off
     const first = await api.match(ctx(DEMO_USER_A, { askId }));
     expect(first.length).toBeGreaterThanOrEqual(4);
 
@@ -169,12 +170,19 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(await api.sentRequests(ctx(DEMO_USER_B))).toEqual([]);
   });
 
+  it("with the soft blocker off (the default), a person passed on stays in the matches", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const first = await api.match(ctx(DEMO_USER_A, { askId }));
+    await api.reject(ctx(DEMO_USER_A, { askId, personId: first[0].person.id, rank: 0 }));
+    expect((await api.match(ctx(DEMO_USER_A, { askId }))).map((x) => x.person.id)).toContain(first[0].person.id);
+  });
+
   it("reads back the caller's own ask, including its soft-blocker setting", async () => {
     const { askId, refined } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     expect(routes.getAsk.response.parse(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))))
-      .toMatchObject({ id: askId, userId: DEMO_USER_A, refined, status: "open", softBlocker: true });
-    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: false }));
-    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))).toMatchObject({ softBlocker: false });
+      .toMatchObject({ id: askId, userId: DEMO_USER_A, refined: { ...refined, minutes: 5 }, status: "open", softBlocker: false });
+    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: true }));
+    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))).toMatchObject({ softBlocker: true });
     await expect(api.getAsk(ctx(DEMO_USER_B, undefined, { id: askId }))).rejects.toMatchObject({ status: 404 });
   });
 
