@@ -161,8 +161,21 @@ test.describe("ask and refine (A1 step 5)", () => {
     await open(page);
     await expect(page.getByText("Couldn't load who's looking for you.")).toBeVisible();
     await expect(page.getByTestId("looking-for-you")).toHaveCount(0);
-    await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByTestId("looking-for-you")).toContainText("4 people here");
+    await page.getByRole("button", { name: "Try again" }).focus();
+    await page.keyboard.press("Enter");
+    // Focus stays in the banner, and the new count is in a live region screen readers announce.
+    const banner = page.getByRole("status").filter({ has: page.getByTestId("looking-for-you") });
+    await expect(banner).toContainText("4 people here");
+    await expect(banner).toBeFocused();
+    await expect(banner).toHaveAttribute("aria-live", "polite");
+  });
+
+  test("an expired sign-in on the counter offers sign-in, not a retry that can't work", async ({ page }) => {
+    await page.route("**/api/looking-for-me", (route) => route.fulfill({ status: 401, json: { error: "sign in first" } }));
+    await open(page);
+    await expect(page.getByText("Your sign-in has expired.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
+    await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
   });
 
   for (const scheme of ["light", "dark"] as const) {
