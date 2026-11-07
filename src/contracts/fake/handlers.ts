@@ -11,9 +11,20 @@ import { runMatch } from "@/server/pipeline";
 import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
-import { visibleCard } from "@/server/profile/visibility";
+import type { Request, RequestView } from "@/contracts/types";
+import { visibleCard, visiblePerson } from "@/server/profile/visibility";
 
 const now = () => new Date().toISOString();
+
+/** A request with the other person's badge (their show/hide choices applied) and the ask's type. */
+function withBadge(request: Request, otherId: string): RequestView {
+  const other = store.get().people.get(otherId);
+  return {
+    ...request,
+    type: store.get().asks.get(request.askId)?.refined?.type ?? null,
+    person: other ? visiblePerson(other) : null,
+  };
+}
 
 export const fake: Api = {
   async getMe({ userId }) {
@@ -70,10 +81,13 @@ export const fake: Api = {
     const rejected = store.get().rejections.get(ask.id) ?? [];
     const hiddenBelowRank =
       rejected.length >= config.batchRejectAfter ? Math.max(...rejected.map((r) => r.rank)) : null;
+    const requested = [...store.get().requests.values()].filter((r) => r.askId === ask.id).map((r) => r.toPersonId);
     const matches = await runMatch({
       ask,
       requester: store.person(userId),
-      excludeIds: ask.softBlocker ? rejected.map((r) => r.personId) : [],
+      excludeIds: [],
+      // Ranked, then left out, so everyone else keeps their rank (same as the real API).
+      hideIds: [...(ask.softBlocker ? rejected.map((r) => r.personId) : []), ...requested],
       query: body.query,
       hiddenBelowRank,
     });
@@ -83,7 +97,8 @@ export const fake: Api = {
   async reject({ userId, body }) {
     const ask = store.ask(body.askId, userId);
     const list = store.get().rejections.get(ask.id) ?? [];
-    list.push({ personId: body.personId, rank: body.rank });
+    // One rejection per person per ask: a repeat is not counted again.
+    if (!list.some((r) => r.personId === body.personId)) list.push({ personId: body.personId, rank: body.rank });
     store.get().rejections.set(ask.id, list);
     const hiddenBelowRank = list.length >= config.batchRejectAfter ? Math.max(...list.map((r) => r.rank)) : null;
     return { rejections: list.length, hiddenBelowRank };
@@ -98,6 +113,9 @@ export const fake: Api = {
   async sendRequest({ userId, body }) {
     const ask = store.ask(body.askId, userId);
     store.person(body.toPersonId);
+    // One request per person per ask: a resend returns the saved one.
+    const saved = [...store.get().requests.values()].find((r) => r.askId === ask.id && r.toPersonId === body.toPersonId);
+    if (saved) return saved;
     const id = store.nextId("req");
     const request = {
       id,
@@ -116,7 +134,13 @@ export const fake: Api = {
   },
 
   async inbox({ userId }) {
-    return [...store.get().requests.values()].filter((r) => r.toPersonId === userId).reverse();
+    return [...store.get().requests.values()].filter((r) => r.toPersonId === userId).reverse()
+      .map((r) => withBadge(r, r.fromUserId));
+  },
+
+  async sentRequests({ userId }) {
+    return [...store.get().requests.values()].filter((r) => r.fromUserId === userId).reverse()
+      .map((r) => withBadge(r, r.toPersonId));
   },
 
   async respond({ userId, params, body }) {
@@ -149,6 +173,10 @@ export const fake: Api = {
     request.slot = body.slot;
     request.status = "scheduled";
     return request;
+  },
+
+  async getAsk({ userId, params }) {
+    return store.ask(params.id, userId);
   },
 
   async resolve({ userId, params }) {

@@ -5,9 +5,9 @@
 import type { Api } from "@/contracts/routes";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 import { searchWorkplaces } from "@/server/profile/ror";
-import { createAsk, matchAsk } from "@/server/requests/asks";
+import { createAsk, getAsk, matchAsk } from "@/server/requests/asks";
 import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
-import { sendRequest, getInbox, respondToRequest } from "@/server/requests/messages";
+import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
 
@@ -23,9 +23,11 @@ export const real: Api = {
   setSoftBlocker: ({ userId, body }) => setSoftBlocker(userId, body),
   sendRequest: ({ userId, body }) => sendRequest(userId, body),
   inbox: ({ userId }) => getInbox(userId),
+  sentRequests: ({ userId }) => getSentRequests(userId),
   respond: ({ userId, params, body }) => respondToRequest(userId, params.id, body),
   slots: ({ userId, params }) => getSlots(userId, params.id),
   schedule: ({ userId, params, body }) => bookSlot(userId, params.id, body.slot),
+  getAsk: ({ userId, params }) => getAsk(userId, params.id),
   resolve: ({ userId, params }) => resolveAsk(userId, params.id),
   lookingForMe: ({ userId }) => lookingForMe(userId),
 };

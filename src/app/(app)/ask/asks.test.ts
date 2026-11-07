@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
-import { ASK_MAX, askProblem, lengthLabel, recallAsk, refineFailure, rememberAsk, typeLabel } from "./asks";
+import { ASK_MAX, askProblem, lengthLabel, lookingLabel, recallAsk, refineFailure, rememberAsk, typeLabel } from "./asks";
 
 class MemoryStorage {
   private items = new Map<string, string>();
@@ -90,5 +90,13 @@ describe("remembered asks (this tab only)", () => {
     delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
     expect(() => rememberAsk({ askId: "a1", rawText: "x", refined })).not.toThrow();
     expect(recallAsk("a1")).toBeNull();
+  });
+});
+
+describe("lookingLabel (A1 step 6)", () => {
+  it("words none, one and many", () => {
+    expect(lookingLabel(0)).toEqual({ number: "No one", text: "is asking for someone like you yet. Check back later." });
+    expect(lookingLabel(1)).toEqual({ number: "1", text: "person here is looking for someone like you" });
+    expect(lookingLabel(1234)).toEqual({ number: "1,234", text: "people here are looking for someone like you" });
   });
 });

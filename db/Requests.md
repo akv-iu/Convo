@@ -1,7 +1,7 @@
 # Saved requests, inbox and responses
 
-This B2 slice implements POST `/api/requests`, GET `/api/inbox`, and POST
-`/api/requests/:id/respond`. It uses the existing requests table: no migration,
+This B2 slice implements POST `/api/requests`, GET `/api/inbox`, GET
+`/api/requests/sent`, GET `/api/asks/:id` and POST `/api/requests/:id/respond`. It uses the existing requests table: no migration,
 reset, new dependency or credential change. Test with `FAKE_API=0` and
 `FAKES=search,ai`: Neon is real; search and AI are still fake.
 
@@ -18,16 +18,37 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
 - The inbox contains only requests addressed to the session user, newest first,
   with ID as a deterministic tie-breaker. An empty inbox is `[]`. It does not
   contain outgoing requests unless the sender also addressed themselves.
+- **GET `/api/requests/sent`** is the asker's side: requests the session user
+  sent, newest first, so they can see accept/decline, the receiver's reply and
+  the booked `slot`.
+- Both lists return `RequestView`: the request plus `type` (the ask's type, null
+  if unrefined) and `person`, the **other person's badge**. That's the asker in
+  the inbox and the receiver in sent requests. The badge is a `CardPerson`, with
+  that person's show/hide choices applied (hidden sections are null, the settings
+  themselves aren't returned). Accounts are read from Postgres. People without
+  an account (synthetic) come from one batched search read. A real account found
+  only in search shows nothing, and an unfinished profile gives `person: null`,
+  as does someone who can't be found. An invalid completed profile returns a
+  sanitized 503 instead of a missing badge. If search is down, the list returns 503
+  rather than leaving out badges. Other routes (send, respond, schedule) still
+  return a plain `Request`; keep the badge you already have when you update an
+  item.
+- **GET `/api/asks/:id`** returns the caller's own `Ask` (question, refinement,
+  status, `softBlocker`), so a new tab can show the question and the real
+  switch state. Someone else's ask returns 404.
 - Respond with `{ action: "accept" }`, `{ action: "decline" }`, or
   `{ action: "reply", reply: "..." }`. Status becomes accepted, declined or
   answered. Only the receiver can update it: 403 for anyone else, 404 if missing.
   Authorization is part of the SQL update, not a separate read-then-write check.
 - All three routes require sign-in (401). Invalid bodies return 400. Storage
-  errors return sanitized 503. A failed write can have committed before a network
-  timeout: check the receiver inbox before retrying. A send error includes its
-  generated request ID to help identify that potentially committed write.
-- Frozen fake behavior is preserved: duplicate sends create separate requests;
-  self-send is allowed; changing a response is allowed; accept/decline preserve
+  errors return sanitized 503. A response write can have committed before a
+  network timeout: check the receiver inbox before retrying a response.
+- **One request per person per ask** (unique `ask_id, to_person_id`). Sending
+  again, or retrying after a timeout, returns the request already saved (same
+  ID, current status) instead of a duplicate in the receiver's inbox. Matching
+  leaves out people this ask already sent a request to, while everyone else
+  keeps their rank (see [Rejections.md](Rejections.md)). The fake does the same.
+- Self-send is allowed; changing a response is allowed; accept/decline preserve
   earlier reply text and any slot. No lifecycle restrictions were added here.
   Concurrent responses use the last committed status; only reply actions replace
   the reply field. Avoid automatic POST retries and overlapping UI saves.

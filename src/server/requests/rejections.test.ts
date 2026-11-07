@@ -34,17 +34,26 @@ describe("saved rejections", () => {
 
   it("returns404 without reading exclusions when no owned ask was inserted from", async () => {
     await expect(rejectPerson("other-user", body)).rejects.toMatchObject({ status: 404 });
-    expect(query).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][1].at(-1)).toBe("other-user");
+    expect(query.mock.calls[1][0]).toContain('from "asks" where ("asks"."id" = $1 and "asks"."user_id" = $2)');
+    expect(query.mock.calls[1][1]).toEqual([body.askId, "other-user", 1]);
   });
 
-  it("appends each submission with a fresh ID, matching the frozen fake's duplicate behavior", async () => {
+  it("does not count a repeated rejection of the same person", async () => {
     query.mockResolvedValueOnce({ rows: [["first-id"]] }).mockResolvedValueOnce({ rows: [[body.personId, 2]] })
-      .mockResolvedValueOnce({ rows: [["second-id"]] }).mockResolvedValueOnce({ rows: [[body.personId, 2], [body.personId, 2]] });
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [[body.askId]] })
+      .mockResolvedValueOnce({ rows: [[body.personId, 2]] });
     expect(await rejectPerson("owner", body)).toEqual({ rejections: 1, hiddenBelowRank: null });
-    expect(await rejectPerson("owner", body)).toEqual({ rejections: 2, hiddenBelowRank: null });
-    expect(query.mock.calls[0][1][0]).not.toBe(query.mock.calls[2][1][0]);
-    expect(query.mock.calls.filter(([statement]) => String(statement).startsWith("insert"))).toHaveLength(2);
+    expect(await rejectPerson("owner", body)).toEqual({ rejections: 1, hiddenBelowRank: null });
+    expect(query.mock.calls[0][0]).toContain('on conflict ("ask_id","person_id") do nothing');
+  });
+
+  it("sanitizes a failed owner check after a repeat", async () => {
+    query.mockResolvedValueOnce({ rows: [] }).mockRejectedValueOnce(new Error("private-db-password"));
+    const error = await rejectPerson("owner", body).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-db-password");
   });
 
   it("sanitizes write failures and does not retry a possibly committed rejection", async () => {
@@ -61,7 +70,7 @@ describe("saved rejections", () => {
     const error = await rejectPerson("owner", body).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).toContain("Rejection saved");
-    expect(String(error)).toContain("do not resubmit");
+    expect(String(error)).toContain("never counts twice");
     expect(String(error)).not.toContain("private-db-password");
     expect(query).toHaveBeenCalledTimes(2);
   });

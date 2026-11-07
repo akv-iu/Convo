@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "../../../db";
-import { asks, rejections, users } from "../../../db/schema";
+import { asks, rejections, requests, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
@@ -20,6 +21,21 @@ async function registerSavedAsk(askId: string, userId: string, text: string): Pr
     await search.registerAsk(askId, userId, text);
   } catch {
     console.warn("[asks] Ask saved; search registration failed. A later match will retry.");
+  }
+}
+
+/**
+ * Best effort: runs the ask's first match after the response is sent, while the asker reads the
+ * refined question, so its explanations (about 3 s for ten new cards) are usually cached by the
+ * time the asker opens the results. If the asker is quicker, both runs pay for the same lines.
+ */
+function warmFirstMatch(userId: string, askId: string): void {
+  try {
+    after(() => matchAsk(userId, askId).catch(() => {
+      console.warn("[asks] Background first match failed; the asker's own first match computes it.");
+    }));
+  } catch {
+    // after() throws outside a request (unit tests, scripts), where nothing waits on a response.
   }
 }
 
@@ -42,10 +58,12 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }
   await registerSavedAsk(askId, userId, refined.text);
+  warmFirstMatch(userId, askId);
   return { askId, refined };
 }
 
-export async function matchAsk(userId: string, askId: string, query?: string): Promise<MatchResult[]> {
+/** One of the caller's asks; someone else's ask is reported as missing (404). */
+export async function getAsk(userId: string, askId: string): Promise<Ask> {
   let row: typeof asks.$inferSelect | undefined;
   try {
     [row] = await db().select().from(asks).where(and(eq(asks.id, askId), eq(asks.userId, userId))).limit(1);
@@ -53,14 +71,17 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Ask storage is unavailable. Try again.", 503);
   }
   if (!row) throw new AskError("Ask not found.", 404);
-  let ask: Ask;
   try {
-    ask = Ask.parse({ ...row, createdAt: row.createdAt.toISOString() });
+    return Ask.parse({ ...row, createdAt: row.createdAt.toISOString() });
   } catch {
     throw new AskError("Stored ask is invalid.", 503);
   }
+}
 
-  const [requester, { excludeIds, hiddenBelowRank }, excludedPeople] = await Promise.all([
+export async function matchAsk(userId: string, askId: string, query?: string): Promise<MatchResult[]> {
+  const ask = await getAsk(userId, askId);
+
+  const [requester, { excludeIds: rejectedIds, hiddenBelowRank }, excludedPeople, , requested] = await Promise.all([
     getProfile(userId),
     getExclusions(askId),
     Promise.resolve(db().select({ id: users.id }).from(users)
@@ -72,11 +93,16 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
       .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
     // Replaying the saved ID repairs search without another ask or AI call; failure must not block results.
     ask.status === "open" && ask.refined ? registerSavedAsk(ask.id, ask.userId, ask.refined.text) : undefined,
+    Promise.resolve(db().select({ id: requests.toPersonId }).from(requests).where(eq(requests.askId, askId)))
+      .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
   ]);
   try {
     const matches = await runMatch({
       ask, requester, query,
-      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...excludedPeople.map(person => person.id)],
+      excludeIds: excludedPeople.map(person => person.id),
+      // Ranked, then left out: whoever this ask already passed on (while the blocker is on) or sent a
+      // request to. Ranking them keeps everyone else's rank, so the batch cutoff means the same place.
+      hideIds: [...(ask.softBlocker ? rejectedIds : []), ...requested.map(person => person.id)],
       hiddenBelowRank,
     });
     if (!matches.length) return [];

@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../../db";
 import { asks, requests, users } from "../../../db/schema";
-import { Person, RefinedAsk, Request } from "@/contracts/types";
+import { Person, RefinedAsk, Request, type CardPerson, type ProfileVisibility, type RequestView } from "@/contracts/types";
 import type { RouteBody } from "@/contracts/routes";
+import { toPerson } from "@/server/profile/service";
+import { visiblePerson } from "@/server/profile/visibility";
 import { search } from "@/server/search";
 
 class RequestError extends Error {
@@ -12,6 +14,34 @@ class RequestError extends Error {
 
 function toRequest(row: typeof requests.$inferSelect): Request {
   return Request.parse({ ...row, createdAt: row.createdAt.toISOString() });
+}
+
+const HIDE_ALL: ProfileVisibility = { country: false, workplace: false, hiring: false };
+
+/**
+ * Requests as one side sees them: the other person's badge (their show/hide choices applied) and the
+ * ask's type. Two batched database reads, plus one batched search read for people without an account.
+ */
+async function withBadges(rows: Request[], other: (request: Request) => string): Promise<RequestView[]> {
+  if (!rows.length) return [];
+  const ids = [...new Set(rows.map(other))];
+  const [accounts, asked] = await Promise.all([
+    db().select().from(users).where(inArray(users.id, ids)),
+    db().select({ id: asks.id, refined: asks.refined }).from(asks).where(inArray(asks.id, [...new Set(rows.map((r) => r.askId))])),
+  ]);
+  const people = new Map<string, CardPerson>();
+  for (const user of accounts) {
+    if (user.filters === null) continue;
+    const person = toPerson(user);
+    people.set(person.id, visiblePerson(person));
+  }
+  // Synthetic people exist only in search. A search copy of a real account never decides what's shown.
+  const withoutAccount = ids.filter((id) => !accounts.some((user) => user.id === id));
+  for (const person of await search.getPeople(withoutAccount)) {
+    people.set(person.id, visiblePerson(person, person.synthetic ? person.visibility : HIDE_ALL));
+  }
+  const types = new Map(asked.map((ask) => [ask.id, RefinedAsk.safeParse(ask.refined).data?.type ?? null]));
+  return rows.map((r) => ({ ...r, type: types.get(r.askId) ?? null, person: people.get(other(r)) ?? null }));
 }
 
 export async function sendRequest(userId: string, body: RouteBody<"sendRequest">): Promise<Request> {
@@ -51,22 +81,44 @@ export async function sendRequest(userId: string, body: RouteBody<"sendRequest">
   } catch {
     throw new RequestError("Stored ask is invalid. No request was sent.", 503);
   }
+  let saved: typeof requests.$inferSelect | undefined;
   try {
-    // shortcut: repeated sends create separate requests; add idempotency with a shared contract change.
-    const [saved] = await db().insert(requests).values({ ...value, createdAt: new Date(value.createdAt) }).returning();
+    // One request per person per ask (unique ask/recipient): a resend or a retry after a timeout
+    // returns the request already saved, never a duplicate in the receiver's inbox.
+    [saved] = await db().insert(requests).values({ ...value, createdAt: new Date(value.createdAt) })
+      .onConflictDoNothing({ target: [requests.askId, requests.toPersonId] }).returning();
+    // The ask is the caller's (checked above), so an existing request for it is theirs too.
+    saved ??= (await db().select().from(requests)
+      .where(and(eq(requests.askId, body.askId), eq(requests.toPersonId, body.toPersonId))).limit(1))[0];
+  } catch {
+    saved = undefined;
+  }
+  if (!saved) throw new RequestError("Request save could not be confirmed. Retrying is safe: a saved request is returned, never sent twice.", 503);
+  try {
     return toRequest(saved);
   } catch {
-    throw new RequestError(`Request save could not be confirmed (ID ${value.id}). Ask the receiver to check their inbox before retrying.`, 503);
+    throw new RequestError("Stored request is invalid.", 503);
   }
 }
 
-export async function getInbox(userId: string): Promise<Request[]> {
+export async function getInbox(userId: string): Promise<RequestView[]> {
   try {
     const rows = await db().select().from(requests).where(eq(requests.toPersonId, userId))
       .orderBy(desc(requests.createdAt), desc(requests.id));
-    return rows.map(toRequest);
+    return await withBadges(rows.map(toRequest), (request) => request.fromUserId);
   } catch {
     throw new RequestError("Inbox storage is unavailable. Try again.", 503);
+  }
+}
+
+/** What the asker needs to see after sending: each receiver's badge, status, reply and booked time. */
+export async function getSentRequests(userId: string): Promise<RequestView[]> {
+  try {
+    const rows = await db().select().from(requests).where(eq(requests.fromUserId, userId))
+      .orderBy(desc(requests.createdAt), desc(requests.id));
+    return await withBadges(rows.map(toRequest), (request) => request.toPersonId);
+  } catch {
+    throw new RequestError("Sent requests are unavailable. Try again.", 503);
   }
 }
 

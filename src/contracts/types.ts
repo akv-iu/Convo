@@ -57,9 +57,11 @@ export const Person = z.object({
 });
 export type Person = z.infer<typeof Person>;
 
+/** A person as other people see them: sections they hid are null. */
 export const CardPerson = Person.extend({
   filters: HardFilters.extend({ country: z.string().length(2).nullable(), hiring: z.boolean().nullable() }),
 });
+export type CardPerson = z.infer<typeof CardPerson>;
 
 export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract"]);
 
@@ -94,7 +96,10 @@ export type Ask = z.infer<typeof Ask>;
 
 export const MatchResult = z.object({
   person: CardPerson,
-  /** Exact evidence snippets behind the match, for the card. */
+  /**
+   * Exact evidence snippets behind the match, for the card. Matched words are wrapped in
+   * <em>…</em>; render everything as text and treat only those two tags as marks.
+   */
   highlights: z.array(z.string()),
   /** Hard-filter badges, e.g. "not hiring". */
   badges: z.array(z.string()),
@@ -103,6 +108,10 @@ export const MatchResult = z.object({
   /** One "why this person" line. */
   explanation: z.string(),
   score: z.number(),
+  /**
+   * Place in this ask's ranking. People already rejected or sent a request keep their place but
+   * aren't returned, so ranks stay the same across refreshes and can have gaps.
+   */
   rank: z.number().int().nonnegative(),
 });
 export type MatchResult = z.infer<typeof MatchResult>;
@@ -124,6 +133,18 @@ export const Request = z.object({
   createdAt: z.iso.datetime({ offset: true }),
 });
 export type Request = z.infer<typeof Request>;
+
+/** A request as it appears in the inbox or sent list: with the other person's badge and the ask's type. */
+export const RequestView = Request.extend({
+  /** What kind of conversation it is; null for an ask that was never refined. */
+  type: AskType.nullable(),
+  /**
+   * The other person's badge, with their show/hide choices applied: the asker in the inbox,
+   * the receiver in sent requests. Null if that profile can't be found any more.
+   */
+  person: CardPerson.nullable(),
+});
+export type RequestView = z.infer<typeof RequestView>;
 
 export const RorMatch = z.object({
   id: z.string(),
