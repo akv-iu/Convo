@@ -10,6 +10,11 @@
  * matches (the server leaves out whoever was saved as passed). After three
  * passes the server may hide everyone ranked below them; the deck follows
  * the returned cutoff.
+ *
+ * A2 step 3: the soft-blocker switch (PUT /api/soft-blocker). On, people
+ * passed on for this ask stay hidden here (and, on the real backend, this
+ * user is hidden from them); off brings them back. The batch cutoff stays
+ * either way. Changing it reloads the matches.
  */
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
@@ -17,7 +22,18 @@ import { Button } from "@/components/ui/button";
 import type { MatchResult } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
 import { MatchCard } from "./match-card";
-import { matchFailure, passFailure, sendFailure, swipeOutcome, withinCutoff, type Failure, type Swipe } from "./matches";
+import {
+  blockerFailure,
+  matchFailure,
+  passFailure,
+  recallBlocker,
+  rememberBlocker,
+  sendFailure,
+  swipeOutcome,
+  withinCutoff,
+  type Failure,
+  type Swipe,
+} from "./matches";
 
 const headingClass =
   "text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl";
@@ -50,10 +66,21 @@ export function MatchesView() {
   const [cutoffNote, setCutoffNote] = useState(false);
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
+  /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
+  const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
+  /** null: not saved from this tab, so the screen can't know (there's no route to read it back yet). */
+  const [blocker, setBlocker] = useState<boolean | null>(null);
+  const blockerRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    blockerRef.current = blocker;
+  }, [blocker]);
+  const [blockerSaving, setBlockerSaving] = useState(false);
+  const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
 
   useEffect(() => {
     if (!askId) return;
+    deckGen.current++;
     let live = true;
     void (async () => {
       try {
@@ -64,8 +91,9 @@ export function MatchesView() {
         });
         const body = await res.json().catch(() => null);
         if (!live) return;
-        // The question text comes from this tab's copy (there's no route to read an ask back).
+        // The question and switch come from this tab's copies (there's no route to read an ask back).
         setQuestion(recallAsk(askId)?.refined.text ?? null);
+        setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setIndex(0);
@@ -93,12 +121,13 @@ export function MatchesView() {
 
   const act = useCallback(
     async (kind: "pass" | "send") => {
-      if (!current || busyRef.current || passLocked) return;
+      if (!current || busyRef.current || passLocked || blockerSaving) return;
       busyRef.current = true;
       setBusy(kind);
       setActionFailure(null);
       setDx(0); // the card goes back at once instead of waiting off to the side for the save
       const who = current.person.name;
+      const gen = deckGen.current;
       try {
         const res =
           kind === "pass"
@@ -113,9 +142,34 @@ export function MatchesView() {
                 body: JSON.stringify({ askId, toPersonId: current.person.id }),
               });
         const body = await res.json().catch(() => null);
+        // If the deck reloaded meanwhile (Search, Refresh or the switch), only the deck stays as it is:
+        // the result, a failure, and who was sent the ask still count.
+        const stale = deckGen.current !== gen;
         if (!res.ok) {
-          setActionFailure(kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body));
-          if (kind === "pass") setPassLocked(true);
+          const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
+          if (stale) {
+            // The card on screen is from the new deck: say who this was for, and leave that card usable.
+            setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+          } else {
+            setActionFailure(failure);
+            if (kind === "pass") setPassLocked(true);
+          }
+          return;
+        }
+        if (stale) {
+          if (kind === "send") {
+            setSent((s) => [...s, who]);
+          } else {
+            // The reload may have been answered before this pass was saved: apply it to the new deck too.
+            const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
+            const passedId = current.person.id;
+            setLoad((cur) => {
+              if (cur.state !== "ready") return cur;
+              const left = blockerRef.current === false ? cur.matches : cur.matches.filter((m) => m.person.id !== passedId);
+              return { state: "ready", matches: withinCutoff(left, cutoff) };
+            });
+          }
+          setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
           return;
         }
         if (kind === "send") {
@@ -137,14 +191,19 @@ export function MatchesView() {
           }
         }
       } catch {
-        setActionFailure(kind === "pass" ? passFailure(0, null) : sendFailure(0, null));
-        if (kind === "pass") setPassLocked(true);
+        const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
+        if (deckGen.current !== gen) {
+          setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+        } else {
+          setActionFailure(failure);
+          if (kind === "pass") setPassLocked(true);
+        }
       } finally {
         busyRef.current = false;
         setBusy(null);
       }
     },
-    [askId, current, matches, passLocked],
+    [askId, blockerSaving, current, matches, passLocked],
   );
 
   // ← passes and → sends, unless the user is typing somewhere.
@@ -180,6 +239,34 @@ export function MatchesView() {
     const outcome: Swipe = swipeOutcome(dx);
     if (outcome) void act(outcome);
     else setDx(0);
+  }
+
+  async function toggleBlocker(enabled: boolean) {
+    // One change at a time, and not while a pass or send is saving.
+    if (blockerSaving || busyRef.current) return;
+    setBlockerSaving(true);
+    setBlockerFailed(null);
+    try {
+      const res = await fetch("/api/soft-blocker", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ askId, enabled }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setBlockerFailed(blockerFailure(res.status, body));
+        return;
+      }
+      const saved = (body as { enabled: boolean }).enabled;
+      setBlocker(saved);
+      rememberBlocker(askId, saved);
+      setAnnounce(saved ? "People you passed on are hidden." : "People you passed on are back in the list.");
+      refresh();
+    } catch {
+      setBlockerFailed(blockerFailure(0, null));
+    } finally {
+      setBlockerSaving(false);
+    }
   }
 
   function onSearch(e: FormEvent<HTMLFormElement>) {
@@ -254,6 +341,46 @@ export function MatchesView() {
           </button>
         </p>
       )}
+
+      <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
+        <label className="flex min-h-11 cursor-pointer items-center gap-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-accent">
+          <span className="flex-1 font-semibold">Keep people I pass on hidden</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={blocker ?? true}
+            aria-disabled={blockerSaving || busy !== null}
+            // While unknown, the first press confirms the default (on) rather than turning it off.
+            onChange={(e) => void toggleBlocker(blocker === null ? true : e.target.checked)}
+            aria-describedby="blocker-hint"
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden="true"
+            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-aria-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
+          />
+        </label>
+        <p id="blocker-hint" className="mt-1 text-sm text-muted">
+          {blocker === null
+            ? "New questions start with this on. If you changed it in another tab, press to confirm it's on."
+            : blocker
+              ? "On: people you passed on stay out of this list, and you're kept out of theirs."
+              : "Off: people you passed on can show up again."}
+        </p>
+        {blockerFailed && (
+          <p role="alert" className={`mt-2 ${errorClass}`}>
+            {blockerFailed.message}
+            {blockerFailed.action && (
+              <>
+                {" "}
+                <a href={blockerFailed.action.href} className="underline underline-offset-4">
+                  {blockerFailed.action.label}
+                </a>
+              </>
+            )}
+          </p>
+        )}
+      </div>
 
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
@@ -337,7 +464,7 @@ export function MatchesView() {
               <Button
                 variant="secondary"
                 onClick={() => void act("pass")}
-                aria-disabled={busy !== null || passLocked}
+                aria-disabled={busy !== null || passLocked || blockerSaving}
                 className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
               >
                 <span aria-hidden="true">←&nbsp;</span>
@@ -345,7 +472,7 @@ export function MatchesView() {
               </Button>
               <Button
                 onClick={() => void act("send")}
-                aria-disabled={busy !== null || passLocked}
+                aria-disabled={busy !== null || passLocked || blockerSaving}
                 className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
               >
                 {busy === "send" ? "Sending…" : "Send request"}

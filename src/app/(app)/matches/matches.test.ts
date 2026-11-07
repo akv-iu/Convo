@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { MatchResult } from "@/contracts/types";
 import {
   badgeLabels,
+  blockerFailure,
   cardColour,
   highlightParts,
   matchFailure,
   passFailure,
+  recallBlocker,
+  rememberBlocker,
   sendFailure,
   SWIPE_DISTANCE,
   swipeOutcome,
@@ -113,5 +116,45 @@ describe("failures", () => {
     expect(sendFailure(404, null).message).toMatch(/isn't available/);
     expect(sendFailure(401, null).action?.label).toBe("Sign in again");
     expect(sendFailure(503, null).message).toMatch(/may not have been sent/);
+  });
+});
+
+describe("soft blocker (A2 step 3)", () => {
+  class MemoryStorage {
+    private items = new Map<string, string>();
+    getItem(k: string) {
+      return this.items.get(k) ?? null;
+    }
+    setItem(k: string, v: string) {
+      this.items.set(k, v);
+    }
+  }
+  beforeEach(() => {
+    (globalThis as { sessionStorage?: unknown }).sessionStorage = new MemoryStorage();
+  });
+  afterEach(() => {
+    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+  });
+
+  it("is unknown until this tab saves it, then remembers it per ask", () => {
+    expect(recallBlocker("a1")).toBeNull();
+    rememberBlocker("a1", false);
+    rememberBlocker("a2", true);
+    expect(recallBlocker("a1")).toBe(false);
+    expect(recallBlocker("a2")).toBe(true);
+  });
+
+  it("is unknown with broken or missing storage", () => {
+    sessionStorage.setItem("convo_soft_blocker", "{broken");
+    expect(recallBlocker("a1")).toBeNull();
+    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    expect(() => rememberBlocker("a1", false)).not.toThrow();
+    expect(recallBlocker("a1")).toBeNull();
+  });
+
+  it("explains a failed save", () => {
+    expect(blockerFailure(401, null).action?.label).toBe("Sign in again");
+    expect(blockerFailure(404, null).action?.href).toBe("/ask");
+    expect(blockerFailure(503, null).message).toMatch(/wasn't saved/);
   });
 });

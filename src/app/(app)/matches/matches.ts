@@ -106,3 +106,39 @@ export function sendFailure(status: number, body: unknown): Failure {
 export function withinCutoff(matches: MatchResult[], hiddenBelowRank: number | null): MatchResult[] {
   return hiddenBelowRank === null ? matches : matches.filter((m) => m.rank < hiddenBelowRank);
 }
+
+/** A failed PUT /api/soft-blocker. Safe to repeat, so the user can just try again. */
+export function blockerFailure(status: number, body: unknown): Failure {
+  if (status === 401) return { message: "Your sign-in has expired.", action: signIn };
+  if (status === 404) return { message: "That question isn't yours or no longer exists.", action: { label: "Ask a question", href: "/ask" } };
+  return { message: serverMessage(body) ?? "That setting wasn't saved. Try again.", action: null };
+}
+
+const BLOCKER_KEY = "convo_soft_blocker";
+
+function readBlockers(): Record<string, unknown> {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(BLOCKER_KEY) ?? "{}");
+    return typeof saved === "object" && saved !== null ? (saved as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The soft blocker's last saved value for an ask, as this tab saved it, or
+ * null when this tab hasn't: there's no route to read it back yet, so the
+ * screen mustn't claim to know. New asks start with it on.
+ */
+export function recallBlocker(askId: string): boolean | null {
+  const value = readBlockers()[askId];
+  return typeof value === "boolean" ? value : null;
+}
+
+export function rememberBlocker(askId: string, enabled: boolean): void {
+  try {
+    sessionStorage.setItem(BLOCKER_KEY, JSON.stringify({ ...readBlockers(), [askId]: enabled }));
+  } catch {
+    // Storage unavailable: the switch shows the default next time.
+  }
+}
