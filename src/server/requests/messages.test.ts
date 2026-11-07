@@ -93,15 +93,27 @@ describe("saved outgoing requests", () => {
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-service-secret");
     expect(query.mock.calls.filter(([sql]) => String(sql).startsWith("insert"))).toHaveLength(stage === "insert" ? 1 : 0);
-    if (stage === "insert") expect(String(error)).toContain("check their inbox before retrying");
+    if (stage === "insert") expect(String(error)).toContain("Retrying is safe");
   });
 
-  it("creates distinct IDs on repeated sends, matching the frozen fake", async () => {
-    ownedAsk(); recipient(); save();
+  it("returns the saved request on a repeated send instead of creating a duplicate", async () => {
     ownedAsk(); recipient(); save();
     const first = await sendRequest("sender", body);
+    ownedAsk(); recipient();
+    query.mockResolvedValueOnce({ rows: [] }) // unique ask/recipient: nothing inserted
+      .mockResolvedValueOnce({ rows: [query.mock.calls[2][1]] }); // the saved row, in column order
     const second = await sendRequest("sender", body);
-    expect(first.id).not.toBe(second.id);
+    expect(second).toEqual(first);
+    expect(query.mock.calls[2][0]).toContain('on conflict ("ask_id","to_person_id") do nothing');
+    expect(query.mock.calls[6][0]).toContain('where ("requests"."ask_id" = $1 and "requests"."to_person_id" = $2)');
+    expect(query.mock.calls[6][1]).toEqual([body.askId, body.toPersonId, 1]);
+  });
+
+  it("reports an unconfirmed save when neither a new nor a saved request comes back", async () => {
+    ownedAsk(); recipient();
+    const error = await sendRequest("sender", body).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).toContain("Retrying is safe");
   });
 });
 afterEach(() => {

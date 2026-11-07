@@ -23,11 +23,14 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
   answered. Only the receiver can update it: 403 for anyone else, 404 if missing.
   Authorization is part of the SQL update, not a separate read-then-write check.
 - All three routes require sign-in (401). Invalid bodies return 400. Storage
-  errors return sanitized 503. A failed write can have committed before a network
-  timeout: check the receiver inbox before retrying. A send error includes its
-  generated request ID to help identify that potentially committed write.
-- Frozen fake behavior is preserved: duplicate sends create separate requests;
-  self-send is allowed; changing a response is allowed; accept/decline preserve
+  errors return sanitized 503. A response write can have committed before a
+  network timeout: check the receiver inbox before retrying a response.
+- **One request per person per ask** (unique `ask_id, to_person_id`). Sending
+  again, or retrying after a timeout, returns the request already saved (same
+  ID, current status) instead of a duplicate in the receiver's inbox. Matching
+  leaves out people this ask already sent a request to, while everyone else
+  keeps their rank (see [Rejections.md](Rejections.md)). The fake does the same.
+- Self-send is allowed; changing a response is allowed; accept/decline preserve
   earlier reply text and any slot. No lifecycle restrictions were added here.
   Concurrent responses use the last committed status; only reply actions replace
   the reply field. Avoid automatic POST retries and overlapping UI saves.

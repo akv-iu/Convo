@@ -175,7 +175,7 @@ describe("searchCandidates", () => {
       expect(child.standard.query.bool.should).toEqual([{ range: { free_times: { gte: slot.start, lt: slot.end, relation: "intersects", boost: 0.5 } } }]);
     }
     expect(results.map((r) => [r.person.id, r.score, r.highlights])).toEqual([
-      [DEMO_USER_B, 5, ["Maintains pkg/scheduler: Preemption picks victims", "KubeCon talk"]],
+      [DEMO_USER_B, 5, ["Maintains pkg/scheduler: Preemption picks <em>victims</em>", "KubeCon talk"]],
       ["p_002", 2.5, ["Bio text"]],
     ]);
   });
