@@ -95,6 +95,14 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     }
   });
 
+  it("lists each match's evidence, best first, with only https links", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const results = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId })));
+    expect(results.every((r) => r.evidence.length <= 5 && r.evidence.every((e) => !e.url || e.url.startsWith("https://")))).toBe(true);
+    const b = results.find((r) => r.person.id === DEMO_USER_B);
+    expect(b?.evidence[0]).toMatchObject({ kind: "commit_area", url: expect.stringMatching(/^https:\/\/github\.com\//) });
+  });
+
   it("marks mutual interest and counts who is looking for you", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const results = await api.match(ctx(DEMO_USER_A, { askId }));

@@ -30,7 +30,14 @@ Production stays in fake mode until the integration checkpoint.
 - `/api/match` accepts `{ askId, query? }`, loads the owned ask and current
   profile, reads its persisted rejections, and calls the existing four-span
   pipeline. Matches conform to the frozen schema, including highlights,
-  explanation, rank, badges and mutual-interest flag. The optional query is
+  explanation, rank, badges and mutual-interest flag. Each match also carries
+  `evidence: { kind, title, url? }[]`: the person's distinct evidence in the
+  search's order, at most five. Only `https://` links are kept; a document with
+  any other link, or none, keeps its title without one. Elasticsearch reads
+  `url` with the hits it already fetches (no extra calls), and the generated
+  `profile` document is left out. Because search collapses to one hit per
+  person in each retriever, a real match usually lists one or two items. The
+  explain step never sees evidence links, so its cache keys are unchanged. The optional query is
   passed to B1's pipeline; it does not modify the saved question.
 - Missing asks and asks owned by another user both return 404. Signed-out calls
   return 401. Storage, invalid provider replies and pipeline failures return

@@ -18,7 +18,7 @@ const reply = (value: unknown, extra: object = {}) => ({
   id: "resp_1", model: "gpt-5.4-mini-2026-03-17", status: "completed", output_text: JSON.stringify(value),
   usage: { input_tokens: 120, output_tokens: 30 }, ...extra,
 });
-const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, score: 1 });
+const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, evidence: [], score: 1 });
 const statements = (verb: "select" | "insert") =>
   query.mock.calls.filter(([text]) => String(text).toLowerCase().startsWith(verb));
 /** The cache holds these values for the first keys a lookup asks for, in order. */
