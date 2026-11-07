@@ -1,5 +1,6 @@
 import type { AskType } from "@/contracts/types";
 import type { AiService } from "./index";
+import { AskBlockedError } from "./blocked";
 
 function classify(text: string): AskType {
   const t = text.toLowerCase();
@@ -12,6 +13,8 @@ function classify(text: string): AskType {
 /** Deterministic stand-in for the model; tests and the fake API rely on it costing nothing. */
 export const cannedAi: AiService = {
   async refineAsk(rawText) {
+    // Stands in for moderation, so the blocked-ask screen can be built with the fake API.
+    if (/\bidiot\b/i.test(rawText)) throw new AskBlockedError();
     const type = classify(rawText);
     const trimmed = rawText.trim().replace(/[.?!]+$/, "");
     const text =
