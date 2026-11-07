@@ -1,6 +1,6 @@
 # How risky a Convo change is
 
-Two people merge into one app in three days; the risk label tells the reviewer where to spend attention.
+Each person ships features end to end and merges their own PRs, so the risk label tells the author, and the other person when their approval is needed, where to spend attention. Some High-risk changes also need that approval; see `.gitar/rules/needs-approval.md`.
 
 ## High risk
 
