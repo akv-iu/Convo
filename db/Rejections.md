@@ -1,8 +1,11 @@
 # Saved rejections and soft blocker
 
 This B2 slice implements POST `/api/rejections` and PUT `/api/soft-blocker`.
-It uses the existing tables; no migration, reset, dependency or credential change
-is needed. Local testing uses `FAKE_API=0`, `FAKES=search,ai`. Neon is real;
+Apply migration `0004_match_integrity.sql` before deploying the idempotent writes.
+It removes repeated ask/person pairs, keeping the earliest `created_at` then ID,
+and adds the unique indexes. Later duplicate requests (including their replies or
+bookings) are removed, so review existing duplicates before applying it.
+No new dependency or credential is needed. Local testing uses `FAKE_API=0`, `FAKES=search,ai`. Neon is real;
 search and AI remain fake. Production remains in fake mode until integration.
 
 ## Frontend handoff
