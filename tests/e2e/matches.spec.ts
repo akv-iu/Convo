@@ -324,6 +324,61 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(1)).toBeFocused();
   });
 
+  test("passing everyone on a short list ends with \"That's everyone\", See them again, and focus on it", async ({ page, isMobile }) => {
+    // Two people, no sends and no cutoff (fewer than three passes).
+    await savedAsk(page, "made-up");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
+    await open(page, "made-up");
+    for (const name of ["Person 1", "Person 2"]) {
+      await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(name);
+      if (isMobile) await passButton(page).click();
+      else {
+        await passButton(page).focus();
+        await page.keyboard.press("Enter");
+      }
+    }
+    await expect(rows(page)).toHaveCount(0);
+    const done = list(page).getByRole("heading", { level: 2 });
+    await expect(done).toHaveText("That's everyone for now");
+    await expect(list(page)).toContainText("You passed on everyone Lanyard found.");
+    await expect(page.getByRole("button", { name: "See them again" })).toBeVisible();
+    // The Pass button went with the list; the keyboard lands on the end panel, not the page body.
+    if (!isMobile) await expect(done).toBeFocused();
+  });
+
+  test("a second failed pass keeps the first person locked too, until Refresh matches", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let passes = 0;
+    let sends = 0;
+    await page.route("**/api/rejections", (route) => {
+      passes++;
+      return route.fulfill({ status: 503, json: { error: "Rejection saved, but the count could not be read. Do not resubmit." } });
+    });
+    await page.route("**/api/requests", (route) => {
+      sends++;
+      return route.fulfill({ json: { id: "r-locked" } });
+    });
+    await open(page, "made-up");
+    await passButton(page).click(); // Person 1's pass fails
+    await expect(alertWithText(page)).toContainText("Person 1");
+    await rows(page).nth(1).click();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await passButton(page).click(); // and so does Person 2's
+    await expect(alertWithText(page)).toContainText("Person 2");
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    // Back to Person 1: still locked, and presses send nothing.
+    await rows(page).nth(0).click();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(sendButton(page)).toHaveAttribute("aria-disabled", "true");
+    await passButton(page).click({ force: true });
+    await sendButton(page).click({ force: true });
+    await page.waitForTimeout(500);
+    expect(passes).toBe(2);
+    expect(sends).toBe(0);
+  });
+
   test("evidence with angle brackets is shown as written", async ({ page }) => {
     const [one] = fakeMatches(1);
     await page.route("**/api/match", (route) =>

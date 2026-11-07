@@ -26,6 +26,9 @@ const LILAC = "rgb(196, 181, 253)";
 const CORAL = "rgb(255, 163, 138)";
 const visibilitySwitch = (page: Page, name: string) =>
   page.getByRole("group", { name: "Show on your badge" }).getByRole("switch", { name });
+/** The visible row a person taps (the input itself is visually hidden), so the click is hit-tested like a real tap. */
+const switchRow = (page: Page, name: string) =>
+  page.getByRole("group", { name: "Show on your badge" }).locator("label").filter({ has: page.getByRole("switch", { name }) });
 
 /** Leave step 1's answers in this tab, as step 1 would, then open step 2. */
 async function openWithDraft(page: Page, person: string, draft: object = { name: "Ada Lovelace", country: "GB", workplace: { kind: "org", org: OXFORD } }) {
@@ -131,9 +134,9 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
     const before = await stored(page, person);
     await expect(visibilitySwitch(page, "Country")).toBeChecked();
-    // Clicked directly: on a phone the sticky Continue bar can sit over the lowest switch.
-    await visibilitySwitch(page, "Country").dispatchEvent("click");
-    await visibilitySwitch(page, "Hiring status").dispatchEvent("click");
+    await switchRow(page, "Country").click();
+    await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
+    await switchRow(page, "Hiring status").click();
     await expect(visibilitySwitch(page, "Hiring status")).not.toBeChecked();
     await expect(page.getByRole("group", { name: "Show on your badge" })).toContainText("Hidden");
 
@@ -237,7 +240,7 @@ test.describe("your badge (step 2)", () => {
     await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
     await expect(badge).not.toContainText("United Kingdom");
     // The switch beside the badge brings a hidden line back.
-    await visibilitySwitch(page, "Workplace").dispatchEvent("click");
+    await switchRow(page, "Workplace").click();
     await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
     await expect(badge).toContainText("University of Oxford");
     // The colour picker and the switches sit with the badge, in one section.

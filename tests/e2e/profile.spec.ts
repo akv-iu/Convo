@@ -59,11 +59,12 @@ test.describe("your details (step 4)", () => {
     const preview = page.getByTestId("seen-preview");
     const me = await stored(page, person);
     await expect(preview).toContainText(me.name);
-    const country = page.getByRole("group", { name: "Show in your row" }).getByRole("switch", { name: "Country" });
+    const row = page.getByRole("group", { name: "Show in your row" });
+    const country = row.getByRole("switch", { name: "Country" });
     await expect(country).toBeChecked();
     const shown = await preview.textContent();
     const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
-    await country.dispatchEvent("click");
+    await row.locator("label").filter({ has: page.getByRole("switch", { name: "Country" }) }).click(); // the visible row, hit-tested like a tap
     expect((await saving).postDataJSON()).toEqual({ visibility: { ...all, country: false } });
     await expect(country).not.toBeChecked();
     await expect.poll(() => preview.textContent()).not.toBe(shown);

@@ -66,17 +66,27 @@ function AskMatches({ askId }: { askId: string }) {
   useEffect(() => {
     if (!focusAfterAction.current) return;
     focusAfterAction.current = false;
-    const target = openId ? document.getElementById(`match-${openId}-toggle`) : document.getElementById("matches-count");
+    // With no one left, the count goes too, so land on the end panel's heading.
+    const target = openId
+      ? document.getElementById(`match-${openId}-toggle`)
+      : (document.getElementById("matches-count") ?? document.getElementById("matches-done"));
     target?.focus();
   }, [openId]);
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
   const [actionFailure, setActionFailure] = useState<Failure | null>(null);
   /**
-   * The person whose pass failed: the server may have saved it, and every
+   * Everyone whose pass failed: the server may have saved it, and every
    * pass counts (three hide the rest), so their actions stay off until
-   * Refresh matches shows what was saved.
+   * Refresh matches shows what was saved. A second failure adds to the set;
+   * only a successful reload clears it.
    */
-  const [lockedId, setLockedId] = useState<string | null>(null);
+  const [lockedIds, setLockedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const lock = (id: string) => setLockedIds((cur) => new Set(cur).add(id));
+  /**
+   * Set by a successful pass: an emptied list then means "you've seen everyone",
+   * not "no one matches". A new search starts a new list, so it clears this.
+   */
+  const [passedAny, setPassedAny] = useState(false);
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
   const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
@@ -156,7 +166,7 @@ function AskMatches({ askId }: { askId: string }) {
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setOpenId(null);
-        setLockedId(null);
+        setLockedIds(new Set());
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
       }
@@ -170,6 +180,21 @@ function AskMatches({ askId }: { askId: string }) {
   const sentIds = useMemo(() => new Set(sent.flatMap((r) => (r.person ? [r.person.id] : [r.toPersonId]))), [sent]);
   /** Nobody left to answer: the list is empty, or everyone still in it has your request. */
   const allDone = matches.every((m) => sentIds.has(m.person.id));
+  /** The list was emptied by you (sends, passes or the cutoff), not by a lack of people. */
+  const reviewed = sent.length > 0 || cutoffNote || passedAny;
+
+  /** What the end panel says under its heading. */
+  function endNote() {
+    if (sent.length > 0) {
+      const names = sent.map((request) => request.person?.name ?? "someone at the conference").join(", ");
+      return `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${names}. They'll see your question in their inbox.`;
+    }
+    if (passedAny) {
+      const hint = blocker === false ? "" : " To see them again, turn off “Keep people I pass on hidden”.";
+      return `You passed on everyone Lanyard found.${hint}`;
+    }
+    return applied ? "Try a different search, or show everyone." : "Try asking it another way, or check back as more people join.";
+  }
 
   // Reloading while a pass or send is saving would let that save land on the new list,
   // so every reload (Refresh, Search, Show everyone, See them again) waits for it.
@@ -182,7 +207,7 @@ function AskMatches({ askId }: { askId: string }) {
 
   const act = useCallback(
     async (kind: "pass" | "send", match: MatchResult) => {
-      if (busyRef.current || lockedId === match.person.id || blockerSaving) return;
+      if (busyRef.current || lockedIds.has(match.person.id) || blockerSaving) return;
       busyRef.current = true;
       setBusy(kind);
       setActionFailure(null);
@@ -214,7 +239,7 @@ function AskMatches({ askId }: { askId: string }) {
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
           setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
-          if (kind === "pass" && !stale) setLockedId(match.person.id);
+          if (kind === "pass" && !stale) lock(match.person.id);
           return;
         }
         if (kind === "send") {
@@ -227,6 +252,7 @@ function AskMatches({ askId }: { askId: string }) {
         // A pass: they leave the list (unless the switch is off), and the server's cutoff may hide more.
         const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
         setAnnounce(`Passed on ${who}.`);
+        setPassedAny(true);
         const passedId = match.person.id;
         const apply = (list: MatchResult[]) =>
           withinCutoff(blockerRef.current === false ? list : list.filter((m) => m.person.id !== passedId), cutoff);
@@ -241,13 +267,13 @@ function AskMatches({ askId }: { askId: string }) {
       } catch {
         const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
         setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
-        if (kind === "pass" && deckGen.current === gen) setLockedId(match.person.id);
+        if (kind === "pass" && deckGen.current === gen) lock(match.person.id);
       } finally {
         busyRef.current = false;
         setBusy(null);
       }
     },
-    [askId, blockerSaving, lockedId, matches, sentIds],
+    [askId, blockerSaving, lockedIds, matches, sentIds],
   );
 
   async function toggleBlocker(enabled: boolean) {
@@ -301,6 +327,7 @@ function AskMatches({ askId }: { askId: string }) {
     e.preventDefault();
     if (busyRef.current) return;
     setCutoffNote(false);
+    setPassedAny(false);
     setLoad({ state: "loading" });
     setApplied(query.trim());
     setAttempt((n) => n + 1); // reload even when the query didn't change
@@ -409,6 +436,7 @@ function AskMatches({ askId }: { askId: string }) {
               if (busyRef.current) return;
               setQuery("");
               setCutoffNote(false);
+              setPassedAny(false);
               setLoad({ state: "loading" });
               setApplied("");
               setAttempt((n) => n + 1);
@@ -537,7 +565,7 @@ function AskMatches({ askId }: { askId: string }) {
               {matches.map((m) => {
                 const open = openId === m.person.id;
                 const isSent = sentIds.has(m.person.id);
-                const off = busy !== null || lockedId === m.person.id || blockerSaving;
+                const off = busy !== null || lockedIds.has(m.person.id) || blockerSaving;
                 const panelId = `match-${m.person.id}-panel`;
                 return (
                   <li
@@ -592,24 +620,18 @@ function AskMatches({ askId }: { askId: string }) {
 
         {load.state === "ready" && allDone && (
           <div className={`rounded-2xl border-2 border-border bg-surface p-6 ${matches.length > 0 ? "mt-4" : ""}`}>
-            <h2 className="text-2xl font-extrabold tracking-tight">
-              {sent.length > 0 || cutoffNote ? "That's everyone for now" : "No one matches yet"}
+            <h2 id="matches-done" tabIndex={-1} className="text-2xl font-extrabold tracking-tight focus:outline-none">
+              {reviewed ? "That's everyone for now" : "No one matches yet"}
             </h2>
             {cutoffNote && (
               <p className="mt-2 font-medium">
                 You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
               </p>
             )}
-            <p className="mt-2 text-muted">
-              {sent.length > 0
-                ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.map(request => request.person?.name ?? "someone at the conference").join(", ")}. They'll see your question in their inbox.`
-                : applied
-                  ? "Try a different search, or show everyone."
-                  : "Try asking it another way, or check back as more people join."}
-            </p>
+            <p className="mt-2 text-muted">{endNote()}</p>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <Button href="/ask">Ask something else</Button>
-              {(sent.length > 0 || cutoffNote) && (
+              {reviewed && (
                 <Button variant="secondary" onClick={refresh}>
                   See them again
                 </Button>
