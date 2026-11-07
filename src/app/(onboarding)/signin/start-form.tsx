@@ -226,7 +226,7 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
                     {consentSources.map((c) => (
                       <label
                         key={c.id}
-                        className="flex min-h-12 cursor-pointer items-center gap-3 rounded-lg px-1 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
+                        className="grid min-h-12 cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 rounded-lg px-1 py-1 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
                       >
                         <input
                           type="checkbox"
@@ -242,13 +242,12 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
                             })
                           }
                           aria-describedby={`consent-${c.id}-hint`}
-                          className="size-5 shrink-0 accent-accent focus-visible:outline-none"
+                          className="col-start-1 row-span-2 row-start-1 size-5 shrink-0 accent-accent focus-visible:outline-none"
                         />
-                        <span>
-                          <span className="block font-semibold">{c.label}</span>
-                          <span id={`consent-${c.id}-hint`} className="block text-sm text-muted">
-                            {c.hint}
-                          </span>
+                        {/* Title straight inside the label, so checkers find its text (Sonar S6853). */}
+                        <span className="col-start-2 row-start-1 font-semibold">{c.label}</span>
+                        <span id={`consent-${c.id}-hint`} className="col-start-2 row-start-2 text-sm text-muted">
+                          {c.hint}
                         </span>
                       </label>
                     ))}
