@@ -41,8 +41,8 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await sender.getByRole("button", { name: "Sharpen my question" }).click();
     const question = (await sender.locator("blockquote").textContent())!.trim();
     await sender.getByRole("link", { name: "Find people" }).click();
-    const first = sender.getByRole("region", { name: "Matches" }).getByRole("article");
-    await expect(first).toBeVisible({ timeout: AFTER_SUBMIT });
+    const firstRow = sender.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
+    await firstRow.click({ timeout: AFTER_SUBMIT });
     const sending = sender.waitForResponse((r) => r.url().endsWith("/api/requests") && r.request().method() === "POST");
     await sender.getByRole("button", { name: /^Send request/ }).click();
     const request = await (await sending).json();

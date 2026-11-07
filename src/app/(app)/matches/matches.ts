@@ -1,6 +1,6 @@
 /**
  * Match screen logic (A2 steps 1 and 2), kept apart from the screen so it
- * can be unit-tested: what a card shows, how a swipe ends, and what each
+ * can be unit-tested: what a card shows, and what each
  * failed request tells the user.
  *
  * Saving rules from db/Rejections.md and db/Requests.md: one save at a
@@ -8,18 +8,6 @@
  * through), and a 503 after a saved rejection says not to resubmit.
  */
 import type { Ask, MatchResult } from "@/contracts/types";
-
-/** How far (px) a card must be dragged to count as a swipe. */
-export const SWIPE_DISTANCE = 110;
-
-export type Swipe = "pass" | "send" | null;
-
-/** A drag's outcome: right sends, left passes, a short drag snaps back. */
-export function swipeOutcome(dx: number): Swipe {
-  if (dx >= SWIPE_DISTANCE) return "send";
-  if (dx <= -SWIPE_DISTANCE) return "pass";
-  return null;
-}
 
 /**
  * Evidence snippets as text runs, with Elasticsearch's <em>…</em>

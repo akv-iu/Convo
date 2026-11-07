@@ -27,7 +27,7 @@ test.describe("ask and refine (A1 step 5)", () => {
     await sharpen(page).click();
     expect((await sent).postDataJSON()).toEqual({ text: "how does Raft do the voting thing" });
 
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Here's your question");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
     await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     await expect(page.locator("blockquote")).toContainText("how does Raft do the voting thing:");
     await expect(page.getByText("Learn something")).toBeVisible();
@@ -89,7 +89,7 @@ test.describe("ask and refine (A1 step 5)", () => {
     await expect(alertWithText(page)).toHaveText("Lanyard is busy. Try again.");
     expect(calls).toBe(1);
     await sharpen(page).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Here's your question", { timeout: AFTER_SUBMIT });
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request", { timeout: AFTER_SUBMIT });
     expect(calls).toBe(2);
   });
 
@@ -158,6 +158,12 @@ test.describe("ask and refine (A1 step 5)", () => {
     await expect(page.getByTestId("looking-for-you")).toContainText("4 people here");
   });
 
+  test("the header leads back to your profile", async ({ page }) => {
+    await open(page);
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Profile" }).click();
+    await expect(page).toHaveURL(/\/onboarding\/profile$/);
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
@@ -170,7 +176,7 @@ test.describe("ask and refine (A1 step 5)", () => {
       await scan("empty with a problem");
       await box(page).fill("how does Raft do the voting thing");
       await sharpen(page).click();
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Here's your question");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
       await scan("refined");
     });
   }

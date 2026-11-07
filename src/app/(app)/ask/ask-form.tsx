@@ -100,7 +100,7 @@ export function AskForm() {
     return (
       <section aria-labelledby="refined-heading" className="mx-auto flex max-w-2xl flex-col">
         <h1 id="refined-heading" ref={resultRef} tabIndex={-1} className={`${headingClass} focus:outline-none`}>
-          Here&apos;s your question
+          Current request
         </h1>
         <p className="mt-3 text-lg text-muted">This is what the people you pick will see.</p>
 

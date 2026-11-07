@@ -52,6 +52,9 @@ test.describe("free time (A1 step 4)", () => {
     await page.getByRole("button", { name: "Clear" }).click();
     await page.getByRole("button", { name: /^Morning/ }).click();
     await expect(page.getByRole("button", { name: /^Morning/ })).toHaveAttribute("aria-pressed", "true");
+    // Picked times stand out: solid, with a tick.
+    await expect(block(page, "9:00 AM to 9:30 AM").getByText("✓")).toBeVisible();
+    await expect(block(page, "8:00 AM to 8:30 AM").getByText("✓")).toBeHidden();
     await block(page, "2:00 PM to 2:30 PM").click();
     await block(page, "2:30 PM to 3:00 PM").click();
     await expect(page.getByRole("status").filter({ hasText: "4 hours" })).toContainText("9:00 AM – 12:00 PM, 2:00 PM – 3:00 PM");

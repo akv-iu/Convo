@@ -51,6 +51,26 @@ test.describe("your details (step 4)", () => {
     await expect(page.getByRole("navigation", { name: "Onboarding progress" })).toContainText("Step 4 of 4");
   });
 
+  test("shows your row as other people see it, and hiding a section saves and updates it", async ({ page, isMobile }) => {
+    const person = isMobile ? "p_006" : "p_004"; // one per project, so runs can't overlap
+    const all = { country: true, workplace: true, hiring: true };
+    await page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: all } });
+    await open(page, person);
+    const preview = page.getByTestId("seen-preview");
+    const me = await stored(page, person);
+    await expect(preview).toContainText(me.name);
+    const country = page.getByRole("group", { name: "Show in your row" }).getByRole("switch", { name: "Country" });
+    await expect(country).toBeChecked();
+    const shown = await preview.textContent();
+    const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
+    await country.dispatchEvent("click");
+    expect((await saving).postDataJSON()).toEqual({ visibility: { ...all, country: false } });
+    await expect(country).not.toBeChecked();
+    await expect.poll(() => preview.textContent()).not.toBe(shown);
+    expect((await stored(page, person)).visibility).toEqual({ ...all, country: false });
+    await page.request.put("/api/me", { headers: { "x-demo-user": person }, data: { visibility: all } });
+  });
+
   test("Yes finishes without saving anything", async ({ page }) => {
     await open(page, "p_006");
     let saved = false;

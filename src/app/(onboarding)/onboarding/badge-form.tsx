@@ -187,65 +187,93 @@ export function BadgeForm() {
   }
 
   /**
-   * A line on the badge people can hide: tap it (pointer) to hide or show
-   * it. The badge is decorative for screen readers, so the labelled
-   * switches beside it do the same for keyboard and screen-reader users.
+   * A line on the badge people can hide: tap it (pointer) to hide it, and it
+   * disappears from the badge. The labelled switches beside the badge bring
+   * it back, and do the same for keyboard and screen-reader users, since the
+   * badge itself is decorative.
    */
-  const tappable = (id: (typeof sections)[number]["id"]) =>
-    `cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10 ${visibility[id] ? "" : "opacity-40 line-through"}`;
+  const tappable = "cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
 
   const badge = (
     <Badge
       name={about.name}
       handle={handle ?? "your-github"}
       label={
-        <span role="presentation" onClick={() => toggleSection("country")} className={tappable("country")}>
-          {countryName(about.country)}
-        </span>
+        visibility.country ? (
+          <span role="presentation" onClick={() => toggleSection("country")} className={tappable}>
+            {countryName(about.country)}
+          </span>
+        ) : (
+          " "
+        )
       }
     >
-      <span role="presentation" onClick={() => toggleSection("workplace")} className={`mt-4 block ${tappable("workplace")}`}>
-        <span className="block text-xs text-muted">Works at</span>
-        <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
-      </span>
-      <span role="presentation" onClick={() => toggleSection("hiring")} className={`mt-3 flex w-fit flex-wrap gap-1.5 ${tappable("hiring")}`}>
-        {hiring === null ? (
-          <BadgeChip className="w-20" />
-        ) : (
-          <BadgeChip className={hiring ? "bg-accent text-on-accent" : "bg-[var(--skeleton)]"}>
-            {hiring ? "Hiring" : "Not hiring"}
-          </BadgeChip>
-        )}
-      </span>
+      {visibility.workplace && (
+        <span role="presentation" onClick={() => toggleSection("workplace")} className={`mt-4 block ${tappable}`}>
+          <span className="block text-xs text-muted">Works at</span>
+          <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
+        </span>
+      )}
+      {visibility.hiring && (
+        <span role="presentation" onClick={() => toggleSection("hiring")} className={`mt-3 flex w-fit flex-wrap gap-1.5 ${tappable}`}>
+          {hiring === null ? (
+            <BadgeChip className="w-20" />
+          ) : (
+            <BadgeChip className={hiring ? "bg-accent text-on-accent" : "bg-[var(--skeleton)]"}>
+              {hiring ? "Hiring" : "Not hiring"}
+            </BadgeChip>
+          )}
+        </span>
+      )}
     </Badge>
   );
 
   return (
-    <form
-      onSubmit={submit}
-      noValidate
-      className={`grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-x-16 ${colourFollowsPicker}`}
-    >
-      <div className="lg:col-start-1 lg:row-start-1">
-        <h1 className={headingClass}>Your badge</h1>
-        <p className="mt-3 max-w-md text-lg text-muted">Three quick answers so you make the right connections.</p>
-      </div>
+    <form onSubmit={submit} noValidate className={`flex flex-col ${colourFollowsPicker}`}>
+      <h1 className={headingClass}>Your badge</h1>
+      <p className="mt-3 max-w-md text-lg text-muted">Three quick answers so you make the right connections.</p>
 
-      {/* The badge with everything that changes how it looks right beside it (rendered once: on a phone it
-          follows the heading, on a laptop it's the right-hand column). */}
-      <section aria-label="Your badge's look" className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-        <div className="mx-auto flex w-full max-w-[19rem] flex-col gap-6 lg:sticky lg:top-6">
-          {badge}
-          <p className="text-center text-sm text-muted" aria-hidden="true">
-            Tap a line on your badge to hide it from other people.
+      <fieldset
+        ref={hiringRef}
+        className="mt-8 flex max-w-2xl flex-col gap-3 border-0 p-0"
+        aria-describedby={hiringProblem ? "hiring-problem" : undefined}
+      >
+        <legend className={legendClass}>Are you hiring?</legend>
+        <div className="grid grid-cols-2 gap-2.5">
+          {[
+            { value: true, label: "Yes, I'm hiring", hint: "People looking for jobs can find you." },
+            { value: false, label: "Not right now", hint: "Career asks won't be sent to you." },
+          ].map((o) => (
+            <label
+              key={String(o.value)}
+              className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
+            >
+              <input type="radio" name="hiring" checked={hiring === o.value} onChange={() => setHiring(o.value)} className="sr-only" />
+              <span className="text-lg font-semibold leading-snug">{o.label}</span>
+              <span className="text-sm text-muted">{o.hint}</span>
+            </label>
+          ))}
+        </div>
+        {hiringProblem && (
+          <p id="hiring-problem" className={errorClass}>
+            {missingMessage.hiring}
           </p>
-          <ColourPicker defaultColour={colour} />
+        )}
+      </fieldset>
+
+      {/* The badge, with what changes it right beside it (rendered once). */}
+      <section
+        aria-label="Your badge's look"
+        className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
+      >
+        <div className="w-full">{badge}</div>
+        <div className="flex flex-col gap-6 sm:pt-2 lg:pt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
             <p id="visibility-note" className="mb-2 text-sm text-muted">
-              Your name and GitHub are always shown.
+              Tap a line on your badge to hide it, or switch it here. Your name and GitHub are always shown.
             </p>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex max-w-sm flex-col gap-1.5">
               {sections.map((v) => (
                 <label
                   key={v.id}
@@ -270,60 +298,35 @@ export function BadgeForm() {
               ))}
             </div>
           </fieldset>
+          <ColourPicker defaultColour={colour} />
         </div>
       </section>
 
-      <div className="flex flex-col lg:col-start-1 lg:row-start-2">
-        <fieldset ref={hiringRef} className="flex flex-col gap-3 border-0 p-0" aria-describedby={hiringProblem ? "hiring-problem" : undefined}>
-          <legend className={legendClass}>Are you hiring?</legend>
-          <div className="grid grid-cols-2 gap-2.5">
-            {[
-              { value: true, label: "Yes, I'm hiring", hint: "People looking for jobs can find you." },
-              { value: false, label: "Not right now", hint: "Career asks won't be sent to you." },
-            ].map((o) => (
-              <label
-                key={String(o.value)}
-                className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
-              >
-                <input type="radio" name="hiring" checked={hiring === o.value} onChange={() => setHiring(o.value)} className="sr-only" />
-                <span className="text-lg font-semibold leading-snug">{o.label}</span>
-                <span className="text-sm text-muted">{o.hint}</span>
-              </label>
-            ))}
-          </div>
-          {hiringProblem && (
-            <p id="hiring-problem" className={errorClass}>
-              {missingMessage.hiring}
-            </p>
-          )}
-        </fieldset>
-
-        <div className="sticky bottom-0 -mx-4 mt-8 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-          {tried && step1Missing.length > 0 && (
-            <p role="alert" className={`mb-3 ${errorClass}`}>
-              {missingMessage[step1Missing[0]]}{" "}
-              <a href="/signin" className="underline underline-offset-4">
-                Go back to About you
-              </a>
-            </p>
-          )}
-          {saveError && (
-            <p role="alert" className={`mb-3 ${errorClass}`}>
-              {saveError}
-              {saveError.startsWith("Your sign-in has expired") && (
-                <>
-                  {" "}
-                  <a href="/signin" className="underline underline-offset-4">
-                    Sign in again
-                  </a>
-                </>
-              )}
-            </p>
-          )}
-          <Button type="submit" disabled={saving} className="w-full text-lg sm:w-auto sm:px-8">
-            {saving ? "Saving…" : "Continue"}
-          </Button>
-        </div>
+      <div className="sticky bottom-0 -mx-4 mt-10 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+        {tried && step1Missing.length > 0 && (
+          <p role="alert" className={`mb-3 ${errorClass}`}>
+            {missingMessage[step1Missing[0]]}{" "}
+            <a href="/signin" className="underline underline-offset-4">
+              Go back to About you
+            </a>
+          </p>
+        )}
+        {saveError && (
+          <p role="alert" className={`mb-3 ${errorClass}`}>
+            {saveError}
+            {saveError.startsWith("Your sign-in has expired") && (
+              <>
+                {" "}
+                <a href="/signin" className="underline underline-offset-4">
+                  Sign in again
+                </a>
+              </>
+            )}
+          </p>
+        )}
+        <Button type="submit" disabled={saving} className="w-full text-lg sm:w-auto sm:px-8">
+          {saving ? "Saving…" : "Continue"}
+        </Button>
       </div>
     </form>
   );
