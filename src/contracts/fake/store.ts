@@ -7,6 +7,7 @@ import type { Ask, Person, Request, TimeBlock } from "@/contracts/types";
 import { freshEnrichment, type FakeEnrichmentState } from "./enrichment";
 
 export interface FakeState {
+  pendingPeople: Map<string, Omit<Person, "filters"> & { filters: null }>;
   enrichment: FakeEnrichmentState;
   people: Map<string, Person>;
   asks: Map<string, Ask>;
@@ -18,6 +19,10 @@ export interface FakeState {
 
 export function freshState(): FakeState {
   return {
+    pendingPeople: new Map([[fixtures.DEMO_GOOGLE_NEW, {
+      id: fixtures.DEMO_GOOGLE_NEW, name: "New demo attendee", githubLogin: null, bio: "",
+      languages: [], organisations: [], filters: null, synthetic: false, freeTimes: [],
+    }]]),
     enrichment: freshEnrichment(),
     people: new Map(fixtures.people.map((p) => [p.id, structuredClone(p)])),
     asks: new Map(),
@@ -45,8 +50,14 @@ export const store = {
   person(id: string): Person {
     const state = store.get();
     const p = state.people.get(id);
+    if (!p && state.pendingPeople.has(id)) throw Object.assign(new Error("Complete onboarding first."), { status: 409 });
     if (!p) throw new NotFound(`person ${id}`);
     return p;
+  },
+  profile(id: string) {
+    const profile = store.get().people.get(id) ?? store.get().pendingPeople.get(id);
+    if (!profile) throw new NotFound(`person ${id}`);
+    return profile;
   },
   ask(id: string, userId: string): Ask {
     const state = store.get();

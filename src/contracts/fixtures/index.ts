@@ -16,6 +16,9 @@ export const block = (from: string, to: string) => ({
 
 export const DEMO_USER_A = "u_demo_a";
 export const DEMO_USER_B = "u_demo_b";
+export const DEMO_RESEARCHER = "u_demo_researcher";
+export const DEMO_GOOGLE_NEW = "u_demo_google_new";
+export const DEMO_GITHUB_CONNECTION = { accountId: "9001", login: "demo-connected" };
 
 export const ror: RorMatch[] = [
   { id: "https://ror.org/00f54p054", name: "Stanford University", country: "US" },
@@ -152,6 +155,14 @@ export const people: Person[] = [
     freeTimes: [block("11:00", "12:00"), block("14:30", "15:30")],
   },
 ];
+
+// Unique query for the no-GitHub fixture: "qubitcalibration".
+people.push({
+  id: DEMO_RESEARCHER, name: "Demo Researcher", githubLogin: null,
+  bio: "Qubitcalibration and quantum error correction.", expertise: ["Qubitcalibration"],
+  languages: [], organisations: [], filters: { country: "US", rorId: null, hiring: false },
+  synthetic: false, freeTimes: [block("09:30", "10:30")],
+});
 
 // Older callers may omit these fields; fixture profiles expose the database defaults.
 for (const person of people) {

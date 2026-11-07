@@ -6,7 +6,7 @@
 import { z } from "zod";
 import {
   AcceptEnrichment, AcceptedEnrichment, CvUpload, DiscoverEnrichment, EnrichmentDiscovery,
-  EnrichmentJob, EnrichmentSync, SavedEnrichmentSource, StartEnrichment, UploadCv,
+  EnrichmentJob, EnrichmentSync, SavedEnrichmentSource, StartEnrichment, UploadCv, EnrichmentState, ConnectGitHub, EnrichmentIdentity,
 } from "./enrichment";
 import {
   Ask,
@@ -39,9 +39,22 @@ function def<const D extends RouteDef>(d: D): D {
 }
 
 export const routes = {
+  enrichmentState: def({
+    method: "GET", path: "/api/profile-enrichment", usedBy: "A1",
+    description: "Resume the owner's identity, connection, job and pending CV before onboarding is complete.", response: EnrichmentState,
+  }),
+  saveEnrichmentIdentity: def({
+    method: "PUT", path: "/api/profile-enrichment", usedBy: "A1",
+    description: "Save private page-one answers after authentication so another tab can resume before final Continue.",
+    body: EnrichmentIdentity, response: EnrichmentState,
+  }),
+  connectGitHub: def({
+    method: "POST", path: "/api/profile-enrichment/github/connect", usedBy: "A1",
+    description: "Connect GitHub to the current Lanyard account, without switching or merging accounts.", response: ConnectGitHub,
+  }),
   discoverEnrichment: def({
     method: "POST", path: "/api/profile-enrichment/discover", usedBy: "A1",
-    description: "Find up to four research authors and four public profiles; nothing is selected automatically.",
+    description: "Discover one selected source independently; return up to four candidates, never selected automatically.",
     body: DiscoverEnrichment, response: EnrichmentDiscovery,
   }),
   uploadCv: def({
@@ -97,7 +110,7 @@ export const routes = {
     path: "/api/me",
     description: "Save edits to the profile card and the onboarding answers.",
     usedBy: "A1",
-    body: Person.partial().omit({ id: true, synthetic: true, expertise: true }),
+    body: Person.partial().omit({ id: true, synthetic: true, githubLogin: true, expertise: true }),
     response: Person,
   }),
   searchRor: def({

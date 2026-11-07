@@ -6,6 +6,10 @@
  */
 import { z } from "zod";
 
+export const SourceUrl = z.url({ protocol: /^https$/ }).max(2048).refine(value => {
+  try { const url = new URL(value); return !url.username && !url.password; } catch { return false; }
+}, "Use an HTTPS URL without credentials");
+
 export const AskType = z.enum(["knowledge", "career", "collaboration", "hiring"]);
 export type AskType = z.infer<typeof AskType>;
 
@@ -40,7 +44,7 @@ export type ProfileVisibility = z.infer<typeof ProfileVisibility>;
 export const Person = z.object({
   id: z.string(),
   name: z.string(),
-  githubLogin: z.string(),
+  githubLogin: z.string().nullable(),
   bio: z.string(),
   languages: z.array(z.string()),
   /** Professional/research topics; absent on older profiles. */
@@ -73,7 +77,7 @@ export const EvidenceDoc = z.object({
   kind: EvidenceKind,
   title: z.string(),
   text: z.string(),
-  url: z.string().url().optional(),
+  url: SourceUrl.optional(),
 });
 export type EvidenceDoc = z.infer<typeof EvidenceDoc>;
 

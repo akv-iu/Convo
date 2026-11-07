@@ -1,40 +1,39 @@
-import type { z } from "zod";
 import { createHash } from "node:crypto";
 import * as fixtures from "../fixtures";
 import type { Api, RouteBody, RouteResponse } from "../routes";
-import { EnrichmentSource, type EnrichmentJob, type SavedEnrichmentSource } from "../enrichment";
+import { EnrichmentSource, type EnrichmentJob, type EnrichmentErrorCode } from "../enrichment";
 import { search } from "@/server/search";
 import { store } from "./store";
 
-type Job = { owner: string; input: RouteBody<"startEnrichment">; value: EnrichmentJob; baseTextRevision: number; draftVersion: number;
-  inputFingerprint: string; accepted?: { input: string; revision: number }; };
+type Job = {
+  owner: string; input: RouteBody<"startEnrichment">; fingerprint: string; value: EnrichmentJob;
+  baseTextVersion: number; draftVersion: number; accepted?: string;
+};
 export interface FakeEnrichmentState {
   discoveries: Map<string, { owner: string; input: RouteBody<"discoverEnrichment">; value: RouteResponse<"discoverEnrichment"> }>;
   uploads: Map<string, { owner: string; value: RouteResponse<"uploadCv">; removed: boolean }>;
   jobs: Map<string, Job>;
-  sources: Map<string, { owner: string; value: z.infer<typeof SavedEnrichmentSource>; removed: boolean }>;
-  evidence: Map<string, EnrichmentJob["evidence"]>;
+  sources: Map<string, { owner: string; value: RouteResponse<"enrichmentSources">[number]; removed: boolean }>;
+  evidence: Map<string, NonNullable<EnrichmentJob["draft"]>["evidence"]>;
   versions: Map<string, { revision: number; text: number; generation: number }>;
+  identities: Map<string, RouteBody<"startEnrichment">["identity"]>;
+  connections: Map<string, { accountId: string; login: string }>;
 }
 export function freshEnrichment(): FakeEnrichmentState {
-  const evidence = new Map<string, EnrichmentJob["evidence"]>();
-  for (const doc of fixtures.evidence) {
-    evidence.set(doc.personId, [...(evidence.get(doc.personId) ?? []), { ...doc, source: "github", sourceId: `${doc.personId}:github`,
-      externalId: doc.id, retrievedAt: "2026-11-05T00:00:00Z" }]);
-  }
-  const sources: FakeEnrichmentState["sources"] = new Map();
-  for (const [owner, docs] of evidence) {
-    const sourceId = `${owner}:github`;
-    sources.set(sourceId, { owner, removed: false, value: { sourceId, source: "github", title: "Saved demo GitHub evidence",
-      url: docs[0]?.url ?? null, evidenceCount: docs.length } });
-  }
-  return { discoveries: new Map(), uploads: new Map(), jobs: new Map(), sources, evidence, versions: new Map() };
+  return {
+    discoveries: new Map(), uploads: new Map(), jobs: new Map(), sources: new Map(), evidence: new Map(),
+    versions: new Map(), identities: new Map(), connections: new Map(),
+  };
 }
 const state = () => store.get().enrichment;
-const expires = () => new Date(Date.now() + 86_400_000).toISOString();
-function fail(message: string, status = 409): never { throw Object.assign(new Error(message), { status }); }
+const expiry = () => new Date(Date.now() + 86_400_000).toISOString();
+const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input ?? null, (_key, value) =>
+  value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)).digest("hex");
+function fail(code: EnrichmentErrorCode, status = 409, retryAfterSeconds?: number): never {
+  throw Object.assign(new Error("Profile enrichment could not complete."), { code, status, retryAfterSeconds });
+}
 function owned<T extends { owner: string }>(value: T | undefined, userId: string): T {
-  if (!value || value.owner !== userId) fail("Not found.", 404);
+  if (!value || value.owner !== userId) fail("not_found", 404);
   return value;
 }
 function versions(userId: string) {
@@ -43,208 +42,286 @@ function versions(userId: string) {
   return value;
 }
 export function noteProfileChange(userId: string, textChanged = false) {
-  const value = versions(userId);
-  value.revision++;
-  if (textChanged) value.text++;
+  versions(userId).revision++;
+  if (textChanged) versions(userId).text++;
 }
-function jobFor(userId: string, id: string): Job {
-  const job = owned(state().jobs.get(id), userId);
-  if (!["accepted", "cancelled"].includes(job.value.state) && Date.parse(job.value.expiresAt) <= Date.now()) {
-    discard(job);
-    job.value.state = "failed";
-    job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed", reason: "expired_input" });
-  }
-  job.value.textRevision = versions(userId).text;
-  job.value.needsReview = job.value.state !== "accepted" && job.value.draft !== null && job.value.draft.baseTextRevision !== job.value.textRevision;
-  return job;
+function connection(userId: string) {
+  return state().connections.get(userId) ?? (store.profile(userId).githubLogin
+    ? { accountId: userId, login: store.profile(userId).githubLogin! } : null);
 }
-function selected(input: RouteBody<"startEnrichment">, source: EnrichmentSource): boolean {
-  if (source === "github") return Object.values(input.permissions.github).some(Boolean);
-  if (source === "research") return input.permissions.research && input.authorId !== null;
-  if (source === "public_profile") return input.permissions.publicProfile && input.publicProfile !== null;
-  return input.permissions.cv && input.cvUploadId !== null;
-}
-function discard(job: Job) {
-  job.value.state = "cancelled";
-  job.value.draft = null;
-  job.value.evidence = [];
-  if (job.input.cvUploadId) {
-    const upload = state().uploads.get(job.input.cvUploadId);
+function discard(job: Job, terminal: "cancelled" | "superseded" = "cancelled", keepUpload?: string) {
+  job.value.state = terminal; job.value.phase = "done"; job.value.draft = null;
+  if (job.input.cv && job.input.cv.uploadId !== keepUpload) {
+    const upload = state().uploads.get(job.input.cv.uploadId);
     if (upload) upload.removed = true;
   }
 }
-async function sync(userId: string, revision: number) {
-  try {
-    await search.ingestPerson(store.person(userId), state().evidence.get(userId) ?? []);
-    return { status: "synced" as const, retryable: false, savedRevision: revision };
-  } catch {
-    return { status: "pending" as const, retryable: true, savedRevision: revision };
+function jobFor(userId: string, id: string) {
+  const job = owned(state().jobs.get(id), userId);
+  if (!["accepted", "cancelled", "superseded", "manual"].includes(job.value.state) && Date.parse(job.value.expiresAt) <= Date.now()) {
+    discard(job); job.value.state = "failed";
+    job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed", reason: s.source === "cv" ? "cv_expired" : "unknown" });
   }
+  if (job.value.draft) job.value.draft.needsReview = job.value.state !== "accepted" && job.baseTextVersion !== versions(userId).text;
+  return job;
 }
-
-type Names = "discoverEnrichment" | "uploadCv" | "removeCv" | "startEnrichment" | "getEnrichment" |
-  "retryEnrichment" | "acceptEnrichment" | "cancelEnrichment" | "enrichmentSources" | "removeEnrichmentSource";
-export const enrichmentFake: Pick<Api, Names> = {
-  async discoverEnrichment({ userId, body }) {
-    store.person(userId);
-    const discoveryId = store.nextId("discovery");
-    const value: RouteResponse<"discoverEnrichment"> = {
-      discoveryId, expiresAt: expires(),
-      research: { status: body.sources.research ? "ok" : "not_selected", reason: body.sources.research ? null : "not_selected", retryAfterSeconds: null,
-        candidates: body.sources.research ? [0, 1, 2, 3].map(n => ({
-          id: `${discoveryId}:author:${n}`, title: `${body.identity.name} (demo ${n + 1})`,
-          url: `https://openalex.org/A${100 + n}`, domain: "openalex.org", snippet: "Synthetic author candidate; confirm the right identity.",
-          orcid: null, affiliations: [body.identity.workplaceName ?? "Demo institution"], samplePapers: ["A recorded research example"],
-        })) : [] },
-      publicProfile: { status: body.sources.publicProfile ? "ok" : "not_selected", reason: body.sources.publicProfile ? null : "not_selected", retryAfterSeconds: null,
-        candidates: body.sources.publicProfile ? [0, 1, 2, 3].map(n => ({
-          id: `${discoveryId}:page:${n}`, title: `${body.identity.name} — demo professional profile ${n + 1}`,
-          url: `https://example.org/people/demo-${n}`, domain: "example.org", snippet: "Synthetic preview. Opening a link does not select it.",
-        })) : [] },
+async function sync(userId: string) {
+  const revision = versions(userId).revision;
+  if (store.get().pendingPeople.has(userId)) return { status: "not_onboarded" as const, retryable: false, savedRevision: revision };
+  try {
+    const evidence = state().evidence.get(userId);
+    await search.ingestPerson(store.person(userId), evidence?.map(e => ({ ...e, text: e.excerpt })));
+    return { status: "confirmed" as const, retryable: false, savedRevision: revision };
+  } catch { return { status: "pending" as const, retryable: true, savedRevision: revision }; }
+}
+function identityInput(identity: RouteBody<"startEnrichment">["identity"], source: "research" | "public_profile") {
+  const { name, workplaceName, rorId, orcid } = identity;
+  return { name, workplaceName, rorId, orcid, source };
+}
+function chosen(userId: string, selection: { discoveryId: string; candidateId: string }, source: "research" | "public_profile", identity: RouteBody<"startEnrichment">["identity"]) {
+  const discovery = owned(state().discoveries.get(selection.discoveryId), userId);
+  if (Date.parse(discovery.value.expiresAt) <= Date.now() ||
+      fingerprint(discovery.input) !== fingerprint(identityInput(identity, source))) fail("selection_stale");
+  const candidate = discovery.value.candidates.find(c => c.id === selection.candidateId);
+  if (!candidate || discovery.value.source !== source) fail("selection_stale");
+  return { label: "name" in candidate ? candidate.name : candidate.title, url: candidate.url };
+}
+function selectedSources(userId: string, input: RouteBody<"startEnrichment">): EnrichmentJob["sources"] {
+  const github = connection(userId);
+  if (input.github.import && !github) fail("github_not_connected");
+  const research = input.research && !("skip" in input.research) ? chosen(userId, input.research, "research", input.identity) : null;
+  const page = input.publicProfile;
+  const publicProfile = !page || "skip" in page ? null : "candidateId" in page ? chosen(userId, page, "public_profile", input.identity)
+    : "url" in page ? { label: "Public profile", url: page.url } : { label: "Text you pasted" };
+  let cv: { label: string; filename: string | null } | null = null;
+  if (input.cv) {
+    const upload = owned(state().uploads.get(input.cv.uploadId), userId);
+    if (upload.removed || Date.parse(upload.value.expiresAt) <= Date.now()) fail("cv_expired");
+    cv = { label: upload.value.filename ?? "Pasted CV text", filename: upload.value.filename };
+  }
+  const selections = { github: input.github.import ? { label: "GitHub", url: "https://github.com/" + github!.login } : null, research, public_profile: publicProfile, cv };
+  return EnrichmentSource.options.map(source => ({
+    source, sourceId: userId + ":" + source, selection: selections[source],
+    status: selections[source] ? "waiting" : "not_selected", items: 0,
+  }));
+}
+function finish(job: Job) {
+  const value = job.value;
+  const scenario = job.input.identity.name;
+  const failure = scenario.includes("[demo:partial]") || scenario.includes("[demo:failed]");
+  const first = value.sources.find(s => s.status === "running");
+  value.sources = value.sources.map(s => s.status !== "running" ? s : scenario.includes("[demo:empty]")
+    ? { ...s, status: "empty", reason: s.source === "github" ? "github_nothing_public" : s.source === "research" ? "research_no_match" : "unknown" }
+    : (scenario.includes("[demo:failed]") || (failure && s === first))
+    ? { ...s, status: "failed", reason: "provider_down", retryAfterSeconds: 30 }
+    : scenario.includes("[demo:reconnect]") && s.source === "github"
+      ? { ...s, status: "failed", reason: "github_reconnect" }
+      : { ...s, status: "done", items: 1, ...(s.source === "github" ? { github: { bio: job.input.github.bio, repos: job.input.github.repos ? 1 : 0, orgs: job.input.github.orgs ? 1 : 0 } } : {}) });
+  const evidence = value.sources.filter(s => s.status === "done").map(s => {
+    const kind = s.source === "github" ? (job.input.github.repos ? "repo" as const : "profile_page" as const)
+      : ({ research: "paper", public_profile: "profile_page", cv: "cv" } as const)[s.source];
+    return {
+      id: job.owner + ":" + kind + ":" + value.jobId + "-" + s.source, personId: job.owner, sourceId: s.sourceId,
+      source: s.source, kind, title: s.source === "research" ? "Recorded research example" : s.source === "cv" ? "CV excerpt" : s.selection?.label ?? "Recorded evidence",
+      excerpt: "Recorded professional work on reliable systems.",
+      ...(s.source === "research" ? { url: "https://openalex.org/W5000000100" }
+        : s.selection?.url ? { url: s.selection.url } : {}),
+      retrievedAt: new Date().toISOString(),
     };
+  });
+  value.phase = "done";
+  value.state = value.sources.some(s => s.status === "failed") ? (evidence.length ? "partial" : "failed") : evidence.length ? "ready" : "manual";
+  value.draft = evidence.length ? {
+    draftVersion: job.draftVersion, baseTextVersion: job.baseTextVersion,
+    bio: "Works on reliable systems. Enjoys sharing practical experience.",
+    bioEvidenceIds: evidence.map(e => e.id), expertise: [{ label: "Reliable systems", evidenceIds: evidence.map(e => e.id) }],
+    evidence, needsReview: job.baseTextVersion !== versions(job.owner).text,
+  } : null;
+}
+export type EnrichmentRoute = "enrichmentState" | "saveEnrichmentIdentity" | "connectGitHub" | "discoverEnrichment" | "uploadCv" | "removeCv" |
+  "startEnrichment" | "getEnrichment" | "retryEnrichment" | "acceptEnrichment" | "cancelEnrichment" |
+  "enrichmentSources" | "removeEnrichmentSource";
+export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
+  async enrichmentState({ userId }) {
+    const profile = store.profile(userId);
+    const jobs = [...state().jobs.values()].filter(j => j.owner === userId);
+    const latest = jobs.at(-1);
+    const upload = [...state().uploads.values()].find(u => u.owner === userId && !u.removed && Date.parse(u.value.expiresAt) > Date.now());
+    const github = connection(userId);
+    return {
+      signIn: { provider: userId === fixtures.DEMO_GOOGLE_NEW || userId === fixtures.DEMO_RESEARCHER ? "google" : "github" },
+      github: { connected: github !== null, login: github?.login ?? null }, onboarded: profile.filters !== null,
+      identity: state().identities.get(userId) ?? null,
+      job: latest ? { jobId: latest.value.jobId, state: jobFor(userId, latest.value.jobId).value.state } : null,
+      pendingCv: upload ? structuredClone(upload.value) : null,
+    };
+  },
+  async connectGitHub({ userId }) {
+    if (state().identities.get(userId)?.name.includes("[demo:connect_cancelled]")) fail("github_connect_cancelled");
+    const existing = connection(userId);
+    if (existing) return { status: "connected", login: existing.login };
+    const recorded = fixtures.DEMO_GITHUB_CONNECTION;
+    if ([...state().connections].some(([owner, account]) => owner !== userId && account.accountId === recorded.accountId)) fail("github_linked_elsewhere");
+    state().connections.set(userId, recorded);
+    store.profile(userId).githubLogin = recorded.login;
+    return { status: "connected", login: recorded.login };
+  },
+  async saveEnrichmentIdentity({ userId, body }) {
+    store.profile(userId);
+    if (fingerprint(state().identities.get(userId)) !== fingerprint(body)) {
+      versions(userId).generation++;
+      for (const job of state().jobs.values()) if (job.owner === userId && !["accepted", "cancelled", "superseded"].includes(job.value.state)) discard(job, "superseded");
+    }
+    state().identities.set(userId, structuredClone(body));
+    return enrichmentFake.enrichmentState({ userId, body: undefined, params: {}, query: new URLSearchParams() });
+  },
+  async discoverEnrichment({ userId, body }) {
+    store.profile(userId);
+    const discoveryId = store.nextId("discovery");
+    const base = { discoveryId, expiresAt: expiry() };
+    let value: RouteResponse<"discoverEnrichment">;
+    if (body.name.includes("[demo:no_matches]")) value = { ...base, source: body.source, status: "no_matches", candidates: [] };
+    else if (body.name.includes("[demo:unavailable]")) value = { ...base, source: body.source, status: "unavailable", reason: "provider_down", retryAfterSeconds: 30, candidates: [] };
+    else if (body.source === "research") value = { ...base, source: "research", status: "ok", candidates: [0,1,2,3].map(n => ({
+      id: discoveryId + ":author:" + n, name: body.name + " (demo " + (n + 1) + ")", url: "https://openalex.org/A" + (5000000100 + n),
+      orcid: null, affiliations: [{ name: body.workplaceName ?? "Recorded institution", years: [2024,2025] }],
+      worksCount: 10, samplePapers: [{ title: "Recorded research example", year: 2025, url: "https://openalex.org/W5000000100" }],
+    })) };
+    else value = { ...base, source: "public_profile", status: "ok", candidates: [0,1,2,3].map(n => ({
+      id: discoveryId + ":page:" + n, title: body.name + " - demo profile " + (n + 1),
+      url: "https://example.org/people/demo-" + n, domain: "example.org", snippet: "Recorded candidate; opening a link does not select it.",
+    })) };
     state().discoveries.set(discoveryId, { owner: userId, input: structuredClone(body), value });
     return structuredClone(value);
   },
   async uploadCv({ userId, body }) {
-    store.person(userId);
-    const value = { uploadId: store.nextId("cv"), filename: "file" in body ? body.file.name : "Pasted CV text",
-      extractedCharacters: "text" in body ? body.text.length : 120, warnings: [], expiresAt: expires() };
-    // Fake mode stages metadata only: no file parsing or real CV text retention.
+    store.profile(userId);
+    if ("file" in body) {
+      const bytes = Buffer.from(await body.file.arrayBuffer());
+      const text = bytes.toString("latin1");
+      const pdf = text.startsWith("%PDF-");
+      const docx = bytes.subarray(0,4).equals(Buffer.from([0x50,0x4b,3,4])) && text.includes("word/document.xml") && text.includes("[Content_Types].xml");
+      if (!pdf && !docx) fail("cv_unsupported", 415);
+      if (pdf && text.includes("/Encrypt")) fail("cv_encrypted", 422);
+      if (text.includes("DEMO:UNREADABLE") || text.includes("DEMO:SCANNED")) fail("cv_unreadable", 422);
+    }
+    for (const old of state().uploads.values()) if (old.owner === userId && !old.removed) {
+      old.removed = true;
+      for (const job of state().jobs.values()) if (job.owner === userId && job.input.cv?.uploadId === old.value.uploadId && job.value.state !== "accepted") discard(job);
+    }
+    const value = { uploadId: store.nextId("cv"), filename: "file" in body ? body.file.name : null,
+      characters: "text" in body ? body.text.length : 120, warnings: [], expiresAt: expiry() };
+    // Only signatures/recorded outcomes: no extraction or private input retention in the fake.
     state().uploads.set(value.uploadId, { owner: userId, value, removed: false });
     return value;
   },
   async removeCv({ userId, params }) {
     const upload = owned(state().uploads.get(params.id), userId);
-    upload.removed = true;
-    for (const job of state().jobs.values()) {
-      if (job.owner === userId && job.input.cvUploadId === params.id && job.value.state !== "accepted") discard(job);
+    if (!upload.removed) {
+      upload.removed = true;
+      for (const job of state().jobs.values()) if (job.owner === userId && job.input.cv?.uploadId === params.id && job.value.state !== "accepted") discard(job);
     }
     return { removed: true };
   },
   async startEnrichment({ userId, body }) {
-    store.person(userId);
-    const inputFingerprint = createHash("sha256").update(JSON.stringify(body)).digest("hex");
-    const previous = [...state().jobs.values()].find(job => job.owner === userId && job.input.idempotencyKey === body.idempotencyKey);
+    store.profile(userId);
+    const digest = fingerprint(body);
+    const previous = [...state().jobs.values()].find(j => j.owner === userId && j.input.idempotencyKey === body.idempotencyKey);
     if (previous) {
-      if (previous.inputFingerprint !== inputFingerprint) fail("Idempotency key already used with different choices.");
-      return structuredClone(previous.value);
+      if (previous.fingerprint !== digest) fail("idempotency_conflict");
+      return structuredClone(jobFor(userId, previous.value.jobId).value);
     }
-    const discovery = body.discoveryId ? owned(state().discoveries.get(body.discoveryId), userId) : undefined;
-    if (discovery && (Date.parse(discovery.value.expiresAt) <= Date.now() || JSON.stringify(discovery.input.identity) !== JSON.stringify(body.identity))) fail("Discovery expired or identity changed.");
-    if (body.authorId && !discovery?.value.research.candidates.some(c => c.id === body.authorId)) fail("Unknown research candidate.");
-    if (body.publicProfile?.kind === "candidate") {
-      const candidateId = body.publicProfile.candidateId;
-      if (!discovery?.value.publicProfile.candidates.some(c => c.id === candidateId)) fail("Unknown public profile candidate.");
-    }
-    if (body.cvUploadId) {
-      const upload = owned(state().uploads.get(body.cvUploadId), userId);
-      if (upload.removed || Date.parse(upload.value.expiresAt) <= Date.now()) fail("CV input expired or removed.");
-    }
-    const current = versions(userId);
-    for (const old of state().jobs.values()) {
-      if (old.owner === userId && !["accepted", "cancelled"].includes(old.value.state)) {
-        // A new confirmed selection invalidates old work, without deleting a reused upload.
-        old.value.state = "cancelled"; old.value.draft = null; old.value.evidence = [];
-      }
-    }
-    current.generation++;
+    const sources = selectedSources(userId, body);
+    for (const old of state().jobs.values()) if (old.owner === userId && !["accepted","cancelled","superseded"].includes(old.value.state)) discard(old, "superseded", body.cv?.uploadId);
+    versions(userId).generation++;
+    state().identities.set(userId, structuredClone(body.identity));
+    const profile = store.profile(userId);
+    if (profile.filters === null) { profile.name = body.identity.name; profile.workplaceName = body.identity.workplaceName; }
     const jobId = store.nextId("enrichment");
-    const sources = EnrichmentSource.options.map(source => ({ source, sourceId: `${userId}:${source}`,
-      status: selected(body, source) ? "queued" as const : "not_selected" as const,
-      reason: selected(body, source) ? null : "not_selected" as const, retryAfterSeconds: null }));
-    const value: EnrichmentJob = { jobId, state: sources.some(s => s.status === "queued") ? "queued" : "manual",
-      sources, selectionGeneration: current.generation, textRevision: current.text, needsReview: false,
-      draft: null, evidence: [], expiresAt: expires() };
+    const active = sources.some(s => s.status === "waiting");
+    const value: EnrichmentJob = {
+      jobId, sources, state: active ? "queued" : "manual", phase: active ? "collecting" : "done",
+      selectionGeneration: versions(userId).generation, draft: null, expiresAt: expiry(),
+    };
     const input = structuredClone(body);
-    if (input.publicProfile?.kind === "text") input.publicProfile.text = "Recorded pasted input";
-    state().jobs.set(jobId, { owner: userId, input, inputFingerprint, value, baseTextRevision: current.text, draftVersion: 1 });
+    if (input.publicProfile && "text" in input.publicProfile) input.publicProfile.text = "Recorded pasted input";
+    state().jobs.set(jobId, { owner: userId, input, fingerprint: digest, value, baseTextVersion: versions(userId).text, draftVersion: 1 });
     return structuredClone(value);
   },
   async getEnrichment({ userId, params }) {
     const job = jobFor(userId, params.id);
     const value = job.value;
-    // Deterministic polling exercises progress without timers or external calls.
-    if (value.state === "queued") value.state = "collecting";
-    else if (value.state === "collecting") value.state = "synthesizing";
-    else if (value.state === "synthesizing") {
-      const evidence = value.sources.filter(s => ["queued", "collecting", "complete"].includes(s.status)).map(s => ({
-        id: `${value.jobId}:${s.source}`, personId: userId, sourceId: s.sourceId, source: s.source,
-        kind: s.source === "github" ? (job.input.permissions.github.repos ? "repo" as const : "profile_page" as const)
-          : ({ research: "paper", public_profile: "profile_page", cv: "cv" } as const)[s.source],
-        title: `Demo ${s.source} evidence`, text: "Recorded professional work on reliable systems.", externalId: "recorded-demo",
-        ...(s.source === "cv" ? {} : { url: "https://example.org/recorded-evidence" }), retrievedAt: new Date().toISOString(),
-      }));
-      value.evidence = evidence;
-      if (evidence.length === 0) { value.state = "failed"; value.draft = null; return structuredClone(value); }
-      value.draft = { version: job.draftVersion, baseTextRevision: job.baseTextRevision, bio: "Works on reliable systems. Enjoys sharing practical experience.", expertise: ["Reliable systems"], evidenceIds: evidence.map(e => e.id) };
-      value.sources = value.sources.map(s => ["queued", "collecting"].includes(s.status) ? { ...s, status: "complete" } : s);
-      value.state = value.sources.some(s => s.status === "failed") ? "partial" : "ready";
-      value.needsReview = job.baseTextRevision !== value.textRevision;
-    }
+    if (value.state === "queued") {
+      value.state = "running";
+      value.sources = value.sources.map(s => s.status === "waiting" ? { ...s, status: "running" } : s);
+    } else if (value.state === "running" && value.phase === "collecting") {
+      if (job.input.identity.name.includes("[demo:stalled]")) value.state = "stalled";
+      else value.phase = "writing";
+    } else if (value.state === "running") finish(job);
     return structuredClone(value);
   },
   async retryEnrichment({ userId, params }) {
     const job = jobFor(userId, params.id);
-    if (!["failed", "stalled", "partial"].includes(job.value.state) || Date.parse(job.value.expiresAt) <= Date.now()) fail("This job cannot be retried.");
-    job.baseTextRevision = versions(userId).text; job.draftVersion++;
-    job.value.sources = job.value.sources.map(s => s.status === "failed" ? { ...s, status: "queued", reason: null, retryAfterSeconds: null } : s);
-    job.value.state = "queued"; job.value.draft = null; job.value.evidence = [];
+    if (["queued","running"].includes(job.value.state)) fail("running", 409, 30);
+    if (!["failed","partial","stalled"].includes(job.value.state) || Date.parse(job.value.expiresAt) <= Date.now()) fail("draft_superseded");
+    job.input.identity.name = job.input.identity.name.replace(/\[demo:(partial|failed|stalled|reconnect)\]/g, "");
+    job.baseTextVersion = versions(userId).text; job.draftVersion++;
+    job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "waiting", items: 0, reason: undefined, retryAfterSeconds: undefined });
+    job.value.state = "queued"; job.value.phase = "collecting"; job.value.draft = null;
     return structuredClone(job.value);
   },
   async acceptEnrichment({ userId, params, body }) {
     const job = jobFor(userId, params.id);
+    const acceptedInput = fingerprint(body);
     if (job.accepted) {
-      if (job.accepted.input !== JSON.stringify(body)) fail("Draft already accepted with different edits.");
-      return { person: structuredClone(store.person(userId)), sync: await sync(userId, versions(userId).revision) };
+      if (job.accepted !== acceptedInput) fail("draft_superseded");
+      return { person: store.get().people.get(userId) ?? null, sync: await sync(userId) };
     }
-    if (!["ready", "partial"].includes(job.value.state) || !job.value.draft ||
-        Date.parse(job.value.expiresAt) <= Date.now() || job.value.selectionGeneration !== versions(userId).generation ||
-        body.version !== job.value.draft.version || body.baseTextRevision !== versions(userId).text ||
-        body.baseTextRevision !== job.value.draft.baseTextRevision) fail("Draft changed; review it again.");
-    if (body.evidenceIds.some(id => !job.value.evidence.some(e => e.id === id)) || new Set(body.evidenceIds).size !== body.evidenceIds.length) fail("Unknown or duplicate evidence.", 400);
-    const accepted = job.value.evidence.filter(e => body.evidenceIds.includes(e.id));
-    const existing = state().evidence.get(userId) ?? [];
-    const replaced = new Set(job.value.sources.filter(s => s.status === "complete").map(s => s.source));
-    const complete = [...existing.filter(e => !replaced.has(e.source)), ...accepted];
+    if (job.value.selectionGeneration !== versions(userId).generation) fail("consent_changed");
+    if (!job.value.draft || !["ready","partial"].includes(job.value.state) || job.value.draft.draftVersion !== body.draftVersion) fail("draft_superseded");
+    if (body.baseTextVersion !== versions(userId).text || body.baseTextVersion !== job.baseTextVersion) fail("text_changed");
+    const evidence = job.value.draft.evidence;
+    if (new Set(body.evidenceIds).size !== body.evidenceIds.length || body.evidenceIds.some(id => !evidence.some(e => e.id === id))) fail("invalid_input", 400);
+    const replaced = new Set(job.value.sources.filter(s => s.status === "done").map(s => s.source));
+    const existing = state().evidence.get(userId) ?? fixtures.evidence.filter(e => e.personId === userId).map(e => ({
+      ...e, sourceId: userId + ":github", source: "github" as const, excerpt: e.text, retrievedAt: new Date().toISOString(),
+    }));
+    const complete = [...existing.filter(e => !replaced.has(e.source)), ...evidence.filter(e => body.evidenceIds.includes(e.id))];
     state().evidence.set(userId, complete);
     for (const source of job.value.sources.filter(s => replaced.has(s.source))) {
-      const evidence = complete.filter(e => e.source === source.source);
-      state().sources.set(source.sourceId, { owner: userId, removed: false, value: { sourceId: source.sourceId, source: source.source,
-        title: evidence[0]?.title ?? source.source, url: evidence[0]?.url ?? null, evidenceCount: evidence.length } });
+      const docs = complete.filter(e => e.source === source.source);
+      state().sources.set(source.sourceId, { owner: userId, removed: false, value: {
+        id: source.sourceId, source: source.source, label: source.selection?.label ?? source.source,
+        ...(source.selection?.url ? { url: source.selection.url } : {}), evidenceCount: docs.length, approvedAt: new Date().toISOString(),
+      } });
     }
-    const person = { ...store.person(userId), bio: body.bio, expertise: body.expertise };
-    store.get().people.set(userId, person);
-    noteProfileChange(userId, true);
-    job.accepted = { input: JSON.stringify(body), revision: versions(userId).revision };
-    job.value.state = "accepted";
-    job.value.needsReview = false;
-    if (job.input.cvUploadId) state().uploads.get(job.input.cvUploadId)!.removed = true;
-    return { person: structuredClone(person), sync: await sync(userId, versions(userId).revision) };
+    const profile = store.profile(userId); profile.bio = body.bio; profile.expertise = body.expertise;
+    noteProfileChange(userId, true); job.accepted = acceptedInput;
+    job.value.state = "accepted"; job.value.draft.needsReview = false;
+    if (job.input.cv) state().uploads.get(job.input.cv.uploadId)!.removed = true;
+    return { person: store.get().people.get(userId) ?? null, sync: await sync(userId) };
   },
   async cancelEnrichment({ userId, params }) {
     const job = jobFor(userId, params.id);
-    if (job.value.state === "accepted") fail("Use source removal for an accepted profile.");
+    if (job.value.state === "accepted") fail("draft_superseded");
     discard(job);
     return structuredClone(job.value);
   },
   async enrichmentSources({ userId }) {
+    store.profile(userId);
     return [...state().sources.values()].filter(s => s.owner === userId && !s.removed).map(s => structuredClone(s.value));
   },
   async removeEnrichmentSource({ userId, params }) {
     const source = owned(state().sources.get(params.id), userId);
-    if (source.removed) return { removed: true, reviewBio: true, sync: await sync(userId, versions(userId).revision) };
-    source.removed = true;
-    versions(userId).generation++;
-    for (const job of state().jobs.values()) {
-      if (job.owner !== userId) continue;
-      if (job.value.state !== "accepted") discard(job);
-      else {
-        job.value.evidence = job.value.evidence.filter(e => e.sourceId !== params.id);
-        job.value.draft = null;
+    if (!source.removed) {
+      source.removed = true; versions(userId).generation++;
+      for (const job of state().jobs.values()) if (job.owner === userId) {
+        if (job.value.state !== "accepted") discard(job);
+        else job.value.draft = null;
       }
+      state().evidence.set(userId, (state().evidence.get(userId) ?? []).filter(e => e.sourceId !== params.id));
+      noteProfileChange(userId);
     }
-    state().evidence.set(userId, (state().evidence.get(userId) ?? []).filter(e => e.sourceId !== params.id));
-    noteProfileChange(userId);
-    return { removed: true, reviewBio: true, sync: await sync(userId, versions(userId).revision) };
+    return { removed: true, reviewBio: true, sync: await sync(userId) };
   },
 };

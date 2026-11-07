@@ -2,12 +2,12 @@
  * Postgres schema (B2). Source records are durable here; Elasticsearch is
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
-  githubLogin: text("github_login").notNull(),
+  githubLogin: text("github_login"),
   name: text("name").notNull(),
   bio: text("bio").notNull().default(""),
   languages: jsonb("languages").$type<string[]>().notNull().default([]),
@@ -22,6 +22,16 @@ export const users = pgTable("users", {
   githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
 });
+
+/** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */
+export const authIdentities = pgTable("auth_identities", {
+  provider: text("provider", { enum: ["github", "google"] }).notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  userId: text("user_id").notNull().references(() => users.id),
+}, table => [
+  primaryKey({ columns: [table.provider, table.providerAccountId] }),
+  uniqueIndex("auth_identities_user_provider_idx").on(table.userId, table.provider),
+]);
 
 export const asks = pgTable(
   "asks",

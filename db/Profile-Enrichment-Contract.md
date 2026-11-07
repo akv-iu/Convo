@@ -1,131 +1,169 @@
-# Profile enrichment foundation: review and frontend handoff
+# Profile enrichment foundation: revised contract and handoff
 
-This branch proposes the shared contract and implements its local fake. It does **not** implement provider imports, CV parsing, AI generation, durable jobs or a migration. Real enrichment endpoints return sanitized **501 / `not_ready`**. The new flow is disabled by default; existing sign-in and screens remain unchanged.
+Status: proposal for Claude's CONTRACT ACK; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. This branch still starts from main `dde538d` and requires #44 plus Claude's nullable-handle compatibility commit `ad0c26f` before its typecheck can pass on main. No feature PR has been opened or merged.
 
-Read the [shared delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-plan/db/Profile-Enrichment-Plan.md) first (confirmed journey at `75a0131`), plus `AGENTS.md`, `docs/Build-Plan.md` and `docs/Quality-Gates.md`. This foundation started from main `dde538d`. Both people must approve the proposed contract before merge; Claude should return **CONTRACT ACK** or specific changes before building screens against it. Do not assume #44/#45 have merged: check their current state before choosing the frontend base.
+Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-plan/db/Profile-Enrichment-Plan.md), AGENTS.md and the quality gates. The user's 7 November decision supersedes GitHub-only authentication: **Google or GitHub sign-in, no ORCID sign-in**. Research still reads OpenAlex.
 
-## What is agreed, and what this proposes
+## Scope and exact decisions
 
-The confirmed order is details/four optional source permissions → required GitHub authentication and source confirmation → badge → availability → editable bio approval. GitHub authentication remains required with every import disabled. OAuth returns to the source-confirmation page. Imports start only on its final Continue. Research and public-profile suggestions are separate lists capped at four, with no automatic selection. Link opening and candidate selection are independent.
+- Page 1: name, country, typed workplace and optional ORCID; four independent import controls.
+- Page 2: Google/GitHub authentication, then optional source connection/confirmation. OAuth returns here with the draft preserved. A Google user who leaves GitHub imports off never needs GitHub. Typed workplace works on page 1; the pilot proposal keeps ROR authenticated and offers directory confirmation on page 2. Do not call the existing directory endpoint while signed out.
+- Final Continue snapshots selections and starts import/synthesis; badge and availability follow, then editable bio approval. An all-off confirmation returns terminal `manual` with no draft or AI call.
+- Authentication obtains basic identity information; it is inaccurate to say it reads absolutely nothing. Optional GitHub bio/repos/orgs imports start only after final confirmation.
+- A connected GitHub can sign into the same Lanyard account. A provider account belongs to at most one Lanyard account. Linking an already-owned GitHub is refused with `github_linked_elsewhere`; no account merging or automatic email linking in this release. Existing user IDs, requests and bookings remain intact.
+- `Person.githubLogin` is `string | null`; null means no connected GitHub. Never fabricate a handle. The server owns it and `putMe` strips it, including inside the real update service. `CardPerson` inherits nullability.
+- `expertise` remains optional (no default through partial updates), bounded to eight 60-character labels. Ordinary expertise edits/storage belong to the real backend implementation; approval is the foundation's write interface.
+- Paper titles/abstracts are normalized as plain text in the real importer; abstracts are optional. Every paper has an HTTPS source URL. Missing abstracts do not fail an import. Limit to ten papers, deduplicated by DOI/OpenAlex ID.
+- Generated bio/expertise must omit country, workplace and hiring claims regardless of later visibility selections. Human edits remain editable; the UI warns about hidden facts in edited prose. Sign-in and author selection do not verify authorship.
+- Public-profile text fallback is retained: `{kind:"text",text}`, ≤30,000 characters. It is owner-private, never logged, discarded on cancel/supersede/expiry/withdrawal, and returned only as bounded owner-only review excerpts. Its evidence is `source:"public_profile", kind:"profile_page"`, title “Text you pasted”, and **no URL**.
 
-The executable request/response schemas are in `src/contracts/enrichment.ts` and `src/contracts/routes.ts`; examples are in `src/contracts/fixtures/enrichment.ts`. `src/contracts/fake/contract.test.ts` covers their lifecycle. These files are the proposal to review, rather than an alternative API described only in chat.
+The foundation implements schemas, fake behavior, thin adapters, and the provider-identity schema migration. **Real enrichment endpoints still return sanitized 501/not_ready.** Google OAuth, real account linking, source collection, isolated CV parsing, durable jobs, synthesis, full-evidence persistence/index recovery and private-input cleanup are next backend work. No new dependencies are installed and no production setting is changed.
 
-Two additions close gaps in the original route table:
+## Executable contract
 
-- `POST /api/profile-enrichment/cv/:id/remove` discards a staged upload before a job exists. Call this when replacing/removing that upload or disabling CV on page two.
-- `GET /api/profile-enrichment/sources` lists approved owner-bound source IDs for returning users. Those IDs are needed to withdraw an accepted source.
+The exact shapes are in `src/contracts/enrichment.ts` and `routes.ts`; do not invent a parallel frontend API.
 
-The original eight proposed endpoints are also present. No other existing route's request or required response fields change. `Person`/`CardPerson` gain optional `expertise` (absent means an empty list); evidence kinds gain `profile_page` and `cv`. `languages` still means programming languages. Expertise is currently accepted only through enrichment approval; extending ordinary profile writes and their database storage belongs to the backend implementation, not this foundation.
+| Name | Method/path | Important behavior |
+| --- | --- | --- |
+| enrichmentState | GET /api/profile-enrichment | Owner's sign-in provider, GitHub connection/login, onboarded flag, saved page-one identity, latest job and pending CV; works before onboarding. 401 shows sign-in. |
+| saveEnrichmentIdentity | PUT /api/profile-enrichment | Privately stage page-one answers after authentication, before discovery/upload, so another tab can resume even before final Continue. Does not publish a profile. |
+| connectGitHub | POST /api/profile-enrichment/github/connect | Preserves the current account. Fake returns a recorded connected login; real implementation will return a same-origin /api/auth/ path for the protected connection flow. No client-supplied owner, handle or return URL. |
+| discoverEnrichment | POST /api/profile-enrichment/discover | One research/public_profile source per request; ≤4 candidates; independent retries; owner-bound discovery ID and input fingerprint. Human-readable links. |
+| uploadCv | POST /api/profile-enrichment/cv | Multipart: consent="true" and exactly one file or text field. PDF/DOCX ≤2 MiB or pasted text ≤30,000 characters. Response contains metadata only; pasted filename is null. |
+| removeCv | POST /api/profile-enrichment/cv/:id/remove | Idempotent private staging removal; a new upload replaces the old pending upload. |
+| startEnrichment | POST /api/profile-enrichment | Includes identity, UUID idempotencyKey and independently selected sources. New confirmation supersedes unaccepted work. |
+| getEnrichment | GET /api/profile-enrichment/:id | State, phase, confirmed-source snapshots/progress and owner-only review draft; no raw pasted input or CV body. |
+| retryEnrichment | POST /api/profile-enrichment/:id/retry | Same confirmed sources only. Active lease: 409/running plus retryAfterSeconds. New draft version on recovery. |
+| acceptEnrichment | POST /api/profile-enrichment/:id/accept | Expected draft/text versions, edited bio/expertise and selected evidence IDs. Stale reasons are distinct. CV excerpts start unselected in the UI. |
+| cancelEnrichment | POST /api/profile-enrichment/:id/cancel | Discards private temporary input; cancelled work cannot publish. |
+| enrichmentSources | GET /api/profile-enrichment/sources | Approved source IDs, labels, links where public, evidence counts and approval time. |
+| removeEnrichmentSource | POST /api/profile-enrichment/sources/:id/remove | Withdraws one source, invalidates old drafts, preserves unrelated evidence; repeating removal does not cancel newer work. |
 
-## Frontend integration details
+Start choices: `github:{import,bio,repos,orgs}`; `research:null | {skip:true} | {discoveryId,candidateId}`; `publicProfile:null | {skip:true} | {discoveryId,candidateId} | {url} | {kind:"text",text}`; `cv:null | {uploadId}`. Null means off; skip means enabled but no selection. Github import with no connection is 409/github_not_connected.
 
-- `config.profileEnrichmentEnabled` is the server-side capability, read only from `PROFILE_ENRICHMENT_ENABLED` in central config. A's server components must pass it to client screens; do not read environment variables from client code. The new screens must remain hidden when false. The server rejects every enrichment endpoint while false, even in fake mode or with a saved old draft.
-- To develop the new flow locally, set **both** `FAKE_API=1` and `PROFILE_ENRICHMENT_ENABLED=1`. No provider credentials are needed. Do not enable the feature in Vercel until the real implementation, cleanup and acceptance checks are complete.
-- All ten endpoints authenticate and scope IDs to their owner. They must eventually work before onboarding is complete. The foundation fake uses the existing demo identity/profile fixtures; it does not test real incomplete-onboarding storage or OAuth redirects.
-- Start sends `identity`, `permissions`, nullable discovery/author/public-profile/upload selections and a client-generated UUID `idempotencyKey`. Keep that key for a retry of the same confirmation. Changed choices need a new key. Candidate selection requires its discovery ID and unchanged discovery identity.
-- `permissions.github` has independent `bio`, `repos` and `organisations` booleans. GitHub import off means all three are false; this never turns off authentication. Other controls are `research`, `publicProfile`, `cv`. A source may be enabled but skipped with a null selection. Do not send selected IDs after disabling a source.
-- Public-profile selection is null or `{kind: "candidate", candidateId}`, `{kind: "url", url}`, or `{kind: "text", text}`. Manual professional text is a fallback, not a discovered candidate. Public URL shape validation is **not** SSRF protection; the real backend must add the delivery brief's connection-time validation.
-- CV uses **multipart/form-data**, not JSON. Send `consent` as the string `"true"`, plus exactly one `file` (PDF/DOCX, ≤2 MiB) or `text` (≤30,000 characters). Let the browser set the boundary: do not manually set Content-Type. One consent field and one payload only. Response: upload ID, filename, extracted-character count, warnings, expiry; no file body or CV text.
-- Source controls remain editable before confirmation. Cancel a running unaccepted job before starting changed choices; the fake also invalidates older work on a new confirmation. With all sources off, state is `manual`, no draft, no AI work. Continue manual onboarding.
-- Poll `GET /api/profile-enrichment/:id` while `queued`, `collecting` or `synthesizing`. The fake advances once per poll and reaches a recorded draft after three reads. Real progress will not depend on poll count. Stop polling on terminal states/navigation; show `stalled` honestly and use explicit retry.
-- `ready` and `partial` expose an owner-only draft and evidence. Show partial-source reasons and “How to fix this” guidance; do not infer privacy settings from empty data or generic errors. Unknown/unavailable differs from no matches.
-- Approval sends the draft's `version` and `baseTextRevision`, edited bio/expertise, and chosen evidence IDs. Bio ≤600 characters; ≤8 expertise labels, each ≤60 characters. The backend checks owner, versions, source consent and references. A newer bio edit returns 409. Badge/availability edits do not make the draft stale. Do not publish before approval.
-- Approval response has `person` and `sync: {status, retryable, savedRevision}`. `person` can be null when onboarding is unfinished; `not_onboarded` is distinct from search failure. `pending` means Postgres saved but search has not confirmed it: retain the saved result and offer retry, rather than saying nothing saved.
-- List approved sources with `enrichmentSources`; withdraw by `sourceId`. `reviewBio: true` means ask the user to review derived claims, not automatically erase their edited bio. Source removal invalidates pending drafts and preserves unrelated accepted evidence. Repeating removal must not cancel newer work.
-- Errors are `{error, code}`, with sanitized text. Statuses include 400, 401, 403, 404, 409, 413, 415, 422, 429, 501 and 503; source progress includes its own reason and optional retry cooldown. Never display provider exception bodies. Responses use `Cache-Control: no-store`.
+**Idempotency:** same owner + same key + identical normalized body returns the same job. A changed body, including edited pasted text, returns **409/idempotency_conflict**. Use a new key when choices change. Retain only owner-private request fingerprints/metadata for this comparison; do not retain raw pasted text just to compare retries.
 
-The fake is deliberately recorded data: it does not fetch candidate links, parse file bytes, contact AI or prove identity/source accuracy. File-format inspection, parsing isolation, rate limits, CV retention/cleanup, durable job leases, authentication changes, all-source database persistence and revision-ordered index recovery remain required backend work. Do not advertise these controls as a released working feature because the fake passes.
+Draft includes `draftVersion,baseTextVersion,bio,bioEvidenceIds,expertise:[{label,evidenceIds}],evidence,needsReview`. Evidence has owner/source IDs, kind, title, bounded excerpt, public URL only when appropriate, and retrieval time. IDs follow owner/kind/external-ID namespaces; the reserved `<personId>:profile` is not source evidence.
 
-The fake store now shares one process-local session across separately bundled Next route modules. It remains disposable and is not durable across restarts or multiple server instances. Claude's separate B1 compatibility check must also verify evidence reaches matching through actual route boundaries; module-level unit tests alone do not prove that integration.
+Approval returns 200 after a committed save, with `person` (nullable before onboarding) and `sync:{status:"confirmed"|"pending"|"not_onboarded",retryable,savedRevision}`. Keep the saved revision when indexing is pending. No saved ID is buried in an error string.
 
-**Observed B1 integration dependency:** after the local checklist approved recorded evidence for `u_demo_a`, a new ask from `u_demo_b` for `recorded professional reliable systems` did not return that approved profile. The memory search state is module-local in `src/server/search/memory.ts`; it needs equivalent sharing across route modules as part of Claude's B1 compatibility PR, together with expertise matching. The existing fixture-based match/request/book/resolve flow passed over actual HTTP. The foundation's source APIs are ready for contract review; the complete enrichment-to-matching flow is **not** release-ready until this separate dependency is fixed and retested. Codex did not edit B1's folders.
+Every failure body is `{error,code,retryAfterSeconds?}`. `EnrichmentReason` is the single source/help-code enum; `EnrichmentErrorCode` adds request/auth/version guards. Source off is a status, not an error reason. The new B2 adapter sanitizes provider messages and logs; the foundation does not silently change every legacy API's error behavior. HTTPS schema validation is not SSRF protection; the real fetcher must still enforce the brief's redirect/DNS/connection/body limits.
 
-## Complete local manual checklist
+## Migration and account identity
 
-No live providers are contacted. These steps verify the foundation API; screen acceptance comes with Claude's frontend PR.
+`0005_provider-identities.sql`:
+- Drops NOT NULL from users.github_login; no existing handles or rows are deleted.
+- Adds auth_identities keyed by (provider, provider_account_id), with at most one of each provider per user.
+- Backfills GitHub's numeric account ID from existing `github:<number>` user IDs, **not mutable handles**.
+- Contains no provider tokens. The real Google/linking backend must use this mapping atomically; the schema alone does not implement OAuth/linking. It must also adopt legacy GitHub rows created after this migration's backfill.
 
-1. In PowerShell, use this isolated checkout and start the fake with its capability enabled:
+The migration has **not** been applied. Generate/check are local; apply only through the user's reviewed deployment checklist. No reset/drop of shared data.
 
-   ```powershell
-   cd D:\Projects\convo-profile-enrichment-contract
-   $savedFakeApi = $env:FAKE_API
-   $savedEnrichment = $env:PROFILE_ENRICHMENT_ENABLED
-   $env:FAKE_API = "1"
-   $env:PROFILE_ENRICHMENT_ENABLED = "1"
-   npm run dev -- --port 3130 --webpack
-   ```
+After the foundation and dependent screens are reviewed, the user can apply to the intended Neon database from this checkout with:
 
-2. Open `http://localhost:3130` and paste the entire snippet below into DevTools Console. It checks discovery limits, private staging, progress, explicit approval, ownership, source withdrawal, all-off mode and cancellation. Expected last output: **FOUNDATION PASSED**.
+~~~powershell
+node --env-file="D:\Projects\Convo\.env.local" .\node_modules\drizzle-kit\bin.cjs migrate
+~~~
 
-   ```js
-   async function enrich(path, body, expected = 200, user = "u_demo_a") {
-     const form = body instanceof FormData;
-     const response = await fetch(`/api/profile-enrichment${path}`, {
-       method: body === undefined ? "GET" : "POST",
-       headers: { "x-demo-user": user, ...(!form && body !== undefined ? {"Content-Type": "application/json"} : {}) },
-       ...(body === undefined ? {} : {body: form ? body : JSON.stringify(body)})
-     });
-     const data = await response.json();
-     if (response.status !== expected) throw new Error(JSON.stringify({path, status: response.status, data}));
-     return data;
-   }
-   function check(value, message) { if (!value) throw new Error(message); }
-   var identity = { name: "Demo Researcher", country: "US", workplaceName: "Demo University", rorId: null, orcid: null };
-   var discovery = await enrich("/discover", {identity, sources: {research: true, publicProfile: true}});
-   check(discovery.research.candidates.length === 4 && discovery.publicProfile.candidates.length === 4, "Candidate limits");
-   var form = new FormData(); form.set("consent", "true"); form.set("text", "Recorded professional CV text");
-   var cv = await enrich("/cv", form);
-   check(!("text" in cv) && !("file" in cv), "Private input leaked");
-   var input = { identity, permissions: {github: {bio: true, repos: true, organisations: true}, research: true, publicProfile: true, cv: true},
-     discoveryId: discovery.discoveryId, authorId: discovery.research.candidates[0].id,
-     publicProfile: {kind: "candidate", candidateId: discovery.publicProfile.candidates[0].id}, cvUploadId: cv.uploadId, idempotencyKey: crypto.randomUUID() };
-   var job = await enrich("", input);
-   check((await enrich("", input)).jobId === job.jobId, "Duplicate job");
-   await enrich(`/${job.jobId}`, undefined, 404, "u_demo_b");
-   check((await enrich(`/${job.jobId}`)).state === "collecting", "Collection progress");
-   check((await enrich(`/${job.jobId}`)).state === "synthesizing", "Synthesis progress");
-   var ready = await enrich(`/${job.jobId}`);
-   check(ready.state === "ready" && ready.evidence.length === 4, "Draft missing");
-   var approved = await enrich(`/${job.jobId}/accept`, {...ready.draft, bio: "Reviewed foundation demo bio."});
-   check(approved.person.bio === "Reviewed foundation demo bio." && approved.sync.status === "synced", "Approval failed");
-   var savedSources = await enrich("/sources");
-   var cvSource = savedSources.find(s => s.source === "cv");
-   await enrich(`/sources/${cvSource.sourceId}/remove`, {});
-   check(!(await enrich("/sources")).some(s => s.source === "cv"), "CV source not withdrawn");
-   var manual = await enrich("", {...input, permissions: {github: {bio: false, repos: false, organisations: false}, research: false, publicProfile: false, cv: false},
-     discoveryId: null, authorId: null, publicProfile: null, cvUploadId: null, idempotencyKey: crypto.randomUUID()});
-   check(manual.state === "manual" && manual.draft === null, "All-off triggered generation");
-   var cancelled = await enrich(`/${manual.jobId}/cancel`, {});
-   check(cancelled.state === "cancelled", "Cancellation failed");
-   var pdf = new FormData(); pdf.set("consent", "true"); pdf.set("file", new File(["%PDF-recorded fake"], "demo.pdf", {type: "application/pdf"}));
-   var stagedFile = await enrich("/cv", pdf);
-   await enrich(`/cv/${stagedFile.uploadId}/remove`, {});
-   var wrongType = new FormData(); wrongType.set("consent", "true"); wrongType.set("file", new File(["text"], "demo.txt", {type: "text/plain"}));
-   await enrich("/cv", wrongType, 415);
-   var tooBig = new FormData(); tooBig.set("consent", "true"); tooBig.set("file", new File([new Uint8Array(2 * 1024 * 1024 + 1)], "large.pdf", {type: "application/pdf"}));
-   await enrich("/cv", tooBig, 413);
-   var noConsent = new FormData(); noConsent.set("text", "Do not import");
-   await enrich("/cv", noConsent, 400);
-   console.log("FOUNDATION PASSED");
-   ```
+This runs outstanding migrations too: review them first and confirm the target environment privately. In Neon's SQL editor, verify the following read-only query returns **zero rows** (every existing numeric GitHub identity was backfilled):
 
-3. The script also checks file transport with a tiny synthetic PDF marker, wrong MIME (415), oversize (413) and missing consent (400). This fake does **not** parse PDF/DOCX contents; extraction and its security cases belong to the real backend checklist.
+~~~sql
+SELECT u.id FROM users u
+LEFT JOIN auth_identities a ON a.provider = 'github'
+  AND a.provider_account_id = substring(u.id from 8) AND a.user_id = u.id
+WHERE u.id ~ '^github:[1-9][0-9]*$' AND a.user_id IS NULL;
+~~~
 
-4. Stop the server, set `$env:PROFILE_ENRICHMENT_ENABLED = "0"`, restart with the same command. Calling `/api/profile-enrichment/sources` must return 404 with code `feature_disabled`. Existing pages and `/api/me` must still work in fake mode.
+Also verify users.github_login is nullable and auth_identities has its composite primary key and unique user/provider index. Do not enable real Google/linking just because the migration exists; callback/linking security still needs implementation and live acceptance.
 
-5. Cleanup: stop the dev server (all fake jobs, uploads and edits disappear), then restore the environment values in that PowerShell session:
+Google scope proposal: `openid profile`, no email/offline/Drive/Gmail scope. Retain the stable provider subject/account mapping and the user-entered display name; do not persist Google email, profile-picture URLs, raw ID tokens, or access/refresh tokens. Tokens used for validation remain transient. Github access stays in the existing encrypted, private session path and is never assigned a Google token. Auth/linking callback security and exact storage behavior still need real implementation and tests.
 
-   ```powershell
-   $env:FAKE_API = $savedFakeApi
-   $env:PROFILE_ENRICHMENT_ENABLED = $savedEnrichment
-   ```
+## Fixtures and deterministic fake
 
-No provider/account setup or database cleanup is needed for this foundation. The complete live acceptance checklist will accompany the real backend; it needs separate permission before any provider calls.
+Existing demo A/B handles remain unchanged.
+- `u_demo_researcher`: onboarded, Google-only, githubLogin:null. Documented ask: **qubitcalibration**. Can send a request to u_demo_a.
+- `u_demo_google_new`: authenticated Google-only, unfinished onboarding. `/api/me` returns 409, but owner-state/upload/discovery/start work.
+- Use `x-demo-user` to select those API identities. Default remains demo A. This is not a simulation of real OAuth redirects.
+- Connect GitHub uses the fixed `DEMO_GITHUB_CONNECTION` fixture, never a generated handle. Connecting that same fixture to a different account returns github_linked_elsewhere.
+- Polling progresses queued → running/collecting → running/writing → ready/done. No timers or provider calls.
+- Identity-name triggers: `[demo:partial]`, `[demo:failed]`, `[demo:stalled]`, `[demo:reconnect]`, `[demo:empty]`. Retry clears recorded temporary failures and creates a new draft version. A staged identity named `[demo:connect_cancelled]` exercises cancelled connection without signing out.
+- Discovery-name triggers: `[demo:no_matches]`, `[demo:unavailable]`. Toggling a source off means no discovery request for it.
+- CV uses actual file signatures/container markers and bounded bytes, but **does not extract real documents**. PDF marker `%PDF-` passes; `/Encrypt` yields cv_encrypted; `DEMO:UNREADABLE` or `DEMO:SCANNED` yields cv_unreadable. DOCX marker requires ZIP signature plus word/document.xml and [Content_Types].xml. Wrong signatures/MIME are cv_unsupported; oversize is cv_too_large. These checks are recorded fake outcomes, not secure parsing.
+- The fake keeps no raw CV/pasted public-profile text. It is process-local and disposable, not durable across restart/instances. B1 must share its own memory-search state across route modules and include expertise/full evidence in matching/rebuild.
 
-## Verification and review status
+## Coordination and gates
 
-- Two critical review/test rounds completed, with extra regression runs after the cross-route store fix. Final lint and typecheck pass; **686 tests pass across 49 files**, with **98.72% overall line coverage**. The new adapter, enrichment schemas and fake lifecycle each have 100% line coverage in the local report. Coverage is not a substitute for the B1 integration dependency above.
-- Ran the documented API journey through an actual local Next.js server twice, including the expanded file-transport/error cases on the final run. Verified the disabled flag and unchanged `/api/me`; verified the existing fake match → send → inbox → accept → slots → book → resolve flow with two demo identities over HTTP.
-- Review fixes include text-edit staleness during collection, preserving accepted evidence on later profile saves, invalidating old work, repeated-removal safety, sanitized errors, origin checks, bounded multipart parsing and process-shared fake state. A regression test reloads the fake module to catch separate-module state loss.
-- No screen files changed, so Playwright was not rerun locally. CI gates and both people's contract approval are still required. No live providers, CV extraction, real OAuth, database migration or production settings were tested or changed. No new dependencies.
-- User explicitly approved the edits to central config and `.env.example`. No other root/shared ownership exception is assumed. No PR was opened and nothing was merged; the branch is for review.
+1. Review/merge #44 separately, then Claude's `a1/nullable-handle` compatibility patch.
+2. Both people review this foundation and Claude returns CONTRACT ACK. Its nullable type intentionally exposes old screen callers until that patch lands. No screen files are changed by Codex.
+3. Rebase/retest against the resulting exact main; get user approval before opening the foundation PR. No gate bypass.
+4. After the foundation merges, parallel backend and frontend/B1 implementation from the same commit, behind PROFILE_ENRICHMENT_ENABLED=0.
+5. Claude owns UI/e2e tests. The flag-on Playwright configuration/specs from request 18 still require the agreed config owner/approval and must land with the frontend; no empty “passing” browser gate is added before screens exist. Existing flag-off browser checks remain required.
+6. Account setup, migration, cleanup and live acceptance remain user-controlled. Ask before any live providers or paid tests.
+
+Requests 1–29 are reflected above, with these explicit amendments: retain identity on start/state, retain terminal manual mode, retain public-profile text, retain structured saved-revision sync, and stage nullable-handle rollout behind the compatibility patch. Browser flag-on work is an explicit frontend dependency, not claimed complete.
+
+## Complete local manual checklist (API foundation only)
+
+Run in this worktree with no provider credentials:
+
+~~~powershell
+$env:FAKE_API = "1"
+$env:PROFILE_ENRICHMENT_ENABLED = "1"
+npm run dev -- --port 3130 --webpack
+~~~
+
+On http://localhost:3130, paste the whole following snippet into DevTools. It uses recorded demo identities only and changes disposable fake state. Expected final output: REVISED FOUNDATION PASSED.
+
+~~~js
+async function enrich(path, body, expected=200, user="u_demo_google_new") {
+  const form=body instanceof FormData;
+  const response=await fetch(`/api/profile-enrichment${path}`, {
+    method:body===undefined?"GET":"POST",
+    headers:{"x-demo-user":user,...(body!==undefined&&!form?{"Content-Type":"application/json"}:{})},
+    ...(body===undefined?{}:{body:form?body:JSON.stringify(body)})
+  });
+  const value=await response.json();
+  if(response.status!==expected) throw new Error(JSON.stringify({path,status:response.status,value}));
+  return value;
+}
+function check(value,message){if(!value)throw new Error(message);}
+var owner=await enrich("");
+check(!owner.onboarded && owner.github.login===null,"Google-only identity");
+var identity={name:"Demo Researcher",country:"US",workplaceName:"Demo University",rorId:null,orcid:null};
+var discovery=await enrich("/discover",{source:"research",name:identity.name,workplaceName:identity.workplaceName,rorId:null,orcid:null});
+check(discovery.candidates.length===4,"Research limit");
+var form=new FormData();form.set("consent","true");form.set("text","Recorded private CV");
+var cv=await enrich("/cv",form);
+check(cv.filename===null && !("text" in cv),"CV privacy");
+var input={identity,idempotencyKey:crypto.randomUUID(),github:{import:false,bio:false,repos:false,orgs:false},
+  research:{discoveryId:discovery.discoveryId,candidateId:discovery.candidates[0].id},
+  publicProfile:{kind:"text",text:"Private professional input"},cv:{uploadId:cv.uploadId}};
+var job=await enrich("",input);
+check((await enrich("",input)).jobId===job.jobId,"Idempotency");
+await enrich("",{...input,publicProfile:{kind:"text",text:"Edited input"}},409);
+await enrich(`/${job.jobId}`,undefined,404,"u_demo_b");
+await enrich(`/${job.jobId}`);await enrich(`/${job.jobId}`);
+var ready=await enrich(`/${job.jobId}`);
+check(ready.state==="ready" && ready.draft.evidence.length===3,"Ready draft");
+var pasted=ready.draft.evidence.find(e=>e.source==="public_profile");
+check(pasted.kind==="profile_page" && !("url" in pasted),"Pasted-text source");
+var accepted=await enrich(`/${job.jobId}/accept`,{
+  draftVersion:ready.draft.draftVersion,baseTextVersion:ready.draft.baseTextVersion,
+  bio:"My reviewed professional bio.",expertise:["Reliable systems"],
+  evidenceIds:ready.draft.evidence.filter(e=>e.source!=="cv").map(e=>e.id)
+});
+check(accepted.person===null && accepted.sync.status==="not_onboarded","Pre-onboarding approval");
+var sources=await enrich("/sources");
+await enrich(`/sources/${sources.find(s=>s.source==="public_profile").id}/remove`,{});
+var manual=await enrich("",{...input,idempotencyKey:crypto.randomUUID(),research:null,publicProfile:null,cv:null});
+check(manual.state==="manual" && manual.draft===null,"All-off manual flow");
+await enrich(`/${manual.jobId}/cancel`,{});
+var linked=await enrich("/github/connect",{});
+check(linked.status==="connected","Recorded GitHub connection");
+check((await enrich("")).signIn.provider==="google","Linking changed sign-in owner");
+console.log("REVISED FOUNDATION PASSED");
+~~~
+
+Then stop the server, set PROFILE_ENRICHMENT_ENABLED=0 and restart. GET /api/profile-enrichment must return 404/feature_disabled; existing /api/me for demo A still returns 200. Cleanup: stop the server and restore your previous shell environment values (or close this task's terminal); all fake data disappears. Do not modify .env.local or Vercel for this checklist.
+
+Real OAuth, real extraction, indexing/rebuild, cleanup/retention and the complete browser journey require the later integration checklist. A passing fake does not establish any of them.

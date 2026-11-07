@@ -11,7 +11,8 @@ const { runtime, identity } = vi.hoisted(() => ({
 vi.mock("@/server/config", () => ({ config: runtime }));
 vi.mock("@/server/auth", () => ({ getUserId: async () => identity.userId }));
 vi.mock("next/server", async original => ({ ...await original<typeof import("next/server")>(), connection: async () => undefined }));
-import { POST as start } from "./route";
+import { POST as start, GET as state, PUT as saveIdentity } from "./route";
+import { POST as connect } from "./github/connect/route";
 import { POST as discover } from "./discover/route";
 import { POST as upload } from "./cv/route";
 import { POST as removeCv } from "./cv/[id]/remove/route";
@@ -41,24 +42,31 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("profile enrichment HTTP foundation", () => {
   it("serves the full fake contract through every route with no provider calls", async () => {
-    const found = await discover(json({ identity: enrichmentIdentity, sources: { research: true, publicProfile: true } }), context());
+    routes.enrichmentState.response.parse(await (await state(new Request("http://localhost/api/profile-enrichment"), context())).json());
+    const identityRequest = new Request("http://localhost/api/profile-enrichment", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(enrichmentIdentity) });
+    routes.saveEnrichmentIdentity.response.parse(await (await saveIdentity(identityRequest, context())).json());
+    routes.connectGitHub.response.parse(await (await connect(json({}), context())).json());
+    const { name, workplaceName, rorId, orcid } = enrichmentIdentity;
+    const lookup = { name, workplaceName, rorId, orcid };
+    const found = await discover(json({ ...lookup, source: "research" }), context());
     const discovery = routes.discoverEnrichment.response.parse(await found.json());
     const uploaded = await upload(multipart(new File(["%PDF-demo fixture"], "demo.pdf", { type: "application/pdf" })), context());
     const cv = routes.uploadCv.response.parse(await uploaded.json());
-    const body = { ...enrichmentStart(), discoveryId: discovery.discoveryId, authorId: discovery.research.candidates[0].id,
-      publicProfile: { kind: "candidate", candidateId: discovery.publicProfile.candidates[0].id }, cvUploadId: cv.uploadId };
+    const body = { ...enrichmentStart(), research: { discoveryId: discovery.discoveryId, candidateId: discovery.candidates[0].id },
+      publicProfile: { kind: "text", text: "Recorded professional text" }, cv: { uploadId: cv.uploadId } };
     const started = routes.startEnrichment.response.parse(await (await start(json(body), context())).json());
     const ctx = context(started.jobId);
     const get = () => new Request("http://localhost/api/profile-enrichment/" + started.jobId);
     await getJob(get(), ctx); await getJob(get(), ctx);
     const ready = routes.getEnrichment.response.parse(await (await getJob(get(), ctx)).json());
     expect(ready.state).toBe("ready");
-    const saved = await accept(json(ready.draft), ctx);
+    const saved = await accept(json({ draftVersion: ready.draft!.draftVersion, baseTextVersion: ready.draft!.baseTextVersion,
+      bio: ready.draft!.bio, expertise: ready.draft!.expertise.map(e => e.label), evidenceIds: ready.draft!.evidence.map(e => e.id) }), ctx);
     expect(saved.status).toBe(200);
     expect(saved.headers.get("cache-control")).toBe("no-store");
     routes.acceptEnrichment.response.parse(await saved.json());
     const list = routes.enrichmentSources.response.parse(await (await sources(get(), context())).json());
-    const removed = await removeSource(json({}), context(list[0].sourceId));
+    const removed = await removeSource(json({}), context(list[0].id));
     routes.removeEnrichmentSource.response.parse(await removed.json());
     const second = routes.startEnrichment.response.parse(await (await start(json(enrichmentStart()), context())).json());
     expect((await retry(json({}), context(second.jobId))).status).toBe(409);
@@ -67,7 +75,7 @@ describe("profile enrichment HTTP foundation", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each([discover, upload, start, getJob, retry, accept, cancel, removeCv, sources, removeSource])(
+  it.each([state, saveIdentity, connect, discover, upload, start, getJob, retry, accept, cancel, removeCv, sources, removeSource])(
     "keeps routes disabled even in fake mode and rejects unauthenticated reads/writes", async handler => {
       runtime.profileEnrichmentEnabled = false;
       const disabled = await handler(json({}), context("missing"));
@@ -100,8 +108,37 @@ describe("profile enrichment HTTP foundation", () => {
     const response = await upload(multipart("Private CV fallback"), context());
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toMatchObject({ filename: "Pasted CV text", extractedCharacters: 19 });
+    expect(body).toMatchObject({ filename: null, characters: 19 });
     expect(JSON.stringify(body)).not.toContain("Private CV fallback");
+  });
+
+  it.each([
+    ["not a PDF", 415, "cv_unsupported"],
+    ["%PDF-1.7 /Encrypt", 422, "cv_encrypted"],
+    ["%PDF-1.7 DEMO:UNREADABLE", 422, "cv_unreadable"],
+    ["%PDF-1.7 DEMO:SCANNED", 422, "cv_unreadable"],
+  ] as const)("checks actual file bytes for recorded outcomes: %s", async (bytes, status, code) => {
+    const response = await upload(multipart(new File([bytes], "recorded.pdf", { type: "application/pdf" })), context());
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ code });
+  });
+
+  it("accepts a recorded DOCX container marker without pretending to extract it", async () => {
+    const file = new File([new Uint8Array([0x50,0x4b,3,4]), "[Content_Types].xml word/document.xml"], "recorded.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+    expect((await upload(multipart(file), context())).status).toBe(200);
+  });
+
+  it("returns machine-readable running retry and idempotency conflict errors", async () => {
+    const input = enrichmentStart();
+    const job = await (await start(json(input), context())).json();
+    const running = await retry(json({}), context(job.jobId));
+    expect(running.status).toBe(409);
+    expect(await running.json()).toMatchObject({ code: "running", retryAfterSeconds: 30 });
+    const conflicting = await start(json({ ...input, publicProfile: { kind: "text", text: "Edited" } }), context());
+    expect(conflicting.status).toBe(409);
+    expect(await conflicting.json()).toMatchObject({ code: "idempotency_conflict" });
   });
 
   it.each([
@@ -151,7 +188,7 @@ describe("profile enrichment HTTP foundation", () => {
     expect(JSON.stringify(await response.json())).not.toContain("secret");
     expect(warn).toHaveBeenCalledWith("[profile-enrichment] startEnrichment unavailable");
     vi.spyOn(fake, "discoverEnrichment").mockResolvedValueOnce({ raw: "secret" } as never);
-    expect((await discover(json({ identity: enrichmentIdentity, sources: { research: true, publicProfile: true } }), context())).status).toBe(500);
+    expect((await discover(json({ name: enrichmentIdentity.name, workplaceName: null, rorId: null, orcid: null, source: "research" }), context())).status).toBe(500);
     const signal = { digest: "NEXT_REDIRECT" };
     vi.spyOn(real, "startEnrichment").mockRejectedValueOnce(signal);
     runtime.fakeApi = false;

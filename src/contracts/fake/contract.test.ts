@@ -3,14 +3,12 @@
  * ready, add them to `implementations` and the same tests prove the swap
  * is safe.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DEMO_USER_A, DEMO_USER_B, sampleAsks } from "@/contracts/fixtures";
 import { search } from "@/server/search";
 import { routes, type Api, type Ctx, type RouteName } from "@/contracts/routes";
 import { fake } from "./handlers";
 import { store } from "./store";
-import { enrichmentIdentity, enrichmentStart } from "../fixtures/enrichment";
-import { SourceUrl } from "../enrichment";
 
 const implementations: { name: string; api: Api; reset: () => void }[] = [
   { name: "fake", api: fake, reset: () => store.reset() },
@@ -23,199 +21,12 @@ function ctx<N extends RouteName>(userId: string, body?: unknown, params: Record
 describe.each(implementations)("$name API", ({ api, reset }) => {
   beforeEach(reset);
 
-  async function readyEnrichment() {
-    const body = enrichmentStart();
-    const discovery = await api.discoverEnrichment(ctx(DEMO_USER_A, { identity: body.identity, sources: { research: true, publicProfile: true } }));
-    routes.discoverEnrichment.response.parse(discovery);
-    expect(discovery.research.candidates).toHaveLength(4);
-    expect(discovery.publicProfile.candidates).toHaveLength(4);
-    const upload = await api.uploadCv(ctx(DEMO_USER_A, { consent: true, text: "Private contact data is not returned or indexed by the fake." }));
-    routes.uploadCv.response.parse(upload);
-    Object.assign(body, { discoveryId: discovery.discoveryId, authorId: discovery.research.candidates[0].id,
-      publicProfile: { kind: "candidate", candidateId: discovery.publicProfile.candidates[0].id }, cvUploadId: upload.uploadId });
-    const started = await api.startEnrichment(ctx(DEMO_USER_A, body));
-    routes.startEnrichment.response.parse(started);
-    expect((await api.startEnrichment(ctx(DEMO_USER_A, body))).jobId).toBe(started.jobId);
-    const params = { id: started.jobId };
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, params))).state).toBe("collecting");
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, params))).state).toBe("synthesizing");
-    const ready = await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    routes.getEnrichment.response.parse(ready);
-    expect(ready.state).toBe("ready");
-    return { body, ready, params, upload };
-  }
-
-  it("imports four fake sources without publishing, then approves only chosen evidence and preserves badge/time edits", async () => {
-    const before = await api.getMe(ctx(DEMO_USER_A));
-    const { ready, params, upload } = await readyEnrichment();
-    expect(await api.getMe(ctx(DEMO_USER_A))).toEqual(before);
-    expect(ready.evidence.map(e => e.kind)).toEqual(["repo", "paper", "profile_page", "cv"]);
-    expect(JSON.stringify(ready)).not.toContain("Private contact data");
-    expect(ready.evidence.find(e => e.kind === "cv")).not.toHaveProperty("url");
-    await api.putMe(ctx(DEMO_USER_A, { badgeColour: "lilac", visibility: { country: false, workplace: false, hiring: false } }));
-    await api.putAvailability(ctx(DEMO_USER_A, []));
-    const accept = { ...ready.draft!, bio: "My reviewed bio.", evidenceIds: ready.evidence.filter(e => e.kind !== "cv").map(e => e.id) };
-    const saved = await api.acceptEnrichment(ctx(DEMO_USER_A, accept, params));
-    routes.acceptEnrichment.response.parse(saved);
-    expect(saved.person).toMatchObject({ bio: accept.bio, badgeColour: "lilac", freeTimes: [], visibility: { country: false, workplace: false, hiring: false } });
-    expect((await api.enrichmentSources(ctx(DEMO_USER_A))).reduce((sum, s) => sum + s.evidenceCount, 0)).toBe(3);
-    expect((await api.acceptEnrichment(ctx(DEMO_USER_A, accept, params))).person).toEqual(saved.person);
-    expect(store.get().enrichment.uploads.get(upload.uploadId)?.removed).toBe(true);
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, { ...accept, bio: "Different repeat" }, params))).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("keeps all-off onboarding manual and discovers nothing for deselected sources", async () => {
-    const discovery = await api.discoverEnrichment(ctx(DEMO_USER_A, { identity: enrichmentIdentity, sources: { research: false, publicProfile: false } }));
-    expect(discovery.research).toMatchObject({ status: "not_selected", candidates: [] });
-    expect(discovery.publicProfile).toMatchObject({ status: "not_selected", candidates: [] });
-    const body = enrichmentStart();
-    body.permissions = { github: { bio: false, repos: false, organisations: false }, research: false, publicProfile: false, cv: false };
-    const job = await api.startEnrichment(ctx(DEMO_USER_A, body));
-    expect(await api.getEnrichment(ctx(DEMO_USER_A, undefined, { id: job.jobId }))).toMatchObject({ state: "manual", draft: null, evidence: [] });
-  });
-
-  it("rejects stale candidate choices, expired uploads, mismatched consent and reused keys with different input", async () => {
-    const body = enrichmentStart();
-    const discovery = await api.discoverEnrichment(ctx(DEMO_USER_A, { identity: body.identity, sources: { research: true, publicProfile: true } }));
-    body.discoveryId = discovery.discoveryId;
-    body.authorId = "not-a-candidate";
-    await expect(api.startEnrichment(ctx(DEMO_USER_A, body))).rejects.toMatchObject({ status: 409 });
-    body.authorId = discovery.research.candidates[0].id;
-    body.identity.name = "Changed identity";
-    await expect(api.startEnrichment(ctx(DEMO_USER_A, body))).rejects.toMatchObject({ status: 409 });
-    body.identity.name = enrichmentIdentity.name;
-    await api.startEnrichment(ctx(DEMO_USER_A, body));
-    await expect(api.startEnrichment(ctx(DEMO_USER_A, { ...body, authorId: null }))).rejects.toMatchObject({ status: 409 });
-    expect(routes.startEnrichment.body.safeParse({ ...body, permissions: { ...body.permissions, research: false } }).success).toBe(false);
-    const upload = await api.uploadCv(ctx(DEMO_USER_A, { consent: true, text: "Bounded CV" }));
-    store.get().enrichment.uploads.get(upload.uploadId)!.value.expiresAt = "2000-01-01T00:00:00Z";
-    await expect(api.startEnrichment(ctx(DEMO_USER_A, { ...enrichmentStart(), cvUploadId: upload.uploadId }))).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("isolates discovery, upload, job, approval and source removal by owner", async () => {
-    const { ready, params, upload, body } = await readyEnrichment();
-    const attempts = [
-      () => api.startEnrichment(ctx(DEMO_USER_B, { ...body, idempotencyKey: crypto.randomUUID() })),
-      () => api.startEnrichment(ctx(DEMO_USER_B, { ...enrichmentStart(), cvUploadId: upload.uploadId })),
-      () => api.removeCv(ctx(DEMO_USER_B, undefined, { id: upload.uploadId })),
-      () => api.getEnrichment(ctx(DEMO_USER_B, undefined, params)),
-      () => api.retryEnrichment(ctx(DEMO_USER_B, undefined, params)),
-      () => api.acceptEnrichment(ctx(DEMO_USER_B, ready.draft, params)),
-      () => api.cancelEnrichment(ctx(DEMO_USER_B, undefined, params)),
-    ];
-    for (const attempt of attempts) await expect(attempt()).rejects.toMatchObject({ status: 404 });
-    await api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params));
-    const sources = await api.enrichmentSources(ctx(DEMO_USER_A));
-    routes.enrichmentSources.response.parse(sources);
-    await expect(api.removeEnrichmentSource(ctx(DEMO_USER_B, undefined, { id: sources[0].sourceId }))).rejects.toMatchObject({ status: 404 });
-    expect((await api.enrichmentSources(ctx(DEMO_USER_B))).some(s => s.sourceId.startsWith(`${DEMO_USER_A}:`))).toBe(false);
-  });
-
-  it("protects bio edits made during collection and refuses unknown evidence", async () => {
-    const started = await api.startEnrichment(ctx(DEMO_USER_A, enrichmentStart()));
-    await api.putMe(ctx(DEMO_USER_A, { bio: "Newer manual edit" }));
-    const params = { id: started.jobId };
-    await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    const ready = await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    expect(ready.needsReview).toBe(true);
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params))).rejects.toMatchObject({ status: 409 });
-    expect((await api.getMe(ctx(DEMO_USER_A))).bio).toBe("Newer manual edit");
-    const clean = await readyEnrichment();
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, { ...clean.ready.draft, evidenceIds: ["foreign-evidence"] }, clean.params))).rejects.toMatchObject({ status: 400 });
-  });
-
-  it("cancels unaccepted uploads and jobs, with no late approval or retry", async () => {
-    const { ready, params, upload } = await readyEnrichment();
-    expect(await api.removeCv(ctx(DEMO_USER_A, undefined, { id: upload.uploadId }))).toEqual({ removed: true });
-    expect((await api.cancelEnrichment(ctx(DEMO_USER_A, undefined, params))).state).toBe("cancelled");
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, params))).draft).toBeNull();
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params))).rejects.toMatchObject({ status: 409 });
-    await expect(api.retryEnrichment(ctx(DEMO_USER_A, undefined, params))).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("withdraws one approved source, preserves other evidence and invalidates pending work", async () => {
-    const { ready, params } = await readyEnrichment();
-    await api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params));
-    const pending = await api.startEnrichment(ctx(DEMO_USER_A, enrichmentStart()));
-    const sources = await api.enrichmentSources(ctx(DEMO_USER_A));
-    const cv = sources.find(s => s.source === "cv")!;
-    const removed = await api.removeEnrichmentSource(ctx(DEMO_USER_A, undefined, { id: cv.sourceId }));
-    routes.removeEnrichmentSource.response.parse(removed);
-    expect(removed.reviewBio).toBe(true);
-    expect(await api.enrichmentSources(ctx(DEMO_USER_A))).toHaveLength(3);
-    expect(store.get().enrichment.evidence.get(DEMO_USER_A)?.some(e => e.source === "cv")).toBe(false);
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, { id: pending.jobId }))).state).toBe("cancelled");
-    await api.removeEnrichmentSource(ctx(DEMO_USER_A, undefined, { id: cv.sourceId }));
-    expect((await api.getMe(ctx(DEMO_USER_A))).bio).toBe(ready.draft!.bio);
-    const newer = await api.startEnrichment(ctx(DEMO_USER_A, enrichmentStart()));
-    await api.removeEnrichmentSource(ctx(DEMO_USER_A, undefined, { id: cv.sourceId }));
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, { id: newer.jobId }))).state).toBe("collecting");
-    expect((await api.getEnrichment(ctx(DEMO_USER_A, undefined, params))).evidence.some(e => e.source === "cv")).toBe(false);
-    await api.putMe(ctx(DEMO_USER_A, { badgeColour: "mint" }));
-    const indexed = await search.searchCandidates("recorded", { excludeIds: [] });
-    expect(indexed.find(c => c.person.id === DEMO_USER_A)?.highlights).toContain("Demo research evidence");
-    expect(indexed.find(c => c.person.id === DEMO_USER_A)?.highlights).not.toContain("Demo cv evidence");
-  });
-
-  it.each(["not a url", "http://example.org", "https://user:secret@example.org", "javascript:alert(1)"])(
-    "rejects an invalid source link without throwing: %s", url => expect(SourceUrl.safeParse(url).success).toBe(false),
-  );
-
-  it("does not claim to import repositories when only GitHub bio is permitted", async () => {
-    const body = enrichmentStart(); body.permissions.github = { bio: true, repos: false, organisations: false };
-    const job = await api.startEnrichment(ctx(DEMO_USER_A, body));
-    const params = { id: job.jobId };
-    await api.getEnrichment(ctx(DEMO_USER_A, undefined, params)); await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    const ready = await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    expect(ready.evidence.every(e => e.kind !== "repo")).toBe(true);
-  });
-
-  it("exercises partial failure and retry with a new draft version, without inventing evidence for a failed source", async () => {
-    const { ready, params } = await readyEnrichment();
-    const job = store.get().enrichment.jobs.get(ready.jobId)!;
-    job.value.state = "synthesizing";
-    job.value.sources = job.value.sources.map(s => s.source === "research" ? { ...s, status: "failed", reason: "temporarily_unavailable" } : s);
-    const partial = await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    expect(partial.state).toBe("partial");
-    expect(partial.evidence.some(e => e.source === "research")).toBe(false);
-    routes.retryEnrichment.response.parse(await api.retryEnrichment(ctx(DEMO_USER_A, undefined, params)));
-    await api.getEnrichment(ctx(DEMO_USER_A, undefined, params)); await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    const recovered = await api.getEnrichment(ctx(DEMO_USER_A, undefined, params));
-    expect(recovered.draft?.version).toBe(2);
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params))).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("expires a draft, clears its temporary data and prevents retry or approval", async () => {
-    const { ready, params, upload } = await readyEnrichment();
-    store.get().enrichment.jobs.get(ready.jobId)!.value.expiresAt = "2000-01-01T00:00:00Z";
-    expect(await api.getEnrichment(ctx(DEMO_USER_A, undefined, params))).toMatchObject({ state: "failed", draft: null, evidence: [] });
-    expect(store.get().enrichment.uploads.get(upload.uploadId)?.removed).toBe(true);
-    await expect(api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params))).rejects.toMatchObject({ status: 409 });
-    await expect(api.retryEnrichment(ctx(DEMO_USER_A, undefined, params))).rejects.toMatchObject({ status: 409 });
-  });
-
-  it("returns a structured pending sync after saving, and repairs on identical approval retry", async () => {
-    const { ready, params } = await readyEnrichment();
-    const ingest = vi.spyOn(search, "ingestPerson").mockRejectedValueOnce(new Error("Private provider details"));
-    try {
-      const saved = await api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params));
-      expect(saved).toMatchObject({ person: { bio: ready.draft!.bio }, sync: { status: "pending", retryable: true } });
-      expect(JSON.stringify(saved)).not.toContain("Private provider details");
-      const repaired = await api.acceptEnrichment(ctx(DEMO_USER_A, ready.draft, params));
-      expect(repaired.sync).toMatchObject({ status: "synced", savedRevision: saved.sync.savedRevision });
-    } finally { ingest.mockRestore(); }
-  });
-
-  it("does not retain pasted professional text in fake jobs and can fail without inventing a draft", async () => {
-    const body = { ...enrichmentStart(), publicProfile: { kind: "text", text: "Private pasted professional input" } };
-    const started = await api.startEnrichment(ctx(DEMO_USER_A, body));
-    const job = store.get().enrichment.jobs.get(started.jobId)!;
-    expect(JSON.stringify(job)).not.toContain("Private pasted professional input");
-    expect((await api.startEnrichment(ctx(DEMO_USER_A, body))).jobId).toBe(started.jobId);
-    job.value.state = "synthesizing";
-    job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed", reason: "import_unavailable" });
-    expect(await api.getEnrichment(ctx(DEMO_USER_A, undefined, { id: started.jobId }))).toMatchObject({ state: "failed", draft: null, evidence: [] });
+  it("keeps GitHub identity server-owned and preserves omitted expertise", async () => {
+    const me = await api.getMe(ctx(DEMO_USER_A));
+    const body = routes.putMe.body.parse({ githubLogin: "another-person", badgeColour: "lilac" });
+    expect(body).not.toHaveProperty("githubLogin");
+    expect(body).not.toHaveProperty("expertise");
+    expect((await api.putMe(ctx(DEMO_USER_A, body))).githubLogin).toBe(me.githubLogin);
   });
 
   it("hides card fields while retaining owner data and matching results", async () => {

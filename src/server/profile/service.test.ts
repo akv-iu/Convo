@@ -27,6 +27,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("real profile and availability services", () => {
+  it("does not write caller-supplied GitHub identity, even when invoked without the HTTP parser", async () => {
+    const saved = await updateProfile(person.id, { githubLogin: "another-person" } as never);
+    expect(saved.githubLogin).toBe(person.githubLogin);
+    expect(query).toHaveBeenCalledOnce();
+    expect(String(query.mock.calls[0][0])).not.toContain('update "users"');
+  });
   it("syncs to the search it is given, and acknowledges only that write", async () => {
     const target = { ingestPerson: vi.fn().mockResolvedValue(undefined) };
     const user = {

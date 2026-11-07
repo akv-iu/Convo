@@ -17,6 +17,9 @@ const enrichmentUnavailable = async (): Promise<never> => {
 };
 
 export const real: Api = {
+  enrichmentState: enrichmentUnavailable,
+  saveEnrichmentIdentity: enrichmentUnavailable,
+  connectGitHub: enrichmentUnavailable,
   discoverEnrichment: enrichmentUnavailable,
   uploadCv: enrichmentUnavailable,
   removeCv: enrichmentUnavailable,
