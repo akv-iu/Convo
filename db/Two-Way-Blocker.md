@@ -82,8 +82,8 @@ and their session-storage backups until cleanup. Search and AI stay fake.
    console.log("BASELINE PASSED");
    ```
 
-4. In **A only**, reject B once. Do not repeat this POST; duplicate submissions
-   count toward the batch cutoff.
+4. In **A only**, reject B once. Repeating this POST is safe: the same person is
+   never counted twice toward the batch cutoff.
 
    ```js
    var test = JSON.parse(sessionStorage.getItem("convo.two-way-test"));

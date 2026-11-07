@@ -3,12 +3,14 @@ import { people } from "@/contracts/fixtures";
 import { routes } from "@/contracts/routes";
 import type { Ask } from "@/contracts/types";
 
-const { query, getProfile, refineAsk, registerAsk, runMatch } = vi.hoisted(() => ({
+const { query, getProfile, refineAsk, registerAsk, runMatch, after, afterTasks } = vi.hoisted(() => ({
   query: vi.fn(), getProfile: vi.fn(), refineAsk: vi.fn(), registerAsk: vi.fn(), runMatch: vi.fn(),
+  after: vi.fn(), afterTasks: [] as (() => Promise<unknown>)[],
 }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
+vi.mock("next/server", async (importOriginal) => ({ ...await importOriginal<typeof import("next/server")>(), after }));
 vi.mock("@/server/profile/service", () => ({ getProfile }));
 vi.mock("@/server/ai", async () => ({ ai: { refineAsk }, ...await import("@/server/ai/blocked") }));
 vi.mock("@/server/search", () => ({ search: { registerAsk } }));
@@ -31,6 +33,8 @@ beforeEach(() => {
   refineAsk.mockReset().mockResolvedValue(refined);
   registerAsk.mockReset().mockResolvedValue(undefined);
   runMatch.mockReset().mockResolvedValue([]);
+  afterTasks.length = 0;
+  after.mockReset().mockImplementation((task: () => Promise<unknown>) => { afterTasks.push(task); });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
 });
@@ -99,6 +103,34 @@ describe("durable ask creation", () => {
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-url");
     expect(registerAsk).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("runs the first match in the background after the response, so its explanations are cached", async () => {
+    const { askId } = await createAsk(person.id, "scheduler preemption");
+    expect(after).toHaveBeenCalledOnce();
+    expect(runMatch).not.toHaveBeenCalled(); // nothing extra before the response
+
+    query.mockResolvedValueOnce(askRows({ ...ask, id: askId }));
+    await afterTasks[0]();
+
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ ask: expect.objectContaining({ id: askId }), requester: person }));
+  });
+
+  it("only logs, without provider details, when the background match fails", async () => {
+    const { askId } = await createAsk(person.id, "scheduler preemption");
+    query.mockResolvedValueOnce(askRows({ ...ask, id: askId }));
+    runMatch.mockRejectedValueOnce(new Error("private-search-token"));
+
+    await expect(afterTasks[0]()).resolves.toBeUndefined();
+
+    expect(console.warn).toHaveBeenCalledWith("[asks] Background first match failed; the asker's own first match computes it.");
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("private-search-token");
+  });
+
+  it("still answers when there is no request to run the background match after", async () => {
+    after.mockImplementationOnce(() => { throw new Error("`after` was called outside a request scope."); });
+    await expect(createAsk(person.id, "scheduler preemption")).resolves.toMatchObject({ refined });
   });
 
   it("returns the saved ask when registration fails and logs no provider details", async () => {
@@ -147,7 +179,7 @@ describe("matching a saved ask", () => {
     query.mockResolvedValueOnce(askRows());
     const matching = matchAsk(person.id, ask.id);
     await vi.waitFor(() => {
-      expect(query).toHaveBeenCalledTimes(3);
+      expect(query).toHaveBeenCalledTimes(4); // ask, rejections, pending users, requests already sent
       expect(registerAsk).toHaveBeenCalledExactlyOnceWith(ask.id, person.id, refined.text);
     });
     expect(runMatch).not.toHaveBeenCalled();
@@ -179,7 +211,8 @@ describe("matching a saved ask", () => {
       .mockResolvedValueOnce({ rows: [["reverse-blocker"], ["pending-user"]] });
     await matchAsk(person.id, ask.id);
     expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({
-      excludeIds: [...(softBlocker ? ["outgoing"] : []), "reverse-blocker", "pending-user"],
+      excludeIds: ["reverse-blocker", "pending-user"],
+      hideIds: softBlocker ? ["outgoing"] : [],
     }));
     const [sql, params] = query.mock.calls[2];
     expect(sql).toContain('union (select "asks"."user_id"');
@@ -195,7 +228,7 @@ describe("matching a saved ask", () => {
     getProfile.mockReturnValueOnce(new Promise(resolve => { releaseProfile = resolve; }));
     query.mockResolvedValueOnce(askRows());
     const matching = matchAsk(person.id, ask.id);
-    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(4));
     expect(runMatch).not.toHaveBeenCalled();
     releaseProfile(person);
     await expect(matching).resolves.toEqual([]);
@@ -213,14 +246,15 @@ describe("matching a saved ask", () => {
     const visible = { country: true, workplace: true, hiring: true };
     runMatch.mockResolvedValueOnce([pending, ready].map((candidate, rank) => ({ person: candidate,
       badges: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
-    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
-      [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
-    ] });
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
+        [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
+      ] });
     const cards = await matchAsk(person.id, ask.id);
     expect(cards.map(card => card.person.id)).toEqual([ready.id]);
   });
   it("uses current database visibility even when search contains an older public profile", async () => {
-    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
     const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
     runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
@@ -228,7 +262,7 @@ describe("matching a saved ask", () => {
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
     expect(card.badges).toEqual([]);
-    expect(query.mock.calls[3][1]).toEqual(["candidate"]);
+    expect(query.mock.calls[4][1]).toEqual(["candidate"]);
     expect(candidate.filters).toEqual(person.filters);
   });
 
@@ -240,7 +274,7 @@ describe("matching a saved ask", () => {
 
   it("does not return cards when the current privacy read fails", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(new Error("private-database-token"));
     runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
@@ -261,7 +295,7 @@ describe("matching a saved ask", () => {
     expect(await matchAsk(person.id, ask.id, "raft")).toEqual([]);
     expect(query.mock.calls[0][0]).toContain('where ("asks"."id" = $1 and "asks"."user_id" = $2)');
     expect(query.mock.calls[0][1]).toEqual([ask.id, person.id, 1]);
-    expect(runMatch).toHaveBeenCalledWith({ ask, requester: person, query: "raft", excludeIds: [], hiddenBelowRank: null });
+    expect(runMatch).toHaveBeenCalledWith({ ask, requester: person, query: "raft", excludeIds: [], hideIds: [], hiddenBelowRank: null });
   });
 
   it("hides existence of another user's or a missing ask", async () => {
@@ -278,14 +312,34 @@ describe("matching a saved ask", () => {
     await matchAsk(person.id, ask.id);
     expect(query.mock.calls[1][1]).toEqual([ask.id]);
     expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({
-      excludeIds: softBlocker ? ["p1", "p2", "p3"] : [], hiddenBelowRank: 4,
+      excludeIds: [], hideIds: softBlocker ? ["p1", "p2", "p3"] : [], hiddenBelowRank: 4,
     }));
   });
 
   it("does not impose the batch cutoff below the configured threshold", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [["p1", 4]] });
     await matchAsk(person.id, ask.id);
-    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["p1"], hiddenBelowRank: null }));
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: [], hideIds: ["p1"], hiddenBelowRank: null }));
+  });
+
+  it.each([true, false])("hides people this ask already sent a request to, with blocker=%s", async (softBlocker) => {
+    query.mockResolvedValueOnce(askRows({ ...ask, softBlocker })).mockResolvedValueOnce({ rows: [["passed", 1]] })
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["requested"]] });
+    await matchAsk(person.id, ask.id);
+    expect(query.mock.calls[3][0]).toContain('select "to_person_id" from "requests" where "requests"."ask_id" = $1');
+    expect(query.mock.calls[3][1]).toEqual([ask.id]);
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({
+      excludeIds: [], hideIds: [...(softBlocker ? ["passed"] : []), "requested"],
+    }));
+  });
+
+  it("does not search when requests already sent cannot be loaded", async () => {
+    query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
+      .mockRejectedValueOnce(new Error("private-database-token"));
+    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-database-token");
+    expect(runMatch).not.toHaveBeenCalled();
   });
 
   it("rejects invalid stored asks before the pipeline", async () => {

@@ -70,10 +70,13 @@ export const fake: Api = {
     const rejected = store.get().rejections.get(ask.id) ?? [];
     const hiddenBelowRank =
       rejected.length >= config.batchRejectAfter ? Math.max(...rejected.map((r) => r.rank)) : null;
+    const requested = [...store.get().requests.values()].filter((r) => r.askId === ask.id).map((r) => r.toPersonId);
     const matches = await runMatch({
       ask,
       requester: store.person(userId),
-      excludeIds: ask.softBlocker ? rejected.map((r) => r.personId) : [],
+      excludeIds: [],
+      // Ranked, then left out, so everyone else keeps their rank (same as the real API).
+      hideIds: [...(ask.softBlocker ? rejected.map((r) => r.personId) : []), ...requested],
       query: body.query,
       hiddenBelowRank,
     });
@@ -83,7 +86,8 @@ export const fake: Api = {
   async reject({ userId, body }) {
     const ask = store.ask(body.askId, userId);
     const list = store.get().rejections.get(ask.id) ?? [];
-    list.push({ personId: body.personId, rank: body.rank });
+    // One rejection per person per ask: a repeat is not counted again.
+    if (!list.some((r) => r.personId === body.personId)) list.push({ personId: body.personId, rank: body.rank });
     store.get().rejections.set(ask.id, list);
     const hiddenBelowRank = list.length >= config.batchRejectAfter ? Math.max(...list.map((r) => r.rank)) : null;
     return { rejections: list.length, hiddenBelowRank };
@@ -98,6 +102,9 @@ export const fake: Api = {
   async sendRequest({ userId, body }) {
     const ask = store.ask(body.askId, userId);
     store.person(body.toPersonId);
+    // One request per person per ask: a resend returns the saved one.
+    const saved = [...store.get().requests.values()].find((r) => r.askId === ask.id && r.toPersonId === body.toPersonId);
+    if (saved) return saved;
     const id = store.nextId("req");
     const request = {
       id,

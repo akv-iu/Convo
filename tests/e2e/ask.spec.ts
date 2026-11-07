@@ -124,12 +124,47 @@ test.describe("ask and refine (A1 step 5)", () => {
     await expect(page.getByRole("link", { name: "Find people" })).toBeFocused();
   });
 
+  test("the counter shows how many people are looking, as the server counts them", async ({ page }) => {
+    const res = await page.request.get("/api/looking-for-me", { headers: { "x-demo-user": "p_003" } });
+    expect(res.ok()).toBe(true);
+    const { count } = await res.json();
+    await open(page);
+    const banner = page.getByTestId("looking-for-you");
+    await expect(banner).toBeVisible();
+    if (count === 0) await expect(banner).toContainText("No one is asking for someone like you yet");
+    else await expect(banner).toContainText(`${count.toLocaleString("en-US")} ${count === 1 ? "person" : "people"} here`);
+  });
+
+  test("the counter words one and many", async ({ page }) => {
+    let count = 1;
+    await page.route("**/api/looking-for-me", (route) => route.fulfill({ json: { count } }));
+    await open(page);
+    await expect(page.getByTestId("looking-for-you")).toHaveText("1 person here is looking for someone like you");
+    count = 12;
+    await page.reload();
+    await expect(page.getByTestId("looking-for-you")).toHaveText("12 people here are looking for someone like you");
+  });
+
+  test("a failed counter says so with Try again, never zero", async ({ page }) => {
+    let calls = 0;
+    await page.route("**/api/looking-for-me", (route) => {
+      calls++;
+      return calls === 1 ? route.fulfill({ status: 503, json: { error: "Search unavailable" } }) : route.fulfill({ json: { count: 4 } });
+    });
+    await open(page);
+    await expect(page.getByText("Couldn't load who's looking for you.")).toBeVisible();
+    await expect(page.getByTestId("looking-for-you")).toHaveCount(0);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByTestId("looking-for-you")).toContainText("4 people here");
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       const scan = async (label: string) =>
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
       await open(page);
+      await expect(page.getByTestId("looking-for-you")).toBeVisible();
       await sharpen(page).click();
       await expect(page.getByText("Write a few words about what you want to ask.")).toBeVisible();
       await scan("empty with a problem");

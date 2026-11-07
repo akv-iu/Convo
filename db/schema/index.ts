@@ -46,7 +46,8 @@ export const rejections = pgTable(
     rank: integer("rank").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("rejections_ask_idx").on(t.askId)],
+  // One rejection per person per ask, so a retry or double tap never counts toward batch reject twice.
+  (t) => [uniqueIndex("rejections_ask_person_idx").on(t.askId, t.personId)],
 );
 
 export const requests = pgTable(
@@ -63,7 +64,12 @@ export const requests = pgTable(
     slot: jsonb("slot").$type<TimeBlock>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("requests_to_idx").on(t.toPersonId), index("requests_from_idx").on(t.fromUserId)],
+  (t) => [
+    index("requests_to_idx").on(t.toPersonId),
+    index("requests_from_idx").on(t.fromUserId),
+    // One request per person per ask: a resend returns the saved request instead of a duplicate.
+    uniqueIndex("requests_ask_person_idx").on(t.askId, t.toPersonId),
+  ],
 );
 
 /** AI replies cached by a hash of their input, so repeats cost nothing. */

@@ -112,15 +112,41 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(r.hiddenBelowRank).toBeNull();
     const afterOne = await api.match(ctx(DEMO_USER_A, { askId }));
     expect(afterOne.some((x) => x.person.id === first[0].person.id)).toBe(false);
+    // Everyone else keeps their rank, so the rank sent with a later rejection means the same place.
+    for (const card of afterOne) {
+      const before = first.find((x) => x.person.id === card.person.id);
+      if (before) expect(card.rank).toBe(before.rank);
+    }
+
+    // A repeat (retry, double tap) is not counted again.
+    r = await api.reject(ctx(DEMO_USER_A, { askId, personId: first[0].person.id, rank: 0 }));
+    expect(r.rejections).toBe(1);
 
     await api.reject(ctx(DEMO_USER_A, { askId, personId: first[1].person.id, rank: 1 }));
     r = await api.reject(ctx(DEMO_USER_A, { askId, personId: first[2].person.id, rank: 2 }));
     expect(r.rejections).toBe(3);
     expect(r.hiddenBelowRank).toBe(2);
+    // Ranks 0-2 were passed on and everyone ranked below the last of them is hidden: no one is left.
+    expect(await api.match(ctx(DEMO_USER_A, { askId }))).toEqual([]);
 
     await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: false }));
     const off = await api.match(ctx(DEMO_USER_A, { askId }));
-    expect(off.some((x) => x.person.id === first[0].person.id)).toBe(true);
+    expect(off.map((x) => [x.person.id, x.rank])).toEqual(first.slice(0, 2).map((x) => [x.person.id, x.rank]));
+  });
+
+  it("sends one request per person per ask and leaves them out of later matches", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const first = await api.match(ctx(DEMO_USER_A, { askId }));
+    expect(first.length).toBeGreaterThanOrEqual(2);
+    const to = first[0].person.id;
+
+    const sent = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: to }));
+    expect(await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: to }))).toEqual(sent);
+    expect((await api.inbox(ctx(to))).filter((x) => x.askId === askId)).toHaveLength(1);
+
+    const after = await api.match(ctx(DEMO_USER_A, { askId }));
+    expect(after.some((x) => x.person.id === to)).toBe(false);
+    expect(after.find((x) => x.person.id === first[1].person.id)?.rank).toBe(first[1].rank);
   });
 
   it("runs the whole flow: send, receive, accept, slot, book, resolve", async () => {

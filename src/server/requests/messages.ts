@@ -51,12 +51,23 @@ export async function sendRequest(userId: string, body: RouteBody<"sendRequest">
   } catch {
     throw new RequestError("Stored ask is invalid. No request was sent.", 503);
   }
+  let saved: typeof requests.$inferSelect | undefined;
   try {
-    // shortcut: repeated sends create separate requests; add idempotency with a shared contract change.
-    const [saved] = await db().insert(requests).values({ ...value, createdAt: new Date(value.createdAt) }).returning();
+    // One request per person per ask (unique ask/recipient): a resend or a retry after a timeout
+    // returns the request already saved, never a duplicate in the receiver's inbox.
+    [saved] = await db().insert(requests).values({ ...value, createdAt: new Date(value.createdAt) })
+      .onConflictDoNothing({ target: [requests.askId, requests.toPersonId] }).returning();
+    // The ask is the caller's (checked above), so an existing request for it is theirs too.
+    saved ??= (await db().select().from(requests)
+      .where(and(eq(requests.askId, body.askId), eq(requests.toPersonId, body.toPersonId))).limit(1))[0];
+  } catch {
+    saved = undefined;
+  }
+  if (!saved) throw new RequestError("Request save could not be confirmed. Retrying is safe: a saved request is returned, never sent twice.", 503);
+  try {
     return toRequest(saved);
   } catch {
-    throw new RequestError(`Request save could not be confirmed (ID ${value.id}). Ask the receiver to check their inbox before retrying.`, 503);
+    throw new RequestError("Stored request is invalid.", 503);
   }
 }
 

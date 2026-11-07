@@ -89,7 +89,8 @@ export const routes = {
   reject: def({
     method: "POST",
     path: "/api/rejections",
-    description: "Swipe left. After 3 rejections for an ask, everyone ranked below the last rejection is hidden too.",
+    description:
+      "Swipe left. After 3 rejected people for an ask, everyone ranked below the last rejection is hidden too. Rejecting the same person again isn't counted twice.",
     usedBy: "A2",
     body: z.object({ askId: z.string(), personId: z.string(), rank: z.number().int().nonnegative() }),
     response: z.object({ rejections: z.number().int(), hiddenBelowRank: z.number().int().nullable() }),
@@ -105,7 +106,7 @@ export const routes = {
   sendRequest: def({
     method: "POST",
     path: "/api/requests",
-    description: "Swipe right: send the refined question to a person.",
+    description: "Swipe right: send the refined question to a person. One request per person per ask; sending again returns it.",
     usedBy: "A2",
     body: z.object({ askId: z.string(), toPersonId: z.string() }),
     response: Request,

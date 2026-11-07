@@ -82,3 +82,10 @@ export function rememberAsk(ask: SavedAsk): void {
 export function recallAsk(askId: string): SavedAsk | null {
   return readAll().find((a) => a.askId === askId) ?? null;
 }
+
+/** The "looking for you" banner's wording (A1 step 6): a big number, then the rest. */
+export function lookingLabel(count: number): { number: string; text: string } {
+  if (count <= 0) return { number: "No one", text: "is asking for someone like you yet. Check back later." };
+  if (count === 1) return { number: "1", text: "person here is looking for someone like you" };
+  return { number: count.toLocaleString("en-US"), text: "people here are looking for someone like you" };
+}

@@ -27,25 +27,37 @@ export async function getExclusions(askId: string) {
 }
 
 export async function rejectPerson(userId: string, body: RouteBody<"reject">): Promise<RouteResponse<"reject">> {
-  // shortcut: retries count again; add idempotency when the shared contract supports it.
   let inserted: { id: string }[];
   try {
-    // Authorize inside the write so a foreign ask can never acquire this rejection.
+    // Authorize inside the write so a foreign ask can never acquire this rejection. A repeat for the
+    // same person inserts nothing (unique ask/person), so a retry or double tap is never counted twice.
     inserted = await db().insert(rejections).select(db().select({
       id: sql<string>`${randomUUID()}`.as("id"), askId: asks.id,
       personId: sql<string>`${body.personId}`.as("person_id"), rank: sql<number>`${body.rank}`.as("rank"),
       createdAt: sql<Date>`now()`.as("created_at"),
     }).from(asks).where(and(eq(asks.id, body.askId), eq(asks.userId, userId))))
+      .onConflictDoNothing({ target: [rejections.askId, rejections.personId] })
       .returning({ id: rejections.id });
   } catch {
-    throw new RejectionError("Rejection storage is unavailable. The save could not be confirmed; refresh matches before retrying.", 503);
+    throw new RejectionError("Rejection storage is unavailable. The save could not be confirmed; retrying the same rejection is safe.", 503);
   }
-  if (!inserted.length) throw new RejectionError("Ask not found.", 404);
+  // Nothing inserted: either this person was already rejected for the ask, or the ask isn't the caller's.
+  if (!inserted.length && !await ownsAsk(userId, body.askId)) throw new RejectionError("Ask not found.", 404);
   try {
     const { rejections: count, hiddenBelowRank } = await getExclusions(body.askId);
     return { rejections: count, hiddenBelowRank };
   } catch {
-    throw new RejectionError("Rejection saved, but its count is unavailable. Refresh matches; do not resubmit this rejection.", 503);
+    throw new RejectionError("Rejection saved, but its count is unavailable. Refresh matches; retrying is safe and never counts twice.", 503);
+  }
+}
+
+async function ownsAsk(userId: string, askId: string): Promise<boolean> {
+  try {
+    const rows = await db().select({ id: asks.id }).from(asks)
+      .where(and(eq(asks.id, askId), eq(asks.userId, userId))).limit(1);
+    return rows.length > 0;
+  } catch {
+    throw new RejectionError("Rejection storage is unavailable. Try again; retrying the same rejection is safe.", 503);
   }
 }
 
