@@ -82,7 +82,10 @@ export function MatchesView() {
   const matches = useMemo(() => (load.state === "ready" ? load.matches : []), [load]);
   const current = matches[index] ?? null;
 
+  // Reloading while a pass or send is saving would let that save land on the new deck,
+  // so every reload (Refresh, Search, Show everyone, See them again) waits for it.
   function refresh() {
+    if (busyRef.current) return;
     setActionFailure(null);
     setLoad({ state: "loading" });
     setAttempt((n) => n + 1);
@@ -181,6 +184,7 @@ export function MatchesView() {
 
   function onSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (busyRef.current) return;
     setCutoffNote(false);
     setLoad({ state: "loading" });
     setApplied(query.trim());
@@ -221,7 +225,12 @@ export function MatchesView() {
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
         />
-        <Button type="submit" variant="secondary" className="shrink-0">
+        <Button
+          type="submit"
+          variant="secondary"
+          aria-disabled={busy !== null}
+          className="shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        >
           Search
         </Button>
       </form>
@@ -231,6 +240,7 @@ export function MatchesView() {
           <button
             type="button"
             onClick={() => {
+              if (busyRef.current) return;
               setQuery("");
               setCutoffNote(false);
               setLoad({ state: "loading" });
