@@ -36,7 +36,15 @@ export function MatchesView() {
   const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
-  const [actionFailure, setActionFailure] = useState<{ failure: Failure; retrySend: boolean } | null>(null);
+  const [actionFailure, setActionFailure] = useState<Failure | null>(null);
+  /**
+   * Set after a failed pass: the server may have saved it, and every pass
+   * counts (three hide the rest), so both actions stay off on this card
+   * until Refresh matches shows what was saved.
+   */
+  const [passLocked, setPassLocked] = useState(false);
+  /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
+  const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
   const [sent, setSent] = useState<string[]>([]);
   const [cutoffNote, setCutoffNote] = useState(false);
@@ -61,6 +69,7 @@ export function MatchesView() {
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setIndex(0);
+        setPassLocked(false);
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
       }
@@ -81,9 +90,11 @@ export function MatchesView() {
 
   const act = useCallback(
     async (kind: "pass" | "send") => {
-      if (!current || busy) return;
+      if (!current || busyRef.current || passLocked) return;
+      busyRef.current = true;
       setBusy(kind);
       setActionFailure(null);
+      setDx(0); // the card goes back at once instead of waiting off to the side for the save
       const who = current.person.name;
       try {
         const res =
@@ -100,8 +111,8 @@ export function MatchesView() {
               });
         const body = await res.json().catch(() => null);
         if (!res.ok) {
-          const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
-          setActionFailure({ failure, retrySend: kind === "send" && res.status !== 401 && res.status !== 404 });
+          setActionFailure(kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body));
+          if (kind === "pass") setPassLocked(true);
           return;
         }
         if (kind === "send") {
@@ -123,14 +134,14 @@ export function MatchesView() {
           }
         }
       } catch {
-        const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
-        setActionFailure({ failure, retrySend: kind === "send" });
+        setActionFailure(kind === "pass" ? passFailure(0, null) : sendFailure(0, null));
+        if (kind === "pass") setPassLocked(true);
       } finally {
+        busyRef.current = false;
         setBusy(null);
-        setDx(0);
       }
     },
-    [askId, busy, current, matches],
+    [askId, current, matches, passLocked],
   );
 
   // ← passes and → sends, unless the user is typing somewhere.
@@ -153,7 +164,7 @@ export function MatchesView() {
   }, [act]);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (busy || (e.target as HTMLElement).closest("a, button")) return;
+    if (busyRef.current || passLocked || (e.target as HTMLElement).closest("a, button")) return;
     drag.current = { x: e.clientX, id: e.pointerId };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -293,10 +304,10 @@ export function MatchesView() {
 
             {actionFailure && (
               <p role="alert" className={`mt-4 ${errorClass}`}>
-                {actionFailure.failure.message}{" "}
-                {actionFailure.failure.action ? (
-                  <a href={actionFailure.failure.action.href} className="underline underline-offset-4">
-                    {actionFailure.failure.action.label}
+                {actionFailure.message}{" "}
+                {actionFailure.action ? (
+                  <a href={actionFailure.action.href} className="underline underline-offset-4">
+                    {actionFailure.action.label}
                   </a>
                 ) : (
                   <button type="button" onClick={refresh} className="underline underline-offset-4">
@@ -307,11 +318,20 @@ export function MatchesView() {
             )}
 
             <div className="sticky bottom-0 -mx-4 mt-5 grid grid-cols-2 gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-              <Button variant="secondary" onClick={() => void act("pass")} disabled={busy !== null} className="text-lg">
+              <Button
+                variant="secondary"
+                onClick={() => void act("pass")}
+                aria-disabled={busy !== null || passLocked}
+                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              >
                 <span aria-hidden="true">←&nbsp;</span>
                 {busy === "pass" ? "Passing…" : "Pass"}
               </Button>
-              <Button onClick={() => void act("send")} disabled={busy !== null} className="text-lg">
+              <Button
+                onClick={() => void act("send")}
+                aria-disabled={busy !== null || passLocked}
+                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              >
                 {busy === "send" ? "Sending…" : "Send request"}
                 <span aria-hidden="true">&nbsp;→</span>
               </Button>

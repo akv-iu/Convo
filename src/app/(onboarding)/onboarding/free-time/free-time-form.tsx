@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import type { Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
 import { showSavedColour } from "../../_components/badge-prefs";
-import { countryName } from "../countries";
+import { countryName } from "@/components/ui/countries";
 import { loadProblem } from "../profile/edits";
 import {
   availabilityBody,

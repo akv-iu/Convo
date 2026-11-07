@@ -8,8 +8,8 @@
  * through), and a 503 after a saved rejection says not to resubmit.
  */
 import type { MatchResult } from "@/contracts/types";
-import { colourHex, isBadgeColour } from "../../(onboarding)/_components/badge-prefs";
-import { countryName, isCountryCode } from "../../(onboarding)/onboarding/countries";
+import { colourHex, isBadgeColour } from "@/components/ui/badge-colours";
+import { countryName, isCountryCode } from "@/components/ui/countries";
 
 /** How far (px) a card must be dragged to count as a swipe. */
 export const SWIPE_DISTANCE = 110;
@@ -24,18 +24,29 @@ export function swipeOutcome(dx: number): Swipe {
 }
 
 /**
- * Evidence snippets as text runs, with Elasticsearch's <em> highlights
- * marked. Everything is rendered as text, never as HTML.
+ * Evidence snippets as text runs, with Elasticsearch's <em>…</em>
+ * highlights marked. Only those literal markers are read; everything else,
+ * such as `Option<T>` or `<div>` in code-like evidence, is kept as written.
+ * The parts are rendered as text, never as HTML. Plain string scanning,
+ * with no regular expression to backtrack.
  */
 export function highlightParts(snippet: string): { text: string; hit: boolean }[] {
   const parts: { text: string; hit: boolean }[] = [];
-  snippet.split(/(<em>.*?<\/em>)/g).forEach((piece) => {
-    if (!piece) return;
-    const hit = piece.startsWith("<em>") && piece.endsWith("</em>");
-    const text = (hit ? piece.slice(4, -5) : piece).replace(/<[^>]*>/g, "");
+  const push = (text: string, hit: boolean) => {
     if (text) parts.push({ text, hit });
-  });
-  return parts;
+  };
+  let rest = snippet;
+  for (;;) {
+    const open = rest.indexOf("<em>");
+    const close = open === -1 ? -1 : rest.indexOf("</em>", open + 4);
+    if (open === -1 || close === -1) {
+      push(rest, false);
+      return parts;
+    }
+    push(rest.slice(0, open), false);
+    push(rest.slice(open + 4, close), true);
+    rest = rest.slice(close + 5);
+  }
 }
 
 /** The card's badge stripe colour: the person's own, sunflower when absent. */

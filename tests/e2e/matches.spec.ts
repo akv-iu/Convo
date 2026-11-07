@@ -267,12 +267,47 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await open(page, "made-up");
     await passButton(page).click();
     await expect(alertWithText(page)).toContainText("Do not resubmit.");
+    // The pass may have been saved, and each one counts: Pass and Send stay off on this card.
+    await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(sendButton(page)).toHaveAttribute("aria-disabled", "true");
+    // A person can still press them (they stay focusable); the presses must do nothing.
+    await passButton(page).click({ force: true });
+    await sendButton(page).click({ force: true });
+    await page.getByRole("heading", { level: 1 }).click();
+    await page.keyboard.press("ArrowLeft");
     await page.waitForTimeout(500);
     expect(passes).toBe(1);
     const reloading = page.waitForRequest((r) => r.url().endsWith("/api/match"));
     await page.getByRole("button", { name: "Refresh matches" }).click();
     await reloading;
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("Pass and Send keep keyboard focus while they save", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
+    await page.route("**/api/requests", (route) => route.fulfill({ json: { id: "r1" } }));
+    await open(page, "made-up");
+    await passButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(passButton(page)).toBeFocused();
+    await sendButton(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 3");
+    await expect(sendButton(page)).toBeFocused();
+  });
+
+  test("evidence with angle brackets is shown as written", async ({ page }) => {
+    const [one] = fakeMatches(1);
+    await page.route("**/api/match", (route) =>
+      route.fulfill({ json: [{ ...one, highlights: ["Returns Option<T> from a <em>Vec<u8></em> parser"] }] }),
+    );
+    await open(page, "made-up");
+    await expect(card(page)).toContainText("Returns Option<T> from a Vec<u8> parser");
+    await expect(card(page).locator("mark")).toHaveText("Vec<u8>");
   });
 
   test("a failed send keeps the card, and can be tried again", async ({ page }) => {
