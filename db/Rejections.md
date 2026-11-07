@@ -17,7 +17,8 @@ search and AI remain fake. Production remains in fake mode until integration.
 - Matching and rejection responses share the same exclusion reader. After
   three rejected people, the cutoff is the **maximum submitted rank**. Matching
   shows only ranks strictly less than that cutoff.
-- **Ranks are stable.** A match ranks everyone first, then leaves out people
+- **Ranks are stable.** A match ranks the same top 50 people every time
+  (mutual-interest boost included), then leaves out people
   this ask already rejected (blocker on) or sent a request to. They keep their
   place, so the others keep their ranks across refreshes and ranks can have
   gaps. Rejecting ranks 0, 1 and 2 therefore leaves **no one**: everyone else is
