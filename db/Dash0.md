@@ -12,7 +12,8 @@ traffic are excluded. Use a separate dataset if testing other environments.
 | Chart | Meaning |
 | --- | --- |
 | p95 time per match step | Duration of `match.understand`, `match.search`, `match.mutual`, `match.explain`, in milliseconds. |
-| AI tokens per created ask | Reported input + output tokens divided by successful `POST /api/refine` requests in the chart window. A window average, not exact attribution to an ask ID: refinement and explanation happen in separate requests; retries and additional matches also consume tokens. |
+| AI tokens per created ask | One value: reported input + output tokens divided by successful `POST /api/refine` requests over the entire selected dashboard range. Refinement and explanation can occur in different minutes. This is a range average, not exact attribution to an ask ID; retries and additional matches also consume tokens. |
+| Estimated GPT-5.4 mini USD per created ask | One value over the same range: `(input tokens * $0.75 + output tokens * $4.50) / 1,000,000 / created asks`. Only token metrics labelled `gen_ai.request.model=gpt-5.4-mini` are priced. This uses standard list rates, without prompt-cache discounts, regional surcharges or other fees; it is not billed cost. |
 | AI cache hit rate | Sum of cache entries hit / (entries hit + entries missed), covering refinement and explanation. It is entry-weighted, not the percentage of HTTP requests served from cache. No lookups means no rate, not 100%. |
 | p95 POST /api/match | Next.js server-request duration, including authentication, database reads, registration replay and the four steps; all response statuses count. |
 
@@ -21,20 +22,29 @@ The SLO counts **95% of production POST /api/match server spans strictly under
 It uses good/total event counters, not an average of p95s or five-minute ratios.
 It is a latency SLO: a fast error still satisfies latency. Dependency availability
 is checked separately. No traffic is no data, never a fabricated success.
-The counters select `next.span_type=BaseServer.handleRequest` as well as SERVER
-kind: Vercel can add an outer server span, which must not count a request twice.
+The counters select `next.span_type=BaseServer.handleRequest`: Vercel can add an
+outer server span, which must not count a request twice.
 This measures the Next.js request, not browser/network or pre-runtime cold-start time.
 
 `signal-metrics.json` converts existing numeric token/cache attributes to sums,
 counts requests/fast requests, and records request durations in Dash0, before
-Dash0 trace sampling. Only service/environment dimensions are retained: no
+Dash0 trace sampling. Only service/environment and, for tokens, model dimensions are retained: no
 person, ask, trace ID, prompt, response, key, or repository text becomes a label.
 The four-step chart queries Dash0's built-in span-duration metric. It describes
 retained spans; disable trace sampling for an unbiased step chart and retain
 traces to inspect all four steps. Configure `OTEL_TRACES_SAMPLER=always_on` in the
-app: Dash0 cannot measure spans discarded before ingestion. The existing
-Gen AI view also uses model/token span attributes for its cost display; no model
-prices are hardcoded in Convo.
+app: Dash0 cannot measure spans discarded before ingestion.
+
+Both per-ask panels use `increase(...[$__range])` with the StatChart `instant`
+calculation, evaluated at the selected range's end. Include both refinement and
+matching in the range; no created asks means an undefined average, not zero.
+Newly applied token rules retain the model label; the cost panel cannot price
+older unlabelled points. The existing spans do not distinguish cached input
+tokens, so the estimate charges all input at the uncached rate and can overstate
+cost. Rates were checked on November 6, 2026 against the
+[official GPT-5.4 mini pricing](https://developers.openai.com/api/docs/models/gpt-5.4-mini).
+Update the estimate if B1 changes the model or published prices change; other
+models are excluded rather than silently charged these rates.
 
 ## Apply (PowerShell, from the repository root)
 
@@ -104,6 +114,8 @@ prices are hardcoded in Convo.
    share a result for 30 seconds per server instance. The synthetic runs every
    five minutes in US East, requires 200, disallows redirects and checks total
    time <=10 seconds. It may initially fail until deployment is complete.
+   This frequency keeps Neon awake; lengthen it after the hackathon if suspension
+   matters more than five-minute dependency detection.
 3. Sign in with your own account and finish onboarding. In the browser console
    on that origin, paste this complete snippet (no earlier helper needed):
 
@@ -134,8 +146,14 @@ prices are hardcoded in Convo.
    No candidates means no explanation lookup/token usage; use an indexed topic.
 5. Open dashboard **Convo matching**. Allow a few minutes for the one-minute
    conversion interval; use a time window that includes both refinement and
-   matching. Confirm four step series, token usage, cache rate and full match
-   latency. The charts should show actual latency even when it exceeds the goal.
+   matching. Confirm four step series, cache rate and full match latency in
+   milliseconds. Confirm the token and estimated USD panels each show one value,
+   including explanation tokens even when refinement happened in an earlier
+   minute. Inspect input/output token increases and successful refine increases
+   over that same range: verify the displayed ratios with the formulas above.
+   Use a range entirely after the new rules were applied to verify model-labelled
+   cost data. Zero asks must not display a fabricated zero cost. The charts should
+   show actual latency even when it exceeds the goal.
 6. Open SLO **95% of POST /api/match under 2 seconds**. Confirm target 95%,
    rolling 28 days, and data after Dash0's five-minute settling delay. Open the
    burn check: either fast or slow normalized burn above 1 for two minutes raises
@@ -170,4 +188,5 @@ Sources: [span metrics](https://www.dash0.com/docs/dash0/opentelemetry/semconvs/
 [SLO definitions](https://www.dash0.com/docs/dash0/monitoring/alerting/create-slos),
 [burn alerts](https://www.dash0.com/docs/dash0/monitoring/alerting/alert-on-slos),
 [CLI](https://www.dash0.com/docs/dash0/miscellaneous/tooling/dash0-cli/commands),
-[OpenAI model metadata](https://developers.openai.com/api/reference/resources/models/methods/list).
+[OpenAI model metadata](https://developers.openai.com/api/reference/resources/models/methods/list),
+[StatChart instant calculation](https://www.dash0.com/docs/dash0/dashboards/types/StatChart).

@@ -50,16 +50,15 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "AI tokens per created ask (window average)"
+            "name": "AI tokens per created ask (selected range)"
           },
           "plugin": {
-            "kind": "TimeSeriesChart",
+            "kind": "StatChart",
             "spec": {
-              "yAxis": {
-                "format": {
-                  "unit": "decimal"
-                },
-                "min": 0
+              "calculation": "instant",
+              "format": {
+                "unit": "decimal",
+                "decimalPlaces": 0
               }
             }
           },
@@ -70,7 +69,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "(sum(increase({otel_metric_name=\"convo.ai.tokens.input\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval])) + sum(increase({otel_metric_name=\"convo.ai.tokens.output\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval]))) / sum(increase({otel_metric_name=\"convo.ask.created\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__rate_interval]))"
+                    "query": "(sum(increase({otel_metric_name=\"convo.ai.tokens.input\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__range])) + sum(increase({otel_metric_name=\"convo.ai.tokens.output\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__range]))) / sum(increase({otel_metric_name=\"convo.ask.created\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__range]))"
                   }
                 }
               }
@@ -141,6 +140,37 @@
             }
           ]
         }
+      },
+      "cost": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "Estimated GPT-5.4 mini USD per created ask (selected range)"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "instant",
+              "format": {
+                "unit": "currency-usd",
+                "decimalPlaces": 6
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "(sum(increase({otel_metric_name=\"convo.ai.tokens.input\",service_name=\"convo\",deployment_environment_name=\"production\",gen_ai_request_model=\"gpt-5.4-mini\"}[$__range])) * 0.75 + sum(increase({otel_metric_name=\"convo.ai.tokens.output\",service_name=\"convo\",deployment_environment_name=\"production\",gen_ai_request_model=\"gpt-5.4-mini\"}[$__range])) * 4.50) / 1000000 / sum(increase({otel_metric_name=\"convo.ask.created\",service_name=\"convo\",deployment_environment_name=\"production\"}[$__range]))"
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     },
     "layouts": [
@@ -182,6 +212,15 @@
               "height": 8,
               "content": {
                 "$ref": "#/spec/panels/match"
+              }
+            },
+            {
+              "x": 0,
+              "y": 16,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/cost"
               }
             }
           ]

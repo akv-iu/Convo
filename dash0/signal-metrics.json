@@ -47,7 +47,13 @@
           ],
           "type": "sum",
           "value": "attributes[\"gen_ai.usage.input_tokens\"]",
-          "monotonic": true
+          "monotonic": true,
+          "keepSignalAttributes": [
+            {
+              "operator": "is",
+              "value": "gen_ai.request.model"
+            }
+          ]
         }
       }
     },
@@ -98,7 +104,13 @@
           ],
           "type": "sum",
           "value": "attributes[\"gen_ai.usage.output_tokens\"]",
-          "monotonic": true
+          "monotonic": true,
+          "keepSignalAttributes": [
+            {
+              "operator": "is",
+              "value": "gen_ai.request.model"
+            }
+          ]
         }
       }
     },
@@ -236,11 +248,6 @@
               "value": "POST /api/match"
             },
             {
-              "key": "otel.span.kind",
-              "operator": "is",
-              "value": "SERVER"
-            },
-            {
               "key": "next.span_type",
               "operator": "is",
               "value": "BaseServer.handleRequest"
@@ -295,14 +302,11 @@
               "value": "POST /api/refine"
             },
             {
-              "key": "otel.span.kind",
-              "operator": "is",
-              "value": "SERVER"
-            },
-            {
               "key": "http.response.status_code",
               "operator": "is",
-              "value": "200"
+              "value": {
+                "intValue": "200"
+              }
             },
             {
               "key": "next.span_type",
@@ -362,11 +366,6 @@
               "value": "POST /api/match"
             },
             {
-              "key": "otel.span.kind",
-              "operator": "is",
-              "value": "SERVER"
-            },
-            {
               "key": "next.span_type",
               "operator": "is",
               "value": "BaseServer.handleRequest"
@@ -422,11 +421,6 @@
               "key": "dash0.operation.name",
               "operator": "is",
               "value": "POST /api/match"
-            },
-            {
-              "key": "otel.span.kind",
-              "operator": "is",
-              "value": "SERVER"
             },
             {
               "key": "otel.span.duration",

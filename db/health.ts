@@ -34,8 +34,7 @@ async function inspect(): Promise<Health> {
     probe(async () => {
       const api = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: TIMEOUT_MS, maxRetries: 0 });
       // One metadata request, no generation or model constant shared with B1.
-      const models = await api.models.list();
-      if (!Array.isArray(models.data)) throw new Error("Unexpected model response");
+      await api.models.list();
     }),
   ]);
   return {

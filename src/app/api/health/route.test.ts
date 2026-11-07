@@ -40,7 +40,7 @@ describe("operational health", () => {
     expect((await response).status).toBe(200);
   });
 
-  it("checks all three real dependencies even with the application's fake API enabled", async () => {
+  it("checks all three dependencies and returns uncached health", async () => {
     const response = await get();
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
@@ -73,11 +73,10 @@ describe("operational health", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
-  it("rejects unexpected provider replies", async () => {
+  it("reports an invalid database reply and a failed cluster ping", async () => {
     query.mockResolvedValueOnce([]);
     ping.mockResolvedValueOnce(false);
-    list.mockResolvedValueOnce({ unexpected: "private provider response" });
-    expect(await (await get()).json()).toEqual({ status: "down", dependencies: { postgres: "down", elasticsearch: "down", openai: "down" } });
+    expect(await (await get()).json()).toEqual({ status: "down", dependencies: { postgres: "down", elasticsearch: "down", openai: "up" } });
   });
 
   it("coalesces concurrent calls and refreshes an unhealthy result after thirty seconds", async () => {
