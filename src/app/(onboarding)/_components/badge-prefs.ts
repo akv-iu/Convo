@@ -1,41 +1,23 @@
 /**
- * How the user's badge looks: its colour. Kept in the browser in the
- * `convo_badge` cookie.
- *
- * Frontend-only. The backend doesn't read this cookie, and the colour isn't
- * in the Person contract, so other people never see it. Showing it to
- * others needs a contract field from B.
+ * The badge colour preview cookie (`convo_badge`). The saved colour is
+ * Person.badgeColour from the API; this cookie only lets each onboarding
+ * step paint the right colour before the profile loads. The colour list is
+ * shared with the match screen in src/components/ui/badge-colours.ts.
  */
 import { z } from "zod";
+import { badgeColours, colourHex, colourIds, DEFAULT_COLOUR, type BadgeColour } from "@/components/ui/badge-colours";
+
+export { badgeColours, colourHex, DEFAULT_COLOUR, isBadgeColour, type BadgeColour } from "@/components/ui/badge-colours";
 
 export const BADGE_COOKIE = "convo_badge";
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
-export const badgeColours = [
-  { id: "sunflower", name: "Sunflower", hex: "#ffd23f" },
-  { id: "mint", name: "Mint", hex: "#5ee6b4" },
-  { id: "sky", name: "Sky", hex: "#7dd3fc" },
-  { id: "lilac", name: "Lilac", hex: "#c4b5fd" },
-  { id: "coral", name: "Coral", hex: "#ffa38a" },
-] as const;
-
-export type BadgeColour = (typeof badgeColours)[number]["id"];
-export const DEFAULT_COLOUR: BadgeColour = "sunflower";
-
-const colourIds = badgeColours.map((c) => c.id) as [BadgeColour, ...BadgeColour[]];
 
 const Prefs = z.object({
   colour: z.enum(colourIds).catch(DEFAULT_COLOUR).default(DEFAULT_COLOUR),
 });
 export type BadgePrefs = z.infer<typeof Prefs>;
 
-export function isBadgeColour(value: unknown): value is BadgeColour {
-  return typeof value === "string" && (colourIds as string[]).includes(value);
-}
-
-export function colourHex(id: BadgeColour): string {
-  return badgeColours.find((c) => c.id === id)?.hex ?? badgeColours[0].hex;
-}
 
 function parseJson(value: string): unknown {
   try {

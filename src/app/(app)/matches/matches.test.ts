@@ -61,9 +61,18 @@ describe("highlightParts", () => {
     ]);
   });
 
-  it("strips any other markup instead of rendering it", () => {
-    expect(highlightParts('<img src=x onerror="alert(1)">etcd <b>raft</b>')).toEqual([{ text: "etcd raft", hit: false }]);
+  it("keeps code-like text with angle brackets as written (React renders it as text)", () => {
+    expect(highlightParts("Option<T> and Vec<u8> in <em>serde</em>")).toEqual([
+      { text: "Option<T> and Vec<u8> in ", hit: false },
+      { text: "serde", hit: true },
+    ]);
+    expect(highlightParts('<img src=x onerror="alert(1)">')).toEqual([{ text: '<img src=x onerror="alert(1)">', hit: false }]);
     expect(highlightParts("plain title")).toEqual([{ text: "plain title", hit: false }]);
+  });
+
+  it("treats an unclosed <em> as plain text", () => {
+    expect(highlightParts("a <em>b")).toEqual([{ text: "a <em>b", hit: false }]);
+    expect(highlightParts("")).toEqual([]);
   });
 });
 

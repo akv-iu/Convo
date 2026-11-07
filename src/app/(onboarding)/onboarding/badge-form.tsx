@@ -37,7 +37,7 @@ import {
   workplaceLabel,
   type AboutYou,
 } from "./answers";
-import { countryName } from "./countries";
+import { countryName } from "@/components/ui/countries";
 
 export const NEXT_STEP = "/onboarding/free-time";
 

@@ -66,7 +66,15 @@ function AskMatches({ askId }: { askId: string }) {
   const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
-  const [actionFailure, setActionFailure] = useState<{ failure: Failure; retrySend: boolean } | null>(null);
+  const [actionFailure, setActionFailure] = useState<Failure | null>(null);
+  /**
+   * Set after a failed pass: the server may have saved it, and every pass
+   * counts (three hide the rest), so both actions stay off on this card
+   * until Refresh matches shows what was saved.
+   */
+  const [passLocked, setPassLocked] = useState(false);
+  /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
+  const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
   const [sent, setSent] = useState<SentTo[]>([]);
   const [resolving, setResolving] = useState(false);
@@ -83,6 +91,10 @@ function AskMatches({ askId }: { askId: string }) {
   /** The setting didn't load for a reason Try again can fix. */
   const [askFailed, setAskFailed] = useState(false);
   const [askAttempt, setAskAttempt] = useState(0);
+  const blockerRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    blockerRef.current = blocker;
+  }, [blocker]);
   const [blockerSaving, setBlockerSaving] = useState(false);
   const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
 
@@ -124,6 +136,7 @@ function AskMatches({ askId }: { askId: string }) {
         setSent(already);
         setLoad({ state: "ready", matches: withoutSent([...(body as MatchResult[])], already).sort((a, b) => a.rank - b.rank) });
         setIndex(0);
+        setPassLocked(false);
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
       }
@@ -136,7 +149,10 @@ function AskMatches({ askId }: { askId: string }) {
   const matches = useMemo(() => (load.state === "ready" ? load.matches : []), [load]);
   const current = matches[index] ?? null;
 
+  // Reloading while a pass or send is saving would let that save land on the new deck,
+  // so every reload (Refresh, Search, Show everyone, See them again) waits for it.
   function refresh() {
+    if (busyRef.current) return;
     setActionFailure(null);
     setLoad({ state: "loading" });
     setAttempt((n) => n + 1);
@@ -144,9 +160,11 @@ function AskMatches({ askId }: { askId: string }) {
 
   const act = useCallback(
     async (kind: "pass" | "send") => {
-      if (!current || busy || blockerSaving) return;
+      if (!current || busyRef.current || passLocked || blockerSaving) return;
+      busyRef.current = true;
       setBusy(kind);
       setActionFailure(null);
+      setDx(0); // the card goes back at once instead of waiting off to the side for the save
       const who = current.person.name;
       const login = current.person.githubLogin;
       const gen = deckGen.current;
@@ -170,7 +188,13 @@ function AskMatches({ askId }: { askId: string }) {
         const stale = deckGen.current !== gen;
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
-          setActionFailure({ failure, retrySend: kind === "send" && res.status !== 401 && res.status !== 404 });
+          if (stale) {
+            // The card on screen is from the new deck: say who this was for, and leave that card usable.
+            setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+          } else {
+            setActionFailure(failure);
+            if (kind === "pass") setPassLocked(true);
+          }
           return;
         }
         if (stale) {
@@ -178,6 +202,15 @@ function AskMatches({ askId }: { askId: string }) {
             setSent(rememberSent(askId, sentTo));
             // The reload may have been answered before this send was saved: drop them from the new deck.
             setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: withoutSent(cur.matches, [sentTo]) } : cur));
+          } else {
+            // The reload may have been answered before this pass was saved: apply it to the new deck too.
+            const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
+            const passedId = current.person.id;
+            setLoad((cur) => {
+              if (cur.state !== "ready") return cur;
+              const left = blockerRef.current === false ? cur.matches : cur.matches.filter((m) => m.person.id !== passedId);
+              return { state: "ready", matches: withinCutoff(left, cutoff) };
+            });
           }
           setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
           return;
@@ -202,13 +235,18 @@ function AskMatches({ askId }: { askId: string }) {
         }
       } catch {
         const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
-        setActionFailure({ failure, retrySend: kind === "send" });
+        if (deckGen.current !== gen) {
+          setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+        } else {
+          setActionFailure(failure);
+          if (kind === "pass") setPassLocked(true);
+        }
       } finally {
+        busyRef.current = false;
         setBusy(null);
-        setDx(0);
       }
     },
-    [askId, blockerSaving, busy, current, matches],
+    [askId, blockerSaving, current, matches, passLocked],
   );
 
   // ← passes and → sends, unless the user is typing somewhere.
@@ -231,7 +269,7 @@ function AskMatches({ askId }: { askId: string }) {
   }, [act]);
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (busy || (e.target as HTMLElement).closest("a, button")) return;
+    if (busyRef.current || passLocked || (e.target as HTMLElement).closest("a, button")) return;
     drag.current = { x: e.clientX, id: e.pointerId };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
@@ -248,7 +286,7 @@ function AskMatches({ askId }: { askId: string }) {
 
   async function toggleBlocker(enabled: boolean) {
     // One change at a time, and not while a pass or send is saving.
-    if (blockerSaving || busy) return;
+    if (blockerSaving || busyRef.current) return;
     setBlockerSaving(true);
     setBlockerFailed(null);
     try {
@@ -295,6 +333,7 @@ function AskMatches({ askId }: { askId: string }) {
 
   function onSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (busyRef.current) return;
     setCutoffNote(false);
     setLoad({ state: "loading" });
     setApplied(query.trim());
@@ -375,7 +414,12 @@ function AskMatches({ askId }: { askId: string }) {
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
         />
-        <Button type="submit" variant="secondary" className="shrink-0">
+        <Button
+          type="submit"
+          variant="secondary"
+          aria-disabled={busy !== null}
+          className="shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        >
           Search
         </Button>
       </form>
@@ -385,13 +429,15 @@ function AskMatches({ askId }: { askId: string }) {
           <button
             type="button"
             onClick={() => {
+              if (busyRef.current) return;
               setQuery("");
               setCutoffNote(false);
               setLoad({ state: "loading" });
               setApplied("");
               setAttempt((n) => n + 1);
             }}
-            className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            aria-disabled={busy !== null}
+            className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
           >
             Show everyone
           </button>
@@ -405,9 +451,10 @@ function AskMatches({ askId }: { askId: string }) {
           <input
             type="checkbox"
             role="switch"
-            checked={blocker}
+            checked={blocker ?? true}
             aria-disabled={blockerSaving || busy !== null}
-            onChange={(e) => void toggleBlocker(e.target.checked)}
+            // While unknown, the first press confirms the default (on) rather than turning it off.
+            onChange={(e) => void toggleBlocker(blocker === null ? true : e.target.checked)}
             aria-describedby="blocker-hint"
             className="peer sr-only"
           />
@@ -417,9 +464,11 @@ function AskMatches({ askId }: { askId: string }) {
           />
         </label>
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
-          {blocker
-            ? "On: people you passed on stay out of this list, and you're kept out of theirs."
-            : "Off: people you passed on can show up again."}
+          {blocker === null
+            ? "New questions start with this on. If you changed it in another tab, press to confirm it's on."
+            : blocker
+              ? "On: people you passed on stay out of this list, and you're kept out of theirs."
+              : "Off: people you passed on can show up again."}
         </p>
         {blockerFailed && (
           <p role="alert" className={`mt-2 ${errorClass}`}>
@@ -512,13 +561,18 @@ function AskMatches({ askId }: { askId: string }) {
 
             {actionFailure && (
               <p role="alert" className={`mt-4 ${errorClass}`}>
-                {actionFailure.failure.message}{" "}
-                {actionFailure.failure.action ? (
-                  <a href={actionFailure.failure.action.href} className="underline underline-offset-4">
-                    {actionFailure.failure.action.label}
+                {actionFailure.message}{" "}
+                {actionFailure.action ? (
+                  <a href={actionFailure.action.href} className="underline underline-offset-4">
+                    {actionFailure.action.label}
                   </a>
                 ) : (
-                  <button type="button" onClick={refresh} className="underline underline-offset-4">
+                  <button
+                    type="button"
+                    onClick={refresh}
+                    aria-disabled={busy !== null}
+                    className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                  >
                     Refresh matches
                   </button>
                 )}
@@ -526,11 +580,20 @@ function AskMatches({ askId }: { askId: string }) {
             )}
 
             <div className="sticky bottom-0 -mx-4 mt-5 grid grid-cols-2 gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-              <Button variant="secondary" onClick={() => void act("pass")} disabled={busy !== null || blockerSaving} className="text-lg">
+              <Button
+                variant="secondary"
+                onClick={() => void act("pass")}
+                aria-disabled={busy !== null || passLocked || blockerSaving}
+                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              >
                 <span aria-hidden="true">←&nbsp;</span>
                 {busy === "pass" ? "Passing…" : "Pass"}
               </Button>
-              <Button onClick={() => void act("send")} disabled={busy !== null || blockerSaving} className="text-lg">
+              <Button
+                onClick={() => void act("send")}
+                aria-disabled={busy !== null || passLocked || blockerSaving}
+                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              >
                 {busy === "send" ? "Sending…" : "Send request"}
                 <span aria-hidden="true">&nbsp;→</span>
               </Button>
