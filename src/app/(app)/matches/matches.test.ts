@@ -57,9 +57,18 @@ describe("highlightParts", () => {
     ]);
   });
 
-  it("strips any other markup instead of rendering it", () => {
-    expect(highlightParts('<img src=x onerror="alert(1)">etcd <b>raft</b>')).toEqual([{ text: "etcd raft", hit: false }]);
+  it("keeps code-like text with angle brackets as written (React renders it as text)", () => {
+    expect(highlightParts("Option<T> and Vec<u8> in <em>serde</em>")).toEqual([
+      { text: "Option<T> and Vec<u8> in ", hit: false },
+      { text: "serde", hit: true },
+    ]);
+    expect(highlightParts('<img src=x onerror="alert(1)">')).toEqual([{ text: '<img src=x onerror="alert(1)">', hit: false }]);
     expect(highlightParts("plain title")).toEqual([{ text: "plain title", hit: false }]);
+  });
+
+  it("treats an unclosed <em> as plain text", () => {
+    expect(highlightParts("a <em>b")).toEqual([{ text: "a <em>b", hit: false }]);
+    expect(highlightParts("")).toEqual([]);
   });
 });
 
@@ -127,20 +136,20 @@ describe("soft blocker (A2 step 3)", () => {
     delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
   });
 
-  it("starts on for a new ask and remembers what this tab saved, per ask", () => {
-    expect(recallBlocker("a1")).toBe(true);
+  it("is unknown until this tab saves it, then remembers it per ask", () => {
+    expect(recallBlocker("a1")).toBeNull();
     rememberBlocker("a1", false);
     rememberBlocker("a2", true);
     expect(recallBlocker("a1")).toBe(false);
     expect(recallBlocker("a2")).toBe(true);
   });
 
-  it("falls back to on with broken or missing storage", () => {
+  it("is unknown with broken or missing storage", () => {
     sessionStorage.setItem("convo_soft_blocker", "{broken");
-    expect(recallBlocker("a1")).toBe(true);
+    expect(recallBlocker("a1")).toBeNull();
     delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
     expect(() => rememberBlocker("a1", false)).not.toThrow();
-    expect(recallBlocker("a1")).toBe(true);
+    expect(recallBlocker("a1")).toBeNull();
   });
 
   it("explains a failed save", () => {
