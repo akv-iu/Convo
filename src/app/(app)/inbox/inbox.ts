@@ -81,7 +81,7 @@ export function slotsFailure(status: number, body: unknown): Failure {
 /** A failed POST /api/requests/:id/schedule (db/Scheduling.md). */
 export function bookFailure(status: number, body: unknown): Failure {
   if (status === 401) return { message: "Your sign-in has expired.", action: { label: "Sign in again", href: "/signin" } };
-  if (status === 409) return { message: "That time was just taken or is too soon. Here are fresh times.", action: null };
+  if (status === 409) return { message: "That time was just taken or is too soon. Showing what's free now.", action: null };
   if (status === 403 || status === 404) return { message: "This request is no longer yours to book.", action: null };
   return {
     message: serverMessage(body) ?? "The booking may have been saved. Reload your requests to check before booking again.",

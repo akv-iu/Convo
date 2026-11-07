@@ -32,12 +32,16 @@ import {
   matchFailure,
   passFailure,
   recallBlocker,
+  recallSent,
   rememberBlocker,
+  rememberSent,
   resolveFailure,
   sendFailure,
   swipeOutcome,
   withinCutoff,
+  withoutSent,
   type Failure,
+  type SentTo,
   type Swipe,
 } from "./matches";
 
@@ -60,13 +64,15 @@ export function MatchesView() {
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
   const [actionFailure, setActionFailure] = useState<{ failure: Failure; retrySend: boolean } | null>(null);
   const [announce, setAnnounce] = useState("");
-  const [sent, setSent] = useState<{ name: string; githubLogin: string }[]>([]);
+  const [sent, setSent] = useState<SentTo[]>([]);
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
   const [cutoffNote, setCutoffNote] = useState(false);
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
+  /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
+  const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
   const [blocker, setBlocker] = useState(true);
   const [blockerSaving, setBlockerSaving] = useState(false);
@@ -74,6 +80,7 @@ export function MatchesView() {
 
   useEffect(() => {
     if (!askId) return;
+    deckGen.current++;
     let live = true;
     void (async () => {
       try {
@@ -88,7 +95,10 @@ export function MatchesView() {
         setQuestion(recallAsk(askId)?.refined.text ?? null);
         setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
-        setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
+        // Leave out people this tab already sent the ask to: a second send would be a duplicate request.
+        const already = recallSent(askId);
+        setSent(already);
+        setLoad({ state: "ready", matches: withoutSent([...(body as MatchResult[])], already).sort((a, b) => a.rank - b.rank) });
         setIndex(0);
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
@@ -110,11 +120,12 @@ export function MatchesView() {
 
   const act = useCallback(
     async (kind: "pass" | "send") => {
-      if (!current || busy) return;
+      if (!current || busy || blockerSaving) return;
       setBusy(kind);
       setActionFailure(null);
       const who = current.person.name;
       const login = current.person.githubLogin;
+      const gen = deckGen.current;
       try {
         const res =
           kind === "pass"
@@ -129,25 +140,33 @@ export function MatchesView() {
                 body: JSON.stringify({ askId, toPersonId: current.person.id }),
               });
         const body = await res.json().catch(() => null);
+        if (deckGen.current !== gen) {
+          // The deck reloaded meanwhile (e.g. the switch changed); the server's list already reflects this save.
+          if (res.ok) setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
+          return;
+        }
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
           setActionFailure({ failure, retrySend: kind === "send" && res.status !== 401 && res.status !== 404 });
           return;
         }
         if (kind === "send") {
-          setSent((s) => [...s, { name: who, githubLogin: login }]);
+          setSent(rememberSent(askId, { id: current.person.id, name: who, githubLogin: login }));
           setAnnounce(`Request sent to ${who}.`);
           setIndex((i) => i + 1);
         } else {
           const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
           setAnnounce(`Passed on ${who}.`);
           if (cutoff !== null) {
-            // Everyone ranked at or below the cutoff is hidden from now on; keep the cards before it.
+            // The cutoff is the highest rank passed on (db/Rejections.md): only ranks below it stay,
+            // which are usually cards already seen, so the deck often ends here. Say why.
             const kept = withinCutoff(matches, cutoff);
             if (kept.length < matches.length) setCutoffNote(true);
             setLoad({ state: "ready", matches: kept });
+            setIndex((i) => Math.min(i + 1, kept.length));
+          } else {
+            setIndex((i) => i + 1);
           }
-          setIndex((i) => i + 1);
         }
       } catch {
         const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
@@ -157,14 +176,15 @@ export function MatchesView() {
         setDx(0);
       }
     },
-    [askId, busy, current, matches],
+    [askId, blockerSaving, busy, current, matches],
   );
 
   // ← passes and → sends, unless the user is typing somewhere.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
-      if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
+      // A held key repeats; acting on repeats would pass on or message people never seen.
+      if (e.repeat || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
       if (target && (target.closest("input, textarea, select, [contenteditable=true]") || target.isContentEditable)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -195,7 +215,8 @@ export function MatchesView() {
   }
 
   async function toggleBlocker(enabled: boolean) {
-    if (blockerSaving) return;
+    // One change at a time, and not while a pass or send is saving.
+    if (blockerSaving || busy) return;
     setBlockerSaving(true);
     setBlockerFailed(null);
     try {
@@ -246,6 +267,7 @@ export function MatchesView() {
     setCutoffNote(false);
     setLoad({ state: "loading" });
     setApplied(query.trim());
+    setAttempt((n) => n + 1); // reload even when the query didn't change
   }
 
   if (!askId) {
@@ -276,7 +298,7 @@ export function MatchesView() {
             <p className="mt-1 text-sm text-muted">Say thanks, or follow the people you reached out to.</p>
             <ul className="mt-3 flex flex-col gap-2">
               {sent.map((p) => (
-                <li key={p.githubLogin}>
+                <li key={p.id}>
                   <a
                     href={githubProfile(p.githubLogin)}
                     target="_blank"
@@ -336,6 +358,7 @@ export function MatchesView() {
               setCutoffNote(false);
               setLoad({ state: "loading" });
               setApplied("");
+              setAttempt((n) => n + 1);
             }}
             className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
           >
@@ -351,14 +374,14 @@ export function MatchesView() {
             type="checkbox"
             role="switch"
             checked={blocker}
-            disabled={blockerSaving}
+            aria-disabled={blockerSaving || busy !== null}
             onChange={(e) => void toggleBlocker(e.target.checked)}
             aria-describedby="blocker-hint"
             className="peer sr-only"
           />
           <span
             aria-hidden="true"
-            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
+            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-aria-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
           />
         </label>
         <p id="blocker-hint" className="mt-1 text-sm text-muted">
@@ -473,6 +496,11 @@ export function MatchesView() {
             <h2 className="text-2xl font-extrabold tracking-tight">
               {matches.length === 0 ? "No one matches yet" : "That's everyone for now"}
             </h2>
+            {cutoffNote && (
+              <p className="mt-2 font-medium">
+                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+              </p>
+            )}
             <p className="mt-2 text-muted">
               {sent.length > 0
                 ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.map((p) => p.name).join(", ")}. They'll see your question in their inbox.`
