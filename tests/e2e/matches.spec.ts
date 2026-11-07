@@ -186,20 +186,75 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
 
   test("after the third pass, people ranked below are hidden as the server says", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(6) }));
-    let passes = 0;
+    // As the server does: after three passes the cutoff is the highest rank passed on.
+    const passed: number[] = [];
     await page.route("**/api/rejections", (route) => {
-      passes++;
-      return route.fulfill({ json: { rejections: passes, hiddenBelowRank: passes >= 3 ? 4 : null } });
+      passed.push(route.request().postDataJSON().rank);
+      return route.fulfill({ json: { rejections: passed.length, hiddenBelowRank: passed.length >= 3 ? Math.max(...passed) : null } });
     });
     await open(page, "made-up");
     for (let i = 1; i <= 3; i++) {
       await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(`Person ${i}`);
       await passButton(page).click();
     }
-    // Cutoff 4 keeps ranks 0-3: Person 4 is the last card, Persons 5 and 6 are gone.
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 4");
-    await expect(card(page)).toContainText("4 of 4");
+    // Cutoff 2 keeps only ranks 0-1, already seen, so the deck ends and says why.
+    await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
     await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
+    expect(passed).toEqual([0, 1, 2]);
+  });
+
+  test("a cutoff above the current card keeps the cards before it", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(6) }));
+    // Earlier visits already passed on ranks 3 and 4 (e.g. before See them again); this is the third pass.
+    const passed = [3, 4];
+    await page.route("**/api/rejections", (route) => {
+      passed.push(route.request().postDataJSON().rank);
+      return route.fulfill({ json: { rejections: passed.length, hiddenBelowRank: Math.max(...passed) } });
+    });
+    await open(page, "made-up");
+    await passButton(page).click();
+    // Cutoff 4 keeps ranks 0-3: the deck moves on to Person 2 of the 4 left.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(card(page)).toContainText("2 of 4");
+    await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
+  });
+
+  test("a held arrow key acts once, not on every repeat", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(4) }));
+    let sends = 0;
+    await page.route("**/api/requests", (route) => {
+      sends++;
+      return route.fulfill({ json: { id: `r${sends}` } });
+    });
+    await open(page, "made-up");
+    await expect(card(page)).toBeVisible();
+    await page.evaluate(() => {
+      for (let i = 0; i < 5; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true }));
+    });
+    await page.waitForTimeout(400);
+    expect(sends).toBe(0);
+    await page.keyboard.press("ArrowRight");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    expect(sends).toBe(1);
+  });
+
+  test("pressing Search again with the same words reloads instead of hanging", async ({ page }) => {
+    let loads = 0;
+    await page.route("**/api/match", (route) => {
+      loads++;
+      return route.fulfill({ json: fakeMatches(2) });
+    });
+    await open(page, "made-up");
+    await expect(card(page)).toBeVisible();
+    await page.getByRole("button", { name: "Search", exact: true }).click(); // empty box, same as now
+    await expect(card(page)).toBeVisible();
+    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(card(page)).toBeVisible();
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(card(page)).toBeVisible();
+    expect(loads).toBe(4);
   });
 
   test("a failed pass is never retried by itself, and Refresh matches reloads", async ({ page }) => {
@@ -307,7 +362,41 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await blocker.click({ force: true });
     await expect(alertWithText(page)).toHaveText("Storage unavailable");
     await expect(blocker).toBeChecked();
-    await expect(blocker).toBeEnabled();
+    await expect(blocker).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("the switch keeps keyboard focus while saving, and waits for a pass in flight", async ({ page, isMobile }) => {
+    test.skip(isMobile, "keyboard path is checked on the laptop project");
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/rejections", async (route) => {
+      await held;
+      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
+    });
+    let puts = 0;
+    await page.route("**/api/soft-blocker", (route) => {
+      puts++;
+      return route.fulfill({ json: { askId: "made-up", enabled: false } });
+    });
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+
+    // While a pass is saving, the switch says it's unavailable and ignores presses.
+    await passButton(page).click();
+    await expect(blocker).toHaveAttribute("aria-disabled", "true");
+    await blocker.focus();
+    await page.keyboard.press("Space");
+    expect(puts).toBe(0);
+    release();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+
+    // Saving the switch keeps focus on it.
+    await blocker.focus();
+    await page.keyboard.press("Space");
+    await expect(blocker).not.toBeChecked();
+    await expect(blocker).toBeFocused();
+    expect(puts).toBe(1);
   });
 
   for (const scheme of ["light", "dark"] as const) {
