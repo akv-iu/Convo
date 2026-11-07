@@ -169,8 +169,25 @@ describe("matching a saved ask", () => {
       .mockResolvedValueOnce({ rows: [["rejected", 1]] }).mockResolvedValueOnce({ rows: [["pending-user"]] });
     await matchAsk(person.id, ask.id);
     expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["pending-user"] }));
-    expect(query.mock.calls[2][1]).toEqual([true]);
+    expect(query.mock.calls[2][1]).toEqual([true, person.id, "open", true]);
     expect(query.mock.calls[2][0]).toContain('"users"."filters" is not null');
+  });
+
+  it.each([true, false])("honors other attendees' rejections regardless of this ask's blocker=%s", async (softBlocker) => {
+    query.mockResolvedValueOnce(askRows({ ...ask, softBlocker }))
+      .mockResolvedValueOnce({ rows: [["outgoing", 1]] })
+      .mockResolvedValueOnce({ rows: [["reverse-blocker"], ["pending-user"]] });
+    await matchAsk(person.id, ask.id);
+    expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({
+      excludeIds: [...(softBlocker ? ["outgoing"] : []), "reverse-blocker", "pending-user"],
+    }));
+    const [sql, params] = query.mock.calls[2];
+    expect(sql).toContain('union (select "asks"."user_id"');
+    expect(sql).toContain('inner join "rejections" on "rejections"."ask_id" = "asks"."id"');
+    expect(sql).toContain('"rejections"."person_id" = $2');
+    expect(sql).toContain('"asks"."status" = $3');
+    expect(sql).toContain('"asks"."soft_blocker" = $4');
+    expect(params).toEqual([true, person.id, "open", true]);
   });
 
   it("starts exclusion and pending reads while the requester profile is still loading", async () => {

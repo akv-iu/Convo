@@ -29,7 +29,9 @@ Production stays in fake mode until the integration checkpoint.
   sanitized 503 errors. Failure to load exclusions stops matching.
 - The rejection count, cutoff and soft-blocker behavior match the existing fake:
   the configured threshold activates a batch rank cutoff; turning the soft
-  blocker off removes individual exclusions, while the cutoff still applies.
+  blocker off removes this ask's individual exclusions, while the cutoff still
+  applies. The real backend additionally excludes attendees whose open,
+  blocker-enabled asks reject the signed-in user, regardless of this ask's switch.
   This step only reads these values. Rejection/switch write routes follow in
   the next B2 slice. Resolved-ask behavior also follows the existing fake.
 - The shared contract has no endpoint to update an existing refined question.

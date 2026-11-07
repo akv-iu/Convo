@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "../../../db";
-import { asks, users } from "../../../db/schema";
+import { asks, rejections, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
@@ -60,11 +60,15 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Stored ask is invalid.", 503);
   }
 
-  const [requester, { excludeIds, hiddenBelowRank }, pendingUsers] = await Promise.all([
+  const [requester, { excludeIds, hiddenBelowRank }, excludedPeople] = await Promise.all([
     getProfile(userId),
     getExclusions(askId),
     Promise.resolve(db().select({ id: users.id }).from(users)
-      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters))))
+      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters)))
+      // An attendee's active rejection also hides that attendee from the rejected person's matches.
+      .union(db().select({ id: asks.userId }).from(asks)
+        .innerJoin(rejections, eq(rejections.askId, asks.id))
+        .where(and(eq(rejections.personId, userId), eq(asks.status, "open"), eq(asks.softBlocker, true)))))
       .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
     // Replaying the saved ID repairs search without another ask or AI call; failure must not block results.
     ask.status === "open" && ask.refined ? registerSavedAsk(ask.id, ask.userId, ask.refined.text) : undefined,
@@ -72,7 +76,7 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
   try {
     const matches = await runMatch({
       ask, requester, query,
-      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...pendingUsers.map(user => user.id)],
+      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...excludedPeople.map(person => person.id)],
       hiddenBelowRank,
     });
     if (!matches.length) return [];
