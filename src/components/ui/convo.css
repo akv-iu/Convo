@@ -1,5 +1,5 @@
 /*
- * Onboarding look. Scoped to .onb so it restyles only A1's screens: the
+ * Convo look (onboarding and the app screens). Scoped to .onb so it restyles only A's screens: the
  * shared token names (background, accent, ...) are redefined here, so the
  * Tailwind classes and src/components/ui pick them up without any change
  * to the global stylesheet.

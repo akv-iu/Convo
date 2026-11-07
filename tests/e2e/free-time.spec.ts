@@ -205,7 +205,7 @@ test.describe("free time (A1 step 4)", () => {
       await open(page, "p_002");
       expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, "loaded").toEqual([]);
       await page.goto("/ask");
-      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, "ask placeholder").toEqual([]);
+      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, "ask screen").toEqual([]);
     });
   }
 });

@@ -38,4 +38,4 @@ export function ColourPicker({ defaultColour = DEFAULT_COLOUR }: { defaultColour
  * from whichever swatch is checked. Written out in full so Tailwind
  * generates them.
  */
-export const colourFollowsPicker = "badge-follows-picker"; // rules in onboarding.css
+export const colourFollowsPicker = "badge-follows-picker"; // rules in src/components/ui/convo.css
