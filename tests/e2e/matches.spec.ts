@@ -40,6 +40,12 @@ async function open(page: Page, askId: string) {
   await page.setExtraHTTPHeaders({ "x-demo-user": ME });
   await page.goto(`/matches?ask=${askId}`);
 }
+const askJson = (askId: string, softBlocker: boolean) =>
+  ({ id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" });
+/** A saved ask for tests that mock the matches of a made-up ask (the switch shows only once its setting is known). */
+async function savedAsk(page: Page, askId: string, softBlocker = true) {
+  await page.route(`**/api/asks/${askId}`, (route) => route.fulfill({ json: askJson(askId, softBlocker) }));
+}
 
 /** Made-up results for screens the fake's data can't reach (many people, hidden fields). */
 function fakeMatches(n: number) {
@@ -427,12 +433,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await passButton(page).click();
     await expect(page.getByRole("status").filter({ hasText: "Passed" })).toHaveText(`Passed on ${first.person.name}.`);
 
-    // This tab hasn't saved it yet, so the first press confirms on; the second turns it off.
-    const confirming = page.waitForRequest((r) => r.url().endsWith("/api/soft-blocker") && r.method() === "PUT");
-    await blocker.click({ force: true });
-    expect((await confirming).postDataJSON()).toEqual({ askId, enabled: true });
-    await expect(page.getByText(/^On: people you passed on/)).toBeVisible();
-    await expect(card(page)).toBeVisible();
+    // GET /api/asks/:id supplied the saved setting: the first press changes it to off.
     const saving = page.waitForRequest((r) => r.url().endsWith("/api/soft-blocker") && r.method() === "PUT");
     await blocker.click({ force: true });
     expect((await saving).postDataJSON()).toEqual({ askId, enabled: false });
@@ -446,9 +447,57 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(blocker).not.toBeChecked();
   });
 
+  test("a new tab shows the saved question and switch setting, read back from the server", async ({ page, browser }) => {
+    const askId = await newAsk(page);
+    const saved = await page.request.put("/api/soft-blocker", { headers: { "x-demo-user": ME }, data: { askId, enabled: false } });
+    expect(saved.ok()).toBe(true);
+    const ask = await (await page.request.get(`/api/asks/${askId}`, { headers: { "x-demo-user": ME } })).json();
+    // A fresh context has none of this tab's copies: everything comes from GET /api/asks/:id.
+    const fresh = await (await browser.newContext()).newPage();
+    await open(fresh, askId);
+    await expect(fresh.getByRole("switch", { name: "Keep people I pass on hidden" })).not.toBeChecked();
+    await expect(fresh.getByText(ask.refined.text)).toBeVisible();
+    await fresh.context().close();
+  });
+
+  test("if the saved setting doesn't load, the screen says so and Try again loads it", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    let loads = 0;
+    await page.route("**/api/asks/made-up", (route) =>
+      ++loads === 1 ? route.fulfill({ status: 503, json: { error: "down" } }) : route.fulfill({ json: askJson("made-up", false) }),
+    );
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await expect(alertWithText(page)).toContainText("setting didn't load.");
+    await expect(card(page)).toBeVisible(); // the matches load anyway
+    await expect(blocker).toHaveCount(0);
+    await alertWithText(page).getByRole("button", { name: "Try again" }).click();
+    await expect(blocker).not.toBeChecked();
+    await expect(alertWithText(page)).toHaveCount(0);
+  });
+
+  test("moving to another ask never shows the last one's switch setting", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await savedAsk(page, "made-up"); // on
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/asks/other-ask", async (route) => {
+      await held;
+      return route.fulfill({ json: askJson("other-ask", false) });
+    });
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await expect(blocker).toBeChecked();
+    await page.evaluate(() => window.history.pushState(null, "", "/matches?ask=other-ask"));
+    await expect(blocker).toHaveCount(0); // hidden while the other ask loads, never this one's "on"
+    release();
+    await expect(blocker).not.toBeChecked();
+  });
+
   test("a failed soft-blocker save leaves the switch as it was", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
     await page.route("**/api/soft-blocker", (route) => route.fulfill({ status: 503, json: { error: "Storage unavailable" } }));
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
     await blocker.click({ force: true });
@@ -474,6 +523,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       puts++;
       return route.fulfill({ json: { askId: "made-up", enabled: true } });
     });
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     await sendButton(page).click();
     await page.getByRole("button", { name: "Search", exact: true }).click({ force: true });
@@ -485,8 +535,14 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(puts).toBe(0);
   });
 
-  test("the switch doesn't claim a setting this tab never saw, and the first press confirms on", async ({ page }) => {
+  test("the switch waits for the saved setting and its first press changes that value", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(1) }));
+    let release = () => {};
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/asks/made-up", async route => {
+      await held;
+      return route.fulfill({ json: askJson("made-up", true) });
+    });
     const sent: boolean[] = [];
     await page.route("**/api/soft-blocker", (route) => {
       const { enabled } = route.request().postDataJSON();
@@ -494,15 +550,16 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       return route.fulfill({ json: { askId: "made-up", enabled } }); // the server echoes what it saved
     });
     await open(page, "made-up");
-    await expect(page.getByText(/^New questions start with this on/)).toBeVisible();
-    await expect(page.getByText(/^On: people you passed on/)).toHaveCount(0);
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
-    await blocker.click({ force: true });
-    await expect(page.getByText(/^On: people you passed on/)).toBeVisible();
+    await expect(card(page)).toBeVisible();
+    await expect(blocker).toHaveCount(0);
+    release();
     await expect(blocker).toBeChecked();
     await blocker.click({ force: true });
     await expect(page.getByText(/^Off: people you passed on/)).toBeVisible();
-    expect(sent).toEqual([true, false]);
+    await blocker.click({ force: true });
+    await expect(page.getByText(/^On: people you passed on/)).toBeVisible();
+    expect(sent).toEqual([false, true]);
   });
 
   test("Pass and Send are disabled while the switch saves", async ({ page }) => {
@@ -513,6 +570,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       await held;
       return route.fulfill({ json: { askId: "made-up", enabled: false } });
     });
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     await page.getByRole("switch", { name: "Keep people I pass on hidden" }).click({ force: true });
     await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
@@ -535,6 +593,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       puts++;
       return route.fulfill({ json: { askId: "made-up", enabled: false } });
     });
+    await savedAsk(page, "made-up");
     await open(page, "made-up");
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
 
@@ -555,25 +614,29 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(puts).toBe(1);
   });
 
-  test("See them again leaves out people already sent the question", async ({ page }) => {
-    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
-    let sends = 0;
-    await page.route("**/api/requests", (route) => {
-      sends++;
-      return route.fulfill({ json: { id: `r${sends}` } });
+  test("See them again leaves out recipients on the server, including after reload", async ({ page }) => {
+    const askId = await newAsk(page);
+    const picks = (await serverMatches(page, askId)).slice(0, 2);
+    expect(picks).toHaveLength(2);
+    const ids = new Set(picks.map(match => match.person.id));
+    // Keep two real cards; the real fake handler, rather than tab storage, decides their exclusions.
+    await page.route("**/api/match", async route => {
+      const response = await route.fetch();
+      const matches = (await response.json()) as Match[];
+      return route.fulfill({ response, json: matches.filter(match => ids.has(match.person.id)) });
     });
-    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
-    await open(page, "made-up");
-    await sendButton(page).click();
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await passButton(page).click();
+    await open(page, askId);
+    for (const pick of picks) {
+      await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(pick.person.name);
+      await sendButton(page).click();
+    }
+    await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
     await page.getByRole("button", { name: "See them again" }).click();
-    // Person 1 already has the question, so only Person 2 comes back.
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await expect(card(page)).toContainText("1 of 1");
+    await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    await page.evaluate(() => sessionStorage.clear());
     await page.reload();
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    expect(sends).toBe(1);
+    await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    expect((await serverMatches(page, askId)).some(match => ids.has(match.person.id))).toBe(false);
   });
 
   test("Mark as answered resolves the ask, and suggests staying in touch with the people sent requests", async ({ page }) => {
@@ -582,6 +645,9 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await open(page, askId);
     await sendButton(page).click();
     await expect(page.getByRole("status").filter({ hasText: "Request sent" })).toBeVisible();
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Mark as answered" })).toBeVisible();
     const resolving = page.waitForRequest((r) => r.url().endsWith(`/api/asks/${askId}/resolve`) && r.method() === "POST");
     await page.getByRole("button", { name: "Mark as answered" }).click();
     await resolving;
@@ -592,6 +658,47 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     // Saved: resolving again (safe to repeat) reports it resolved.
     const again = await page.request.post(`/api/asks/${askId}/resolve`, { headers: { "x-demo-user": ME } });
     expect((await again.json()).status).toBe("resolved");
+  });
+
+  test("a late sent-history snapshot keeps a request sent while it was loading", async ({ page }) => {
+    const askId = await newAsk(page);
+    const [first] = await serverMatches(page, askId);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    await page.route("**/api/requests/sent", async route => {
+      await held;
+      return route.fulfill({ json: [] }); // snapshot from before the send
+    });
+    await open(page, askId);
+    await sendButton(page).click();
+    await expect(page.getByRole("status").filter({ hasText: "Request sent" })).toBeVisible();
+    const loaded = page.waitForResponse("**/api/requests/sent");
+    release();
+    await loaded;
+    await expect(page.getByText("Loading your sent requests…")).toHaveCount(0);
+    await page.getByRole("button", { name: "Mark as answered" }).click();
+    await expect(page.getByRole("link", { name: new RegExp(`${first.person.name}.*@${first.person.githubLogin} on GitHub`) })).toBeVisible();
+  });
+
+  test("a failed sent-history load offers retry instead of claiming nobody was sent the ask", async ({ page }) => {
+    const askId = await newAsk(page);
+    const [first] = await serverMatches(page, askId);
+    const sent = await page.request.post("/api/requests", {
+      headers: { "x-demo-user": ME }, data: { askId, toPersonId: first.person.id },
+    });
+    expect(sent.ok()).toBe(true);
+    let loads = 0;
+    await page.route("**/api/requests/sent", async route => {
+      if (++loads === 1) return route.fulfill({ status: 503, json: { error: "unavailable" } });
+      return route.fulfill({ response: await route.fetch() });
+    });
+    await open(page, askId);
+    const error = page.getByRole("alert").filter({ hasText: "Your sent requests didn't load." });
+    await expect(error).toBeVisible();
+    await error.getByRole("button", { name: "Try again" }).click();
+    await expect(error).toHaveCount(0);
+    await page.getByRole("button", { name: "Mark as answered" }).click();
+    await expect(page.getByRole("link", { name: new RegExp(`${first.person.name}.*@${first.person.githubLogin} on GitHub`) })).toBeVisible();
   });
 
   test("a failed resolve can be tried again", async ({ page }) => {
@@ -617,6 +724,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
       await page.route("**/api/requests", (route) => route.fulfill({ json: { id: "r" } }));
       const scan = async (label: string) =>
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
+      await savedAsk(page, "made-up");
       await open(page, "made-up");
       await expect(card(page)).toBeVisible();
       await scan("card");

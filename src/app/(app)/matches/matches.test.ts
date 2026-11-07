@@ -1,23 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MatchResult } from "@/contracts/types";
+import { personColour } from "@/components/ui/badge-colours";
+import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 import {
-  badgeLabels,
   blockerFailure,
-  cardColour,
-  githubProfile,
+  loadAsk,
   highlightParts,
   matchFailure,
   passFailure,
-  recallBlocker,
-  recallSent,
-  rememberBlocker,
-  rememberSent,
   resolveFailure,
   sendFailure,
   SWIPE_DISTANCE,
   swipeOutcome,
   withinCutoff,
-  withoutSent,
 } from "./matches";
 
 function match(over: Partial<MatchResult> & { rank: number }, person: Partial<MatchResult["person"]> = {}): MatchResult {
@@ -79,17 +74,17 @@ describe("highlightParts", () => {
 
 describe("cards", () => {
   it("use the person's badge colour, sunflower when they have none", () => {
-    expect(cardColour(match({ rank: 0 }, { badgeColour: "lilac" }).person)).toBe("#c4b5fd");
-    expect(cardColour(match({ rank: 0 }).person)).toBe("#ffd23f");
+    expect(personColour(match({ rank: 0 }, { badgeColour: "lilac" }).person)).toBe("#c4b5fd");
+    expect(personColour(match({ rank: 0 }).person)).toBe("#ffd23f");
   });
 
   it("word the hard-filter badges, with synthetic shown separately", () => {
-    expect(badgeLabels(match({ rank: 0, badges: ["hiring", "GB", "synthetic"] }))).toEqual(["Hiring", "United Kingdom"]);
+    expect(badgeFacts(match({ rank: 0 }, { filters: { country: "GB", rorId: null, hiring: true } }).person)).toEqual(["United Kingdom", "Hiring"]);
   });
 
   it("never show a hidden hiring value as not hiring", () => {
     const hidden = match({ rank: 0, badges: ["not hiring", "US"] }, { filters: { country: "US", rorId: null, hiring: null } });
-    expect(badgeLabels(hidden)).toEqual(["United States"]);
+    expect(badgeFacts(hidden.person)).toEqual(["United States"]);
   });
 });
 
@@ -125,38 +120,7 @@ describe("failures", () => {
 });
 
 describe("soft blocker (A2 step 3)", () => {
-  class MemoryStorage {
-    private items = new Map<string, string>();
-    getItem(k: string) {
-      return this.items.get(k) ?? null;
-    }
-    setItem(k: string, v: string) {
-      this.items.set(k, v);
-    }
-  }
-  beforeEach(() => {
-    (globalThis as { sessionStorage?: unknown }).sessionStorage = new MemoryStorage();
-  });
-  afterEach(() => {
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-  });
-
-  it("is unknown until this tab saves it, then remembers it per ask", () => {
-    expect(recallBlocker("a1")).toBeNull();
-    rememberBlocker("a1", false);
-    rememberBlocker("a2", true);
-    expect(recallBlocker("a1")).toBe(false);
-    expect(recallBlocker("a2")).toBe(true);
-  });
-
-  it("is unknown with broken or missing storage", () => {
-    sessionStorage.setItem("convo_soft_blocker", "{broken");
-    expect(recallBlocker("a1")).toBeNull();
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-    expect(() => rememberBlocker("a1", false)).not.toThrow();
-    expect(recallBlocker("a1")).toBeNull();
-  });
-
+  // The switch's setting now comes from GET /api/asks/:id (covered by the e2e tests), not this tab.
   it("explains a failed save", () => {
     expect(blockerFailure(401, null).action?.label).toBe("Sign in again");
     expect(blockerFailure(404, null).action?.href).toBe("/ask");
@@ -178,36 +142,21 @@ describe("resolve and connect (A2 step 5)", () => {
   });
 });
 
-describe("people already sent the ask (no duplicate requests)", () => {
-  class MemoryStorage {
-    private items = new Map<string, string>();
-    getItem(k: string) {
-      return this.items.get(k) ?? null;
-    }
-    setItem(k: string, v: string) {
-      this.items.set(k, v);
-    }
-  }
-  beforeEach(() => {
-    (globalThis as { sessionStorage?: unknown }).sessionStorage = new MemoryStorage();
-  });
-  afterEach(() => {
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+describe("the saved ask (GET /api/asks/:id)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ask = { id: "a1", userId: "u", rawText: "q", refined: null, status: "open", softBlocker: false, createdAt: "2026-11-05T12:00:00Z" };
+
+  it("returns the saved ask, so the switch shows its real setting", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(ask)));
+    vi.stubGlobal("fetch", fetch);
+    expect(await loadAsk("a 1")).toEqual(ask);
+    expect(fetch).toHaveBeenCalledWith("/api/asks/a%201", { cache: "no-store" });
   });
 
-  it("remembers each person once per ask, and the deck leaves them out", () => {
-    const ada = { id: "p0", name: "Ada", githubLogin: "ada" };
-    rememberSent("a1", ada);
-    expect(rememberSent("a1", ada)).toEqual([ada]);
-    expect(recallSent("a2")).toEqual([]);
-    const deck = [0, 1].map((rank) => match({ rank }));
-    expect(withoutSent(deck, recallSent("a1")).map((m) => m.person.id)).toEqual(["p1"]);
-  });
-
-  it("copes with broken or missing storage", () => {
-    sessionStorage.setItem("convo_sent", "{broken");
-    expect(recallSent("a1")).toEqual([]);
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-    expect(rememberSent("a1", { id: "p0", name: "Ada", githubLogin: "ada" })).toHaveLength(1);
+  it("returns the status when it can't be read (0 offline), instead of guessing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 503 })));
+    expect(await loadAsk("a1")).toBe(503);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    expect(await loadAsk("a1")).toBe(0);
   });
 });

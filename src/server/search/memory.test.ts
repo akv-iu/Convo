@@ -58,6 +58,10 @@ describe("person updates without replacing evidence", () => {
     expect(await memorySearch.getPerson(person.id)).toEqual(person);
   });
 
+  it("reads several people at once, leaving out unknown IDs", async () => {
+    expect(await memorySearch.getPeople([people[0].id, "unknown-recipient", people[1].id])).toEqual([people[0], people[1]]);
+  });
+
   it("preserves repository evidence while updating profile fields and availability", async () => {
     const person = { ...structuredClone(people[0]), id: "evidence-update-test" };
     await memorySearch.ingestPerson(person, [{

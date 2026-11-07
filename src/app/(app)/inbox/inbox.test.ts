@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Request } from "@/contracts/types";
+import { badgeFacts } from "@/components/ui/person-badge";
+import { personColour } from "@/components/ui/badge-colours";
 import {
   bookFailure,
   inboxFailure,
@@ -7,6 +9,7 @@ import {
   REPLY_MAX,
   replyProblem,
   respondFailure,
+  sentStatusLabel,
   slotsFailure,
   statusLabel,
   venueRange,
@@ -83,5 +86,30 @@ describe("booking failures (A2 step 5)", () => {
     expect(slotsFailure(404, null).message).toMatch(/no longer yours/);
     expect(slotsFailure(401, null).action?.href).toBe("/signin");
     expect(slotsFailure(503, null).message).toMatch(/didn't load/);
+  });
+});
+
+describe("the other person's badge on a request", () => {
+  const person = {
+    id: "p1", name: "Ada", githubLogin: "ada", bio: "", languages: [], organisations: [], synthetic: false, freeTimes: [],
+    workplaceName: "Acme Robotics", filters: { country: "GB", rorId: null, hiring: true },
+  };
+
+  it("lists workplace, country and hiring, leaving out sections the person hid", () => {
+    expect(badgeFacts(person)).toEqual(["Acme Robotics", "United Kingdom", "Hiring"]);
+    expect(badgeFacts({ ...person, filters: { ...person.filters, hiring: false } })).toContain("Not hiring");
+    // Hidden sections arrive as null: a hidden hiring answer is never shown as "Not hiring".
+    expect(badgeFacts({ ...person, workplaceName: null, filters: { country: null, rorId: null, hiring: null } })).toEqual([]);
+  });
+
+  it("uses the person's colour, and sunflower when they have none or can't be found", () => {
+    expect(personColour({ ...person, badgeColour: "lilac" })).toBe("#c4b5fd");
+    expect(personColour(person)).toBe("#ffd23f");
+    expect(personColour(null)).toBe("#ffd23f");
+  });
+
+  it("words every status from the asker's side", () => {
+    expect(sentStatusLabel.sent).toBe("Sent");
+    expect(Object.keys(sentStatusLabel).sort()).toEqual(Object.keys(statusLabel).sort());
   });
 });

@@ -43,7 +43,7 @@ async function writeUser(userId: string, changes: ProfilePatch): Promise<User> {
   return rows[0];
 }
 
-function toPerson(user: User): Person {
+export function toPerson(user: User): Person {
   if (user.filters === null) throw new ProfileError("Complete onboarding first: save country, workplace and hiring answers.", 409);
   const parsed = Person.safeParse({ ...user, synthetic: false });
   if (!parsed.success) throw new ProfileError("Stored profile is invalid.", 503);
