@@ -8,11 +8,14 @@
  * One answer is saved at a time per request, nothing is retried
  * automatically (a failed write may have committed), and a failure offers
  * a reload so the user sees what was actually saved.
+ *
+ * A2 step 5: an accepted request without a time shows the slot picker.
  */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Request } from "@/contracts/types";
 import { lengthLabel } from "../ask/asks";
+import { SlotPicker } from "./slot-picker";
 import {
   inboxFailure,
   inboxOrder,
@@ -210,6 +213,9 @@ function RequestCard({
         <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3 font-semibold">Meeting booked: {venueRange(request.slot)}</p>
       )}
       {request.status === "declined" && <p className="mt-3 text-muted">You declined this one.</p>}
+      {request.status === "accepted" && !request.slot && (
+        <SlotPicker request={request} onBooked={(r) => onSaved(r, `Meeting booked: ${r.slot ? venueRange(r.slot) : ""}`)} onReload={onReload} />
+      )}
 
       {request.status === "sent" && !replying && (
         <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">

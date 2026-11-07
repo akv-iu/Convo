@@ -142,3 +142,54 @@ export function rememberBlocker(askId: string, enabled: boolean): void {
     // Storage unavailable: the switch shows the default next time.
   }
 }
+
+/** A failed POST /api/asks/:id/resolve. Repeating it is safe (db/Frontend-Support.md), so Try again is offered. */
+export function resolveFailure(status: number, body: unknown): Failure {
+  if (status === 401) return { message: "Your sign-in has expired.", action: signIn };
+  if (status === 404) return { message: "That question isn't yours or no longer exists.", action: { label: "Ask a question", href: "/ask" } };
+  return { message: serverMessage(body) ?? "That wasn't saved. Try again.", action: null };
+}
+
+/** A person's public GitHub profile, for the "stay in touch" prompt. */
+export function githubProfile(login: string): string {
+  return `https://github.com/${encodeURIComponent(login)}`;
+}
+
+export type SentTo = { id: string; name: string; githubLogin: string };
+
+const SENT_KEY = "convo_sent";
+
+function readSent(): Record<string, SentTo[]> {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(SENT_KEY) ?? "{}");
+    return typeof saved === "object" && saved !== null ? (saved as Record<string, SentTo[]>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Who this tab has sent the ask to. Matching doesn't leave them out and
+ * every send makes a new request, so the deck skips them on reload to
+ * avoid sending the same question twice.
+ */
+export function recallSent(askId: string): SentTo[] {
+  const list = readSent()[askId];
+  return Array.isArray(list) ? list.filter((p) => p && typeof p.id === "string") : [];
+}
+
+export function rememberSent(askId: string, person: SentTo): SentTo[] {
+  const next = [...recallSent(askId).filter((p) => p.id !== person.id), person];
+  try {
+    sessionStorage.setItem(SENT_KEY, JSON.stringify({ ...readSent(), [askId]: next }));
+  } catch {
+    // Storage unavailable: duplicates are still avoided until the page reloads.
+  }
+  return next;
+}
+
+/** The deck without people already sent this ask. */
+export function withoutSent(matches: MatchResult[], sent: SentTo[]): MatchResult[] {
+  const ids = new Set(sent.map((p) => p.id));
+  return matches.filter((m) => !ids.has(m.person.id));
+}

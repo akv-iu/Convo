@@ -15,6 +15,10 @@
  * passed on for this ask stay hidden here (and, on the real backend, this
  * user is hidden from them); off brings them back. The batch cutoff stays
  * either way. Changing it reloads the matches.
+ *
+ * A2 step 5: "Mark as answered" resolves the ask (POST /api/asks/:id/resolve),
+ * so it stops being matched or counted, then suggests staying in touch with
+ * the people sent requests from this screen, via their public GitHub.
  */
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
@@ -24,14 +28,20 @@ import { recallAsk } from "../ask/asks";
 import { MatchCard } from "./match-card";
 import {
   blockerFailure,
+  githubProfile,
   matchFailure,
   passFailure,
   recallBlocker,
+  recallSent,
   rememberBlocker,
+  rememberSent,
+  resolveFailure,
   sendFailure,
   swipeOutcome,
   withinCutoff,
+  withoutSent,
   type Failure,
+  type SentTo,
   type Swipe,
 } from "./matches";
 
@@ -62,7 +72,10 @@ export function MatchesView() {
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
   const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
-  const [sent, setSent] = useState<string[]>([]);
+  const [sent, setSent] = useState<SentTo[]>([]);
+  const [resolving, setResolving] = useState(false);
+  const [resolved, setResolved] = useState(false);
+  const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
   const [cutoffNote, setCutoffNote] = useState(false);
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
@@ -95,7 +108,10 @@ export function MatchesView() {
         setQuestion(recallAsk(askId)?.refined.text ?? null);
         setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
-        setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
+        // Leave out people this tab already sent the ask to: a second send would be a duplicate request.
+        const already = recallSent(askId);
+        setSent(already);
+        setLoad({ state: "ready", matches: withoutSent([...(body as MatchResult[])], already).sort((a, b) => a.rank - b.rank) });
         setIndex(0);
         setPassLocked(false);
       } catch {
@@ -127,7 +143,9 @@ export function MatchesView() {
       setActionFailure(null);
       setDx(0); // the card goes back at once instead of waiting off to the side for the save
       const who = current.person.name;
+      const login = current.person.githubLogin;
       const gen = deckGen.current;
+      const sentTo = { id: current.person.id, name: who, githubLogin: login };
       try {
         const res =
           kind === "pass"
@@ -158,7 +176,9 @@ export function MatchesView() {
         }
         if (stale) {
           if (kind === "send") {
-            setSent((s) => [...s, who]);
+            setSent(rememberSent(askId, sentTo));
+            // The reload may have been answered before this send was saved: drop them from the new deck.
+            setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: withoutSent(cur.matches, [sentTo]) } : cur));
           } else {
             // The reload may have been answered before this pass was saved: apply it to the new deck too.
             const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
@@ -173,7 +193,7 @@ export function MatchesView() {
           return;
         }
         if (kind === "send") {
-          setSent((s) => [...s, who]);
+          setSent(rememberSent(askId, sentTo));
           setAnnounce(`Request sent to ${who}.`);
           setIndex((i) => i + 1);
         } else {
@@ -269,6 +289,26 @@ export function MatchesView() {
     }
   }
 
+  async function resolve() {
+    if (resolving) return;
+    setResolving(true);
+    setResolveFailed(null);
+    try {
+      const res = await fetch(`/api/asks/${encodeURIComponent(askId)}/resolve`, { method: "POST" });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setResolveFailed(resolveFailure(res.status, body));
+        return;
+      }
+      setResolved(true);
+      setAnnounce("Marked as answered.");
+    } catch {
+      setResolveFailed(resolveFailure(0, null));
+    } finally {
+      setResolving(false);
+    }
+  }
+
   function onSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busyRef.current) return;
@@ -285,6 +325,46 @@ export function MatchesView() {
         <p className="mt-4 text-lg">Ask a question first, then Convo finds people who can answer it.</p>
         <div className="mt-6">
           <Button href="/ask">Ask a question</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (resolved) {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col">
+        <h1 className={headingClass}>Marked as answered</h1>
+        <p className="mt-3 text-lg text-muted">
+          Convo won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
+        </p>
+        {question && <p className="mt-2 text-muted">&ldquo;{question}&rdquo;</p>}
+        {sent.length > 0 && (
+          <section aria-labelledby="connect-heading" className="mt-8 rounded-2xl border-2 border-border bg-surface p-5">
+            <h2 id="connect-heading" className="text-xl font-extrabold tracking-tight">
+              Stay in touch
+            </h2>
+            <p className="mt-1 text-sm text-muted">Say thanks, or follow the people you reached out to.</p>
+            <ul className="mt-3 flex flex-col gap-2">
+              {sent.map((p) => (
+                <li key={p.id}>
+                  <a
+                    href={githubProfile(p.githubLogin)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-lg border-2 border-border px-3 font-semibold hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    <span>{p.name}</span>
+                    <span className="text-sm text-accent">
+                      @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <div className="mt-8">
+          <Button href="/ask">Ask something else</Button>
         </div>
       </div>
     );
@@ -495,7 +575,7 @@ export function MatchesView() {
             )}
             <p className="mt-2 text-muted">
               {sent.length > 0
-                ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.join(", ")}. They'll see your question in their inbox.`
+                ? `You sent ${sent.length === 1 ? "a request" : `${sent.length} requests`} to ${sent.map((p) => p.name).join(", ")}. They'll see your question in their inbox.`
                 : applied
                   ? "Try a different search, or show everyone."
                   : "Try asking it another way, or check back as more people join."}
@@ -511,6 +591,31 @@ export function MatchesView() {
           </div>
         )}
       </section>
+
+      {load.state === "ready" && (
+        <div className="mt-10 border-t-2 border-border pt-6">
+          <h2 className="text-lg font-bold">Got what you needed?</h2>
+          <p className="mt-1 text-sm text-muted">Marking it answered stops Convo matching this question with anyone new.</p>
+          <div className="mt-3">
+            <Button variant="secondary" onClick={() => void resolve()} disabled={resolving}>
+              {resolving ? "Saving…" : "Mark as answered"}
+            </Button>
+          </div>
+          {resolveFailed && (
+            <p role="alert" className={`mt-3 ${errorClass}`}>
+              {resolveFailed.message}
+              {resolveFailed.action && (
+                <>
+                  {" "}
+                  <a href={resolveFailed.action.href} className="underline underline-offset-4">
+                    {resolveFailed.action.label}
+                  </a>
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
