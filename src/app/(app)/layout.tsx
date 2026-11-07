@@ -38,6 +38,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           >
             Requests
           </Link>
+          <Link
+            href="/onboarding/profile"
+            className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Profile
+          </Link>
         </nav>
       </header>
       <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 pb-10 pt-6 sm:px-8 sm:pt-10">
