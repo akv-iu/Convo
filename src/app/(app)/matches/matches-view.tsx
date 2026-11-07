@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * A2 steps 1 and 2: the people Convo found for an ask, one card at a time.
- * Swipe right (or press "Send request", or →) to send them the question;
- * swipe left (or "Pass", or ←) to pass. A search box narrows the list.
+ * A2 steps 1 and 2: the people Lanyard found for an ask, as a short list.
+ * Each row shows who they are and why they were picked; tapping it opens
+ * their full profile with Pass and Send request. After either, the next
+ * person opens. A search box narrows the list.
  *
  * Saves follow db/Rejections.md and db/Requests.md: one at a time, never
- * retried automatically, and a failed pass is checked by refreshing the
- * matches (the server leaves out whoever was saved as passed). After three
- * passes the server may hide everyone ranked below them; the deck follows
- * the returned cutoff.
+ * retried automatically, and a failed pass locks that person's actions
+ * until Refresh matches shows what was saved (every pass counts). After
+ * three passes the server may hide everyone ranked below them; the list
+ * follows the returned cutoff.
  *
  * A2 step 3: the soft-blocker switch (PUT /api/soft-blocker). On, people
  * passed on for this ask stay hidden here (and, on the real backend, this
@@ -21,12 +22,12 @@
  * the people sent requests from this screen, via their public GitHub.
  */
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { githubProfile } from "@/components/ui/person-badge";
 import type { MatchResult, Request, RequestView } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
-import { MatchCard } from "./match-card";
+import { MatchDetails, MatchSummary } from "./match-card";
 import {
   blockerFailure,
   loadAsk,
@@ -34,10 +35,8 @@ import {
   passFailure,
   resolveFailure,
   sendFailure,
-  swipeOutcome,
   withinCutoff,
   type Failure,
-  type Swipe,
 } from "./matches";
 
 const headingClass =
@@ -60,15 +59,24 @@ function AskMatches({ askId }: { askId: string }) {
   const [applied, setApplied] = useState("");
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [index, setIndex] = useState(0);
+  /** The person whose full profile is open (one at a time), or null. */
+  const [openId, setOpenId] = useState<string | null>(null);
+  /** Set by a pass or send: move keyboard focus to the next person's row once it opens. */
+  const focusAfterAction = useRef(false);
+  useEffect(() => {
+    if (!focusAfterAction.current) return;
+    focusAfterAction.current = false;
+    const target = openId ? document.getElementById(`match-${openId}-toggle`) : document.getElementById("matches-count");
+    target?.focus();
+  }, [openId]);
   const [busy, setBusy] = useState<"pass" | "send" | null>(null);
   const [actionFailure, setActionFailure] = useState<Failure | null>(null);
   /**
-   * Set after a failed pass: the server may have saved it, and every pass
-   * counts (three hide the rest), so both actions stay off on this card
-   * until Refresh matches shows what was saved.
+   * The person whose pass failed: the server may have saved it, and every
+   * pass counts (three hide the rest), so their actions stay off until
+   * Refresh matches shows what was saved.
    */
-  const [passLocked, setPassLocked] = useState(false);
+  const [lockedId, setLockedId] = useState<string | null>(null);
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
   const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
@@ -79,8 +87,6 @@ function AskMatches({ askId }: { askId: string }) {
   const [resolved, setResolved] = useState(false);
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
   const [cutoffNote, setCutoffNote] = useState(false);
-  const [dx, setDx] = useState(0);
-  const drag = useRef<{ x: number; id: number } | null>(null);
   /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
   const deckGen = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
@@ -149,8 +155,8 @@ function AskMatches({ askId }: { askId: string }) {
         if (!live) return;
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
-        setIndex(0);
-        setPassLocked(false);
+        setOpenId(null);
+        setLockedId(null);
       } catch {
         if (live) setLoad({ state: "failed", failure: matchFailure(0, null) });
       }
@@ -161,9 +167,11 @@ function AskMatches({ askId }: { askId: string }) {
   }, [askId, applied, attempt]);
 
   const matches = useMemo(() => (load.state === "ready" ? load.matches : []), [load]);
-  const current = matches[index] ?? null;
+  const sentIds = useMemo(() => new Set(sent.flatMap((r) => (r.person ? [r.person.id] : [r.toPersonId]))), [sent]);
+  /** Nobody left to answer: the list is empty, or everyone still in it has your request. */
+  const allDone = matches.every((m) => sentIds.has(m.person.id));
 
-  // Reloading while a pass or send is saving would let that save land on the new deck,
+  // Reloading while a pass or send is saving would let that save land on the new list,
   // so every reload (Refresh, Search, Show everyone, See them again) waits for it.
   function refresh() {
     if (busyRef.current) return;
@@ -173,130 +181,74 @@ function AskMatches({ askId }: { askId: string }) {
   }
 
   const act = useCallback(
-    async (kind: "pass" | "send") => {
-      if (!current || busyRef.current || passLocked || blockerSaving) return;
+    async (kind: "pass" | "send", match: MatchResult) => {
+      if (busyRef.current || lockedId === match.person.id || blockerSaving) return;
       busyRef.current = true;
       setBusy(kind);
       setActionFailure(null);
-      setDx(0); // the card goes back at once instead of waiting off to the side for the save
-      const who = current.person.name;
+      const who = match.person.name;
       const gen = deckGen.current;
+      /** After acting on someone, open the next person still waiting for an answer. */
+      const openNext = (list: MatchResult[]) => {
+        const next = list.find((m) => m.rank > match.rank && m.person.id !== match.person.id && !sentIds.has(m.person.id));
+        focusAfterAction.current = true; // the buttons go with the closed row; keep the keyboard's place
+        setOpenId(next ? next.person.id : null);
+      };
       try {
         const res =
           kind === "pass"
             ? await fetch("/api/rejections", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ askId, personId: current.person.id, rank: current.rank }),
+                body: JSON.stringify({ askId, personId: match.person.id, rank: match.rank }),
               })
             : await fetch("/api/requests", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ askId, toPersonId: current.person.id }),
+                body: JSON.stringify({ askId, toPersonId: match.person.id }),
               });
         const body = await res.json().catch(() => null);
-        // If the deck reloaded meanwhile (Search, Refresh or the switch), only the deck stays as it is:
-        // the result, a failure, and who was sent the ask still count.
+        // If the list reloaded meanwhile (Search, Refresh or the switch), the result, a failure,
+        // and who was sent the ask still count; only the open row stays as it is.
         const stale = deckGen.current !== gen;
         if (!res.ok) {
           const failure = kind === "pass" ? passFailure(res.status, body) : sendFailure(res.status, body);
-          if (stale) {
-            // The card on screen is from the new deck: say who this was for, and leave that card usable.
-            setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
-          } else {
-            setActionFailure(failure);
-            if (kind === "pass") setPassLocked(true);
-          }
+          setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+          if (kind === "pass" && !stale) setLockedId(match.person.id);
           return;
         }
         if (kind === "send") {
-          const saved: RequestView = { ...(body as Request), type: null, person: current.person };
-          setSent(previous => [...previous.filter(request => request.id !== saved.id), saved]);
-        }
-        if (stale) {
-          if (kind === "send") {
-            // The reload may have been answered before this send was saved: drop them from the new deck.
-            setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: cur.matches.filter(match => match.person.id !== current.person.id) } : cur));
-          } else {
-            // The reload may have been answered before this pass was saved: apply it to the new deck too.
-            const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
-            const passedId = current.person.id;
-            setLoad((cur) => {
-              if (cur.state !== "ready") return cur;
-              const left = blockerRef.current === false ? cur.matches : cur.matches.filter((m) => m.person.id !== passedId);
-              return { state: "ready", matches: withinCutoff(left, cutoff) };
-            });
-          }
-          setAnnounce(kind === "send" ? `Request sent to ${who}.` : `Passed on ${who}.`);
-          return;
-        }
-        if (kind === "send") {
+          const saved: RequestView = { ...(body as Request), type: null, person: match.person };
+          setSent((previous) => [...previous.filter((request) => request.id !== saved.id), saved]);
           setAnnounce(`Request sent to ${who}.`);
-          setIndex((i) => i + 1);
-        } else {
-          const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
-          setAnnounce(`Passed on ${who}.`);
-          if (cutoff !== null) {
-            // The cutoff is the highest rank passed on (db/Rejections.md): only ranks below it stay,
-            // which are usually cards already seen, so the deck often ends here. Say why.
-            const kept = withinCutoff(matches, cutoff);
-            if (kept.length < matches.length) setCutoffNote(true);
-            setLoad({ state: "ready", matches: kept });
-            setIndex((i) => Math.min(i + 1, kept.length));
-          } else {
-            setIndex((i) => i + 1);
-          }
+          if (!stale) openNext(matches);
+          return;
         }
+        // A pass: they leave the list (unless the switch is off), and the server's cutoff may hide more.
+        const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
+        setAnnounce(`Passed on ${who}.`);
+        const passedId = match.person.id;
+        const apply = (list: MatchResult[]) =>
+          withinCutoff(blockerRef.current === false ? list : list.filter((m) => m.person.id !== passedId), cutoff);
+        if (stale) {
+          setLoad((cur) => (cur.state === "ready" ? { state: "ready", matches: apply(cur.matches) } : cur));
+          return;
+        }
+        const kept = apply(matches);
+        if (cutoff !== null && withinCutoff(matches, cutoff).length < matches.length) setCutoffNote(true);
+        setLoad({ state: "ready", matches: kept });
+        openNext(kept);
       } catch {
         const failure = kind === "pass" ? passFailure(0, null) : sendFailure(0, null);
-        if (deckGen.current !== gen) {
-          setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
-        } else {
-          setActionFailure(failure);
-          if (kind === "pass") setPassLocked(true);
-        }
+        setActionFailure({ ...failure, message: `${who}: ${failure.message}` });
+        if (kind === "pass" && deckGen.current === gen) setLockedId(match.person.id);
       } finally {
         busyRef.current = false;
         setBusy(null);
       }
     },
-    [askId, blockerSaving, current, matches, passLocked],
+    [askId, blockerSaving, lockedId, matches, sentIds],
   );
-
-  // ← passes and → sends, unless the user is typing somewhere.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      // A held key repeats; acting on repeats would pass on or message people never seen.
-      if (e.repeat || e.isComposing || e.altKey || e.ctrlKey || e.metaKey) return;
-      if (target && (target.closest("input, textarea, select, [contenteditable=true]") || target.isContentEditable)) return;
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        void act("pass");
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        void act("send");
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [act]);
-
-  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (busyRef.current || passLocked || (e.target as HTMLElement).closest("a, button")) return;
-    drag.current = { x: e.clientX, id: e.pointerId };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (drag.current?.id === e.pointerId) setDx(e.clientX - drag.current.x);
-  }
-  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
-    if (drag.current?.id !== e.pointerId) return;
-    drag.current = null;
-    const outcome: Swipe = swipeOutcome(dx);
-    if (outcome) void act(outcome);
-    else setDx(0);
-  }
 
   async function toggleBlocker(enabled: boolean) {
     // One change at a time, and not while a pass or send is saving.
@@ -368,7 +320,7 @@ function AskMatches({ askId }: { askId: string }) {
     return (
       <div className="mx-auto max-w-xl">
         <h1 className={headingClass}>Matches</h1>
-        <p className="mt-4 text-lg">Ask a question first, then Convo finds people who can answer it.</p>
+        <p className="mt-4 text-lg">Ask a question first, then Lanyard finds people who can answer it.</p>
         <div className="mt-6">
           <Button href="/ask">Ask a question</Button>
         </div>
@@ -381,7 +333,7 @@ function AskMatches({ askId }: { askId: string }) {
       <div className="mx-auto flex max-w-xl flex-col">
         <h1 className={headingClass}>Marked as answered</h1>
         <p className="mt-3 text-lg text-muted">
-          Convo won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
+          Lanyard won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
         </p>
         {question && <p className="mt-2 text-muted">&ldquo;{question}&rdquo;</p>}
         {sentNotice}
@@ -552,38 +504,18 @@ function AskMatches({ askId }: { askId: string }) {
           </div>
         )}
 
-        {load.state === "ready" && current && (
+        {load.state === "ready" && matches.length > 0 && (
           <>
+            <p id="matches-count" tabIndex={-1} className="mb-3 text-xl font-extrabold tracking-tight focus:outline-none">
+              {matches.length} {matches.length === 1 ? "person" : "people"} found
+            </p>
             {cutoffNote && (
               <p className="mb-3 rounded-xl border-2 border-border px-4 py-3 text-sm">
-                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
               </p>
             )}
-            <div
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={() => {
-                drag.current = null;
-                setDx(0);
-              }}
-              style={{ transform: dx ? `translateX(${dx}px) rotate(${dx / 25}deg)` : undefined }}
-              className={`relative touch-pan-y select-none ${dx ? "" : "transition-transform duration-200 motion-reduce:transition-none"}`}
-            >
-              {dx !== 0 && (
-                <span
-                  aria-hidden="true"
-                  className={`absolute top-12 z-10 rounded-lg border-4 px-3 py-1 text-xl font-extrabold uppercase ${dx > 0 ? "left-4 rotate-[-10deg] border-accent text-accent" : "right-4 rotate-[10deg] border-[var(--danger-border)] text-[var(--danger)]"}`}
-                  style={{ opacity: Math.min(1, Math.abs(dx) / 110) }}
-                >
-                  {dx > 0 ? "Send" : "Pass"}
-                </span>
-              )}
-              <MatchCard key={current.person.id} match={current} position={`${index + 1} of ${matches.length}`} />
-            </div>
-
             {actionFailure && (
-              <p role="alert" className={`mt-4 ${errorClass}`}>
+              <p role="alert" className={`mb-3 ${errorClass}`}>
                 {actionFailure.message}{" "}
                 {actionFailure.action ? (
                   <a href={actionFailure.action.href} className="underline underline-offset-4">
@@ -601,38 +533,71 @@ function AskMatches({ askId }: { askId: string }) {
                 )}
               </p>
             )}
-
-            <div className="sticky bottom-0 -mx-4 mt-5 grid grid-cols-2 gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-              <Button
-                variant="secondary"
-                onClick={() => void act("pass")}
-                aria-disabled={busy !== null || passLocked || blockerSaving}
-                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              >
-                <span aria-hidden="true">←&nbsp;</span>
-                {busy === "pass" ? "Passing…" : "Pass"}
-              </Button>
-              <Button
-                onClick={() => void act("send")}
-                aria-disabled={busy !== null || passLocked || blockerSaving}
-                className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              >
-                {busy === "send" ? "Sending…" : "Send request"}
-                <span aria-hidden="true">&nbsp;→</span>
-              </Button>
-            </div>
-            <p className="mt-3 text-center text-sm text-muted">Swipe the card, or use the ← and → keys.</p>
+            <ul className="flex flex-col gap-2">
+              {matches.map((m) => {
+                const open = openId === m.person.id;
+                const isSent = sentIds.has(m.person.id);
+                const off = busy !== null || lockedId === m.person.id || blockerSaving;
+                const panelId = `match-${m.person.id}-panel`;
+                return (
+                  <li
+                    key={m.person.id}
+                    className={`overflow-hidden rounded-2xl border-2 bg-surface transition-colors motion-reduce:transition-none ${open ? "border-accent" : "border-border"}`}
+                  >
+                    <button
+                      id={`match-${m.person.id}-toggle`}
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={panelId}
+                      onClick={() => setOpenId(open ? null : m.person.id)}
+                      className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+                    >
+                      <MatchSummary match={m} sent={isSent} />
+                      <span aria-hidden="true" className={`mt-2 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}>
+                        ▾
+                      </span>
+                    </button>
+                    {open && (
+                      <div id={panelId} role="region" aria-labelledby={`match-${m.person.id}-name`} className="border-t-2 border-border px-4 pb-4 pt-4">
+                        <MatchDetails match={m} nameId={`match-${m.person.id}-name`} />
+                        {isSent ? (
+                          <p className="mt-4 font-semibold">You sent {m.person.name} your question. They&apos;ll see it in their inbox.</p>
+                        ) : (
+                          <div className="mt-5 grid grid-cols-2 gap-3">
+                            <Button
+                              variant="secondary"
+                              onClick={() => void act("pass", m)}
+                              aria-disabled={off}
+                              className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                            >
+                              {busy === "pass" ? "Passing…" : "Pass"}
+                            </Button>
+                            <Button
+                              onClick={() => void act("send", m)}
+                              aria-disabled={off}
+                              className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                            >
+                              {busy === "send" ? "Sending…" : "Send request"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </>
         )}
 
-        {load.state === "ready" && !current && (
-          <div className="rounded-2xl border-2 border-border bg-surface p-6">
+        {load.state === "ready" && allDone && (
+          <div className={`rounded-2xl border-2 border-border bg-surface p-6 ${matches.length > 0 ? "mt-4" : ""}`}>
             <h2 className="text-2xl font-extrabold tracking-tight">
-              {matches.length === 0 ? "No one matches yet" : "That's everyone for now"}
+              {sent.length > 0 || cutoffNote ? "That's everyone for now" : "No one matches yet"}
             </h2>
             {cutoffNote && (
               <p className="mt-2 font-medium">
-                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
               </p>
             )}
             <p className="mt-2 text-muted">
@@ -644,7 +609,7 @@ function AskMatches({ askId }: { askId: string }) {
             </p>
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <Button href="/ask">Ask something else</Button>
-              {matches.length > 0 && (
+              {(sent.length > 0 || cutoffNote) && (
                 <Button variant="secondary" onClick={refresh}>
                   See them again
                 </Button>
@@ -657,7 +622,7 @@ function AskMatches({ askId }: { askId: string }) {
       {load.state === "ready" && (
         <div className="mt-10 border-t-2 border-border pt-6">
           <h2 className="text-lg font-bold">Got what you needed?</h2>
-          <p className="mt-1 text-sm text-muted">Marking it answered stops Convo matching this question with anyone new.</p>
+          <p className="mt-1 text-sm text-muted">Marking it answered stops Lanyard matching this question with anyone new.</p>
           <div className="mt-3">
             <Button variant="secondary" onClick={() => void resolve()} disabled={resolving}>
               {resolving ? "Saving…" : "Mark as answered"}

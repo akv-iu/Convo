@@ -17,7 +17,6 @@ import type { RefinedAsk } from "@/contracts/types";
 import {
   ASK_MAX,
   askProblem,
-  examples,
   lengthLabel,
   refineFailure,
   rememberAsk,
@@ -101,7 +100,7 @@ export function AskForm() {
     return (
       <section aria-labelledby="refined-heading" className="mx-auto flex max-w-2xl flex-col">
         <h1 id="refined-heading" ref={resultRef} tabIndex={-1} className={`${headingClass} focus:outline-none`}>
-          Here&apos;s your question
+          Current request
         </h1>
         <p className="mt-3 text-lg text-muted">This is what the people you pick will see.</p>
 
@@ -139,14 +138,10 @@ export function AskForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="mx-auto flex max-w-2xl flex-col" aria-busy={sending}>
-      <h1 className={headingClass}>What do you want to ask?</h1>
-      <p className="mt-3 text-lg text-muted">
-        Say it in your own words. Convo sharpens it and finds people here who can answer.
-      </p>
-
-      <label htmlFor="ask-text" className="mt-8 text-xl font-bold leading-snug tracking-tight">
-        Your question
-      </label>
+      {/* One prompt: the heading is the box's label. */}
+      <h1 className={headingClass}>
+        <label htmlFor="ask-text">What do you want to ask?</label>
+      </h1>
       <textarea
         id="ask-text"
         ref={boxRef}
@@ -161,7 +156,7 @@ export function AskForm() {
           setFailure(null);
         }}
         onKeyDown={onKeyDown}
-        className="mt-2 min-h-32 w-full resize-y rounded-xl border-2 border-border bg-surface px-4 py-3 text-lg leading-snug placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]"
+        className="mt-6 min-h-32 w-full resize-y rounded-xl border-2 border-border bg-surface px-4 py-3 text-lg leading-snug placeholder:text-muted focus-visible:border-accent focus-visible:outline-none aria-invalid:border-[var(--danger-border)]"
       />
       <p id="ask-hint" className="mt-2 flex justify-between gap-3 text-sm text-muted">
         <span>Press Ctrl+Enter to send.</span>
@@ -174,29 +169,6 @@ export function AskForm() {
           {problem}
         </p>
       )}
-
-      <div className="mt-6">
-        <p className="text-sm font-semibold text-muted" id="examples-label">
-          Not sure? Try one:
-        </p>
-        <ul className="mt-2 flex flex-wrap gap-2" aria-labelledby="examples-label">
-          {examples.map((ex) => (
-            <li key={ex}>
-              <button
-                type="button"
-                onClick={() => {
-                  setText(ex);
-                  setFailure(null);
-                  boxRef.current?.focus();
-                }}
-                className="min-h-11 rounded-full border-2 border-border bg-surface px-4 text-left text-sm font-medium hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {ex}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
 
       <div className="sticky bottom-0 -mx-4 mt-8 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         {failure && (

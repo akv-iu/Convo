@@ -5,11 +5,17 @@
  * shared with the match screen in src/components/ui/badge-colours.ts.
  */
 import { z } from "zod";
-import { badgeColours, colourHex, colourIds, DEFAULT_COLOUR, type BadgeColour } from "@/components/ui/badge-colours";
+import { BADGE_COOKIE, colourHex, colourIds, DEFAULT_COLOUR, type BadgeColour } from "@/components/ui/badge-colours";
 
-export { badgeColours, colourHex, DEFAULT_COLOUR, isBadgeColour, type BadgeColour } from "@/components/ui/badge-colours";
+export {
+  BADGE_COOKIE,
+  badgeColours,
+  colourHex,
+  DEFAULT_COLOUR,
+  isBadgeColour,
+  type BadgeColour,
+} from "@/components/ui/badge-colours";
 
-export const BADGE_COOKIE = "convo_badge";
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
 
@@ -57,16 +63,6 @@ export function readBadgePrefs(): BadgePrefs {
       .find((c) => c.startsWith(`${BADGE_COOKIE}=`))
       ?.slice(BADGE_COOKIE.length + 1),
   );
-}
-
-/**
- * A tiny script for the onboarding layout: sets --badge on its parent
- * element from the cookie before first paint, so a fresh page load never
- * flashes the default colour. Built from the same colour list.
- */
-export function badgeColourScript(): string {
-  const hexes = JSON.stringify(Object.fromEntries(badgeColours.map((c) => [c.id, c.hex])));
-  return `(function(){try{var el=document.currentScript&&document.currentScript.parentElement;var m=document.cookie.match(/(?:^|; )${BADGE_COOKIE}=([^;]*)/);if(!el||!m)return;var p=JSON.parse(decodeURIComponent(m[1]));var c=${hexes}[p.colour];if(c)el.style.setProperty("--badge",c)}catch(e){}})();`;
 }
 
 /** Browser-side update, merging into what's already saved. */

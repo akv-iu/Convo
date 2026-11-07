@@ -88,22 +88,27 @@ test.describe("done when (A1 and A2)", () => {
       // Ask and refine.
       await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
       // Reach the question box with Tab alone, from wherever navigation left focus.
-      await tabTo(page, page.getByRole("textbox", { name: "Your question" }));
+      await tabTo(page, page.getByRole("textbox", { name: "What do you want to ask?" }));
       await page.keyboard.type(QUESTION);
       await page.keyboard.press("Control+Enter");
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused({ timeout: AFTER_SUBMIT });
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Here's your question");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
       await scan(page, `refined (${size.name})`);
 
-      // On to the cards, still by keyboard: Tab to Find people, Enter, then → sends.
+      // On to the matches, still by keyboard: Tab to Find people, Enter, Tab to the first person,
+      // Enter to open them, Tab to Send request, Enter.
       await page.keyboard.press("Tab");
       await expect(page.getByRole("link", { name: "Find people" })).toBeFocused();
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("region", { name: "Matches" }).getByRole("article")).toBeVisible({ timeout: AFTER_SUBMIT });
+      const firstRow = page.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
+      await expect(firstRow).toBeVisible({ timeout: AFTER_SUBMIT });
+      await tabTo(page, firstRow);
+      await page.keyboard.press("Enter");
+      await expect(firstRow).toHaveAttribute("aria-expanded", "true");
       await scan(page, `matches (${size.name})`);
       const sending = page.waitForResponse((r) => r.url().endsWith("/api/requests") && r.request().method() === "POST");
-      await page.getByRole("heading", { level: 1 }).focus();
-      await page.keyboard.press("ArrowRight");
+      await tabTo(page, page.getByRole("button", { name: "Send request" }));
+      await page.keyboard.press("Enter");
       expect((await sending).ok()).toBe(true);
       await page.context().close();
     });
@@ -116,12 +121,15 @@ test.describe("done when (A1 and A2)", () => {
 
     // A asks and sends to the expert.
     await a.goto("/ask");
-    await a.getByRole("textbox", { name: "Your question" }).fill(QUESTION);
+    await a.getByRole("textbox", { name: "What do you want to ask?" }).fill(QUESTION);
     await a.getByRole("button", { name: "Sharpen my question" }).click();
     const question = (await a.locator("blockquote").textContent())!.trim();
     await a.getByRole("link", { name: "Find people" }).click();
-    const cardA = a.getByRole("region", { name: "Matches" }).getByRole("article");
-    await expect(cardA.getByRole("heading", { level: 2 })).toHaveText("Demo Expert", { timeout: AFTER_SUBMIT });
+    const firstRow = a.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
+    await expect(firstRow).toContainText("Demo Expert", { timeout: AFTER_SUBMIT });
+    await firstRow.click();
+    const cardA = a.getByRole("region", { name: "Matches" }).getByRole("region");
+    await expect(cardA.getByRole("heading", { level: 2 })).toHaveText("Demo Expert");
     await expect(cardA).toContainText("Maintains pkg/scheduler/framework/preemption");
     const sending = a.waitForResponse((r) => r.url().endsWith("/api/requests") && r.request().method() === "POST");
     await a.getByRole("button", { name: /^Send request/ }).click();

@@ -5,10 +5,12 @@ import { useLayoutEffect, useRef } from "react";
 import { colourHex, readBadgePrefs } from "./badge-prefs";
 
 /**
- * Keeps --badge on the onboarding wrapper in step with the convo_badge
- * cookie when moving between steps without a full page load (the layout
- * stays mounted, so its first-paint script doesn't run again). Runs before
- * paint, so the new step shows the right colour straight away.
+ * Applies the saved badge colour (convo_badge cookie) to the onboarding
+ * wrapper before the browser paints, and again on every step change
+ * (the layout stays mounted between steps). Until it first runs, the
+ * wrapper's data-badge-pending keeps the stripe blank, so a fresh load
+ * never flashes the default colour. No inline script: React warns about
+ * scripts rendered by components.
  */
 export function BadgeColourSync() {
   const marker = useRef<HTMLSpanElement>(null);
@@ -16,7 +18,9 @@ export function BadgeColourSync() {
 
   useLayoutEffect(() => {
     const wrapper = marker.current?.parentElement;
-    if (wrapper) wrapper.style.setProperty("--badge", colourHex(readBadgePrefs().colour));
+    if (!wrapper) return;
+    wrapper.style.setProperty("--badge", colourHex(readBadgePrefs().colour));
+    wrapper.removeAttribute("data-badge-pending"); // the stripe can show now
   }, [pathname]);
 
   return <span ref={marker} hidden />;

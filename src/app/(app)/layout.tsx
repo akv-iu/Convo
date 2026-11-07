@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import "@/components/ui/convo.css";
+import { Logo } from "@/components/ui/logo";
 import { convoThemeClass } from "@/components/ui/theme";
 
 /**
@@ -21,9 +22,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <nav aria-label="Main" className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-4 sm:px-8">
           <Link
             href="/ask"
-            className="mr-auto rounded-md px-1 text-xl font-extrabold tracking-tight [font-stretch:85%] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="mr-auto rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            Convo
+            <Logo />
           </Link>
           <Link
             href="/ask"
@@ -36,6 +37,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             Requests
+          </Link>
+          <Link
+            href="/onboarding/profile"
+            className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Profile
           </Link>
         </nav>
       </header>

@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 /**
- * A2 steps 1 and 2: result cards and swipe, on the fake API. Each test
+ * A2 steps 1 and 2: the match list, on the fake API. Each test
  * makes its own ask, so passes and requests never leak between tests, and
  * checks what the server stored (its matches and the receiver's inbox).
  */
@@ -17,9 +17,13 @@ type Match = {
   highlights: string[];
 };
 
-const passButton = (page: Page) => page.getByRole("button", { name: /^←?\s*Pass$/ });
+const passButton = (page: Page) => page.getByRole("button", { name: /^Pass$/ });
 const sendButton = (page: Page) => page.getByRole("button", { name: /^Send request/ });
-const card = (page: Page) => page.getByRole("region", { name: "Matches" }).getByRole("article");
+const list = (page: Page) => page.getByRole("region", { name: "Matches" });
+/** The open person's full profile (one at a time). */
+const card = (page: Page) => list(page).getByRole("region");
+/** The rows' open/close buttons, in rank order. */
+const rows = (page: Page) => list(page).locator("button[aria-expanded]");
 const isPass = (r: Request) => r.url().endsWith("/api/rejections") && r.method() === "POST";
 const isSend = (r: Request) => r.url().endsWith("/api/requests") && r.method() === "POST";
 const alertWithText = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
@@ -36,9 +40,15 @@ async function serverMatches(page: Page, askId: string): Promise<Match[]> {
   return ((await res.json()) as Match[]).sort((a, b) => a.rank - b.rank);
 }
 
+/** Opens the matches and, when there are any, the first person's profile. */
 async function open(page: Page, askId: string) {
   await page.setExtraHTTPHeaders({ "x-demo-user": ME });
   await page.goto(`/matches?ask=${askId}`);
+  const first = rows(page).first();
+  await first
+    .waitFor({ timeout: 10_000 })
+    .then(() => first.click())
+    .catch(() => {});
 }
 const askJson = (askId: string, softBlocker: boolean) =>
   ({ id: askId, userId: ME, rawText: "q", refined: null, status: "open", softBlocker, createdAt: "2026-11-05T12:00:00Z" });
@@ -72,14 +82,15 @@ function fakeMatches(n: number) {
   }));
 }
 
-test.describe("match cards and swipe (A2 steps 1-2)", () => {
+test.describe("match list (A2 steps 1-2)", () => {
   test("Find people on the refine screen opens the cards, best match first, with the question", async ({ page }) => {
     await page.setExtraHTTPHeaders({ "x-demo-user": ME });
     await page.goto("/ask");
-    await page.getByRole("textbox", { name: "Your question" }).fill("how does the Kubernetes scheduler do preemption");
+    await page.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
     await page.getByRole("button", { name: "Sharpen my question" }).click();
     await page.getByRole("link", { name: "Find people" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
+    await rows(page).first().click();
     await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption:/)).toBeVisible();
 
     const askId = new URL(page.url()).searchParams.get("ask")!;
@@ -87,7 +98,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(expected.length).toBeGreaterThan(0);
     const first = expected[0];
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
-    await expect(card(page)).toContainText(`1 of ${expected.length}`);
+    await expect(page.getByText(`${expected.length} ${expected.length === 1 ? "person" : "people"} found`)).toBeVisible();
     await expect(card(page)).toContainText(first.explanation);
     if (first.person.synthetic) await expect(card(page)).toContainText("Synthetic profile");
   });
@@ -122,55 +133,29 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(after.map((m) => m.person.id)).not.toContain(first.person.id);
   });
 
-  test("arrow keys pass and send, but not while typing in the search box", async ({ page, isMobile }) => {
-    test.skip(isMobile, "keyboard path is checked on the laptop project");
-    const askId = await newAsk(page);
-    const expected = await serverMatches(page, askId);
-    test.skip(expected.length < 2, "needs two matches");
-    await open(page, askId);
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(expected[0].person.name);
-
-    let saves = 0;
-    page.on("request", (r) => {
-      if (isPass(r) || isSend(r)) saves++;
-    });
-    await page.getByRole("searchbox", { name: "Narrow the list" }).focus();
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowLeft");
-    expect(saves).toBe(0);
-
-    await page.getByRole("heading", { level: 1 }).click();
-    const sending = page.waitForRequest(isSend);
-    await page.keyboard.press("ArrowRight");
-    await sending;
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(expected[1].person.name);
-  });
-
-  test("dragging the card far enough sends; a short drag snaps back", async ({ page }) => {
-    const askId = await newAsk(page);
-    const [first] = await serverMatches(page, askId);
-    await open(page, askId);
-    const box = (await card(page).boundingBox())!;
-    const y = box.y + 30;
-    const x = box.x + box.width / 2;
-
-    let sends = 0;
-    page.on("request", (r) => {
-      if (isSend(r)) sends++;
-    });
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + 40, y, { steps: 4 });
-    await page.mouse.up();
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
-    expect(sends).toBe(0);
-
-    const sending = page.waitForRequest(isSend);
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x + 200, y, { steps: 8 });
-    await page.mouse.up();
-    expect((await sending).postDataJSON()).toEqual({ askId, toPersonId: first.person.id });
+  test("a short list: rows open one at a time, and work with the keyboard", async ({ page, isMobile }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
+    await page.setExtraHTTPHeaders({ "x-demo-user": ME });
+    await page.goto("/matches?ask=made-up");
+    await expect(page.getByText("3 people found")).toBeVisible();
+    await expect(rows(page)).toHaveCount(3);
+    await expect(card(page)).toHaveCount(0); // condensed until you pick someone
+    await expect(rows(page).nth(1)).toContainText("Person 2");
+    await expect(rows(page).nth(1)).toContainText("Why person 2");
+    await rows(page).nth(1).click();
+    await expect(rows(page).nth(1)).toHaveAttribute("aria-expanded", "true");
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await rows(page).nth(0).click(); // opening another closes the first
+    await expect(card(page)).toHaveCount(1);
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    if (isMobile) return;
+    await page.route("**/api/requests", (route) => route.fulfill({ json: { id: "r1" } }));
+    await sendButton(page).focus();
+    await page.keyboard.press("Enter");
+    // The next person opens, and focus moves to their row.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(rows(page).nth(1)).toBeFocused();
+    await expect(rows(page).nth(0)).toContainText("Request sent");
   });
 
   test("a card shows evidence highlights, the mutual marker, and hides fields the person hid", async ({ page }) => {
@@ -205,7 +190,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     }
     // Cutoff 2 keeps only ranks 0-1, already seen, so the deck ends and says why.
     await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
-    await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
+    await expect(page.getByText("You've passed on three people, so Lanyard hid everyone ranked below them.")).toBeVisible();
     expect(passed).toEqual([0, 1, 2]);
   });
 
@@ -219,30 +204,10 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     });
     await open(page, "made-up");
     await passButton(page).click();
-    // Cutoff 4 keeps ranks 0-3: the deck moves on to Person 2 of the 4 left.
+    // Cutoff 4 keeps ranks 0-3, and Person 1 (passed) leaves: Person 2 opens, 3 people left.
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await expect(card(page)).toContainText("2 of 4");
-    await expect(page.getByText("You've passed on three people, so Convo hid everyone ranked below them.")).toBeVisible();
-  });
-
-  test("a held arrow key acts once, not on every repeat", async ({ page, isMobile }) => {
-    test.skip(isMobile, "keyboard path is checked on the laptop project");
-    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(4) }));
-    let sends = 0;
-    await page.route("**/api/requests", (route) => {
-      sends++;
-      return route.fulfill({ json: { id: `r${sends}` } });
-    });
-    await open(page, "made-up");
-    await expect(card(page)).toBeVisible();
-    await page.evaluate(() => {
-      for (let i = 0; i < 5; i++) window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true }));
-    });
-    await page.waitForTimeout(400);
-    expect(sends).toBe(0);
-    await page.keyboard.press("ArrowRight");
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    expect(sends).toBe(1);
+    await expect(page.getByText("3 people found")).toBeVisible();
+    await expect(page.getByText("You've passed on three people, so Lanyard hid everyone ranked below them.")).toBeVisible();
   });
 
   test("pressing Search again with the same words reloads instead of hanging", async ({ page }) => {
@@ -254,13 +219,13 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await open(page, "made-up");
     await expect(card(page)).toBeVisible();
     await page.getByRole("button", { name: "Search", exact: true }).click(); // empty box, same as now
-    await expect(card(page)).toBeVisible();
+    await expect(rows(page)).toHaveCount(2);
     await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(card(page)).toBeVisible();
+    await expect(rows(page)).toHaveCount(2);
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(card(page)).toBeVisible();
-    expect(loads).toBe(4);
+    await expect(rows(page)).toHaveCount(2);
+    await expect.poll(() => loads).toBe(4);
   });
 
   test("a failed pass is never retried by itself, and Refresh matches reloads", async ({ page }) => {
@@ -286,7 +251,8 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     const reloading = page.waitForRequest((r) => r.url().endsWith("/api/match"));
     await page.getByRole("button", { name: "Refresh matches" }).click();
     await reloading;
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 1");
+    await expect(rows(page).first()).toContainText("Person 1");
+    await rows(page).first().click();
     await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
   });
 
@@ -330,6 +296,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText(/Showing people for .Go./)).toBeVisible();
+    await rows(page).first().click();
     await expect(card(page)).toBeVisible();
     await passButton(page).click();
     const showAll = page.getByRole("button", { name: "Show everyone" });
@@ -341,7 +308,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     expect(loads).toBe(2);
   });
 
-  test("Pass and Send keep keyboard focus while they save", async ({ page, isMobile }) => {
+  test("after Pass or Send, keyboard focus moves to the next person's row", async ({ page, isMobile }) => {
     test.skip(isMobile, "keyboard path is checked on the laptop project");
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
     await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
@@ -350,11 +317,11 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await passButton(page).focus();
     await page.keyboard.press("Enter");
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await expect(passButton(page)).toBeFocused();
+    await expect(rows(page).first()).toBeFocused(); // Person 1 left the list, so Person 2 is first
     await sendButton(page).focus();
     await page.keyboard.press("Enter");
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 3");
-    await expect(sendButton(page)).toBeFocused();
+    await expect(rows(page).nth(1)).toBeFocused();
   });
 
   test("evidence with angle brackets is shown as written", async ({ page }) => {
@@ -440,7 +407,7 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(blocker).not.toBeChecked();
     await expect(page.getByText("Off: people you passed on can show up again.")).toBeVisible();
     // The list reloads with the passed person back, as the server now matches them again.
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
+    await expect(rows(page).first()).toContainText(first.person.name);
     expect((await serverMatches(page, askId)).map((m) => m.person.id)).toContain(first.person.id);
 
     await page.reload();
@@ -576,6 +543,9 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(passButton(page)).toHaveAttribute("aria-disabled", "true");
     await expect(sendButton(page)).toHaveAttribute("aria-disabled", "true");
     release();
+    // The saved switch reloads the list; the buttons are usable again.
+    await expect(page.getByText("Off: people you passed on can show up again.")).toBeVisible();
+    await rows(page).first().click();
     await expect(sendButton(page)).not.toHaveAttribute("aria-disabled", "true");
   });
 
@@ -632,10 +602,13 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     }
     await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
     await page.getByRole("button", { name: "See them again" }).click();
-    await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    // The server leaves them out now; the screen still says who has the question.
+    await expect(rows(page)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
     await page.evaluate(() => sessionStorage.clear());
     await page.reload();
-    await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    await expect(rows(page)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "That's everyone for now" })).toBeVisible();
     expect((await serverMatches(page, askId)).some(match => ids.has(match.person.id))).toBe(false);
   });
 
@@ -721,7 +694,8 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
-      await page.route("**/api/requests", (route) => route.fulfill({ json: { id: "r" } }));
+      let sends = 0; // each request gets its own ID, as on the server
+      await page.route("**/api/requests", (route) => route.fulfill({ json: { id: `r${++sends}` } }));
       const scan = async (label: string) =>
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
       await savedAsk(page, "made-up");

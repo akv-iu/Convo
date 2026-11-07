@@ -131,8 +131,10 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
     const before = await stored(page, person);
     await expect(visibilitySwitch(page, "Country")).toBeChecked();
-    await visibilitySwitch(page, "Country").uncheck({ force: true });
-    await visibilitySwitch(page, "Hiring status").uncheck({ force: true });
+    // Clicked directly: on a phone the sticky Continue bar can sit over the lowest switch.
+    await visibilitySwitch(page, "Country").dispatchEvent("click");
+    await visibilitySwitch(page, "Hiring status").dispatchEvent("click");
+    await expect(visibilitySwitch(page, "Hiring status")).not.toBeChecked();
     await expect(page.getByRole("group", { name: "Show on your badge" })).toContainText("Hidden");
 
     const saving = page.waitForRequest(isSave);
@@ -222,6 +224,26 @@ test.describe("your badge (step 2)", () => {
     await continueButton(page).click();
     await expect(alertWithText(page)).toContainText("Your sign-in has expired");
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
+  });
+
+  test("tapping a line on the badge hides it, and the switch beside the badge follows", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    const badge = visibleBadge(page);
+    await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    await badge.getByText("University of Oxford").click();
+    await expect(visibilitySwitch(page, "Workplace")).not.toBeChecked();
+    await expect(badge).not.toContainText("University of Oxford"); // gone, not struck through
+    await badge.getByText("United Kingdom").click();
+    await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
+    await expect(badge).not.toContainText("United Kingdom");
+    // The switch beside the badge brings a hidden line back.
+    await visibilitySwitch(page, "Workplace").dispatchEvent("click");
+    await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    await expect(badge).toContainText("University of Oxford");
+    // The colour picker and the switches sit with the badge, in one section.
+    const look = page.getByRole("region", { name: "Your badge's look" });
+    await expect(look.getByRole("radio", { name: "Lilac" })).toHaveCount(1);
+    await expect(look.getByRole("group", { name: "Show on your badge" })).toBeVisible();
   });
 
   test("the saved profile's colour wins over this browser's preview cookie", async ({ page, baseURL }) => {

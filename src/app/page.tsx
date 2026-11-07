@@ -1,27 +1,29 @@
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { config } from "@/server/config";
+import "@/components/ui/convo.css";
+import { LogoMark } from "@/components/ui/logo";
+import { convoThemeClass } from "@/components/ui/theme";
 
+/**
+ * The front door. Developer notes (the API contract and fake-mode details)
+ * live at /dev/routes, not here.
+ */
 export default function Home() {
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-4 py-12">
-      <h1 className="text-4xl font-semibold tracking-tight">Convo</h1>
-      <p className="text-lg text-muted">
-        Bring a specific question or goal. See the few people in the room with evidence they can help, and book a short,
-        focused conversation.
-      </p>
-      <div className="flex flex-wrap gap-3">
-        <Button href="/signin">Get started</Button>
-        <Link href="/dev/routes" className="self-center text-sm underline underline-offset-4">
-          API contract
-        </Link>
-      </div>
-      {config.fakeApi && (
-        <p className="text-sm text-muted">
-          Running with <code>FAKE_API=1</code>: every route answers from memory as demo user A. Send the header{" "}
-          <code>x-demo-user: u_demo_b</code> to act as demo user B.
+    <div className={`${convoThemeClass} flex flex-1 flex-col`}>
+      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-4 py-12">
+        <LogoMark className="size-14" />
+        <h1 className="text-[3rem] font-extrabold leading-none tracking-[-0.03em] [font-stretch:85%] sm:text-7xl">
+          Lanyard
+        </h1>
+        <p className="text-xl text-muted">
+          Ask one question. Meet the few people at the conference who can actually answer it.
         </p>
-      )}
-    </main>
+        <div>
+          <Button href="/signin" className="text-lg sm:px-8">
+            Get started
+          </Button>
+        </div>
+      </main>
+    </div>
   );
 }

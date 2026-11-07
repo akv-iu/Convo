@@ -4,7 +4,7 @@ import { MatchesView } from "./matches-view";
 
 export const metadata: Metadata = { title: "Matches" };
 
-/** A2 steps 1 and 2: result cards for /matches?ask=<askId>, with swipe, buttons and arrow keys. */
+/** A2 steps 1 and 2: the match list for /matches?ask=<askId>; tap a person to open their profile. */
 export default function MatchesPage() {
   return (
     // The view reads ?ask= on the client; Suspense lets the rest of the page render first.

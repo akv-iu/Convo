@@ -4,7 +4,7 @@
  * send only the fields that changed.
  */
 import type { RouteBody } from "@/contracts/routes";
-import type { Person } from "@/contracts/types";
+import type { CardPerson, Person, ProfileVisibility } from "@/contracts/types";
 
 export interface Draft {
   name: string;
@@ -88,3 +88,22 @@ export function loadProblem(status: number): { message: string; action: { label:
     return { message: "Start with your name, workplace and country.", action: { label: "Go to About you", href: "/signin" } };
   return { message: "Your profile didn't load. Try again in a moment.", action: null };
 }
+
+/**
+ * You as other people see you in their matches: the sections you hid come
+ * through empty, the same way the server sends them (db/Frontend-Support.md).
+ */
+export function asSeenByOthers(person: Person, visibility: ProfileVisibility): CardPerson {
+  return {
+    ...person,
+    workplaceName: visibility.workplace ? (person.workplaceName ?? null) : null,
+    filters: {
+      country: visibility.country ? person.filters.country : null,
+      rorId: visibility.workplace ? person.filters.rorId : null,
+      hiring: visibility.hiring ? person.filters.hiring : null,
+    },
+  };
+}
+
+/** Everything shown, for profiles saved before show/hide existed. */
+export const SHOW_ALL: ProfileVisibility = { country: true, workplace: true, hiring: true };

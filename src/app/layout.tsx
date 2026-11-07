@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "Convo", template: "%s · Convo" },
+  title: { default: "Lanyard", template: "%s · Lanyard" },
   description: "State a specific question or goal, find the few people in the room who can help, and book a short conversation.",
   manifest: "/manifest.webmanifest",
 };

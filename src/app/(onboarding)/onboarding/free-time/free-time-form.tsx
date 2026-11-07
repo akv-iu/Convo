@@ -228,8 +228,11 @@ export function FreeTimeForm() {
                   aria-pressed={on}
                   aria-label={`${p.label}, ${timeLabel(p.from)} to ${timeLabel(p.to)}`}
                   onClick={() => togglePreset(indexes)}
-                  className="min-h-11 rounded-full border-2 border-border bg-surface px-4 font-semibold transition-colors aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+                  className="group min-h-11 rounded-full border-2 border-border bg-surface px-4 font-semibold transition-colors aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
                 >
+                  <span aria-hidden="true" className="hidden group-aria-pressed:inline">
+                    ✓{" "}
+                  </span>
                   {p.label}
                 </button>
               );
@@ -263,8 +266,12 @@ export function FreeTimeForm() {
                       aria-pressed={picked.has(i)}
                       aria-label={`${timeLabel(b.from)} to ${timeLabel(b.to)}`}
                       onClick={() => toggle(i)}
-                      className="min-h-12 rounded-xl border-2 border-border bg-surface font-semibold tabular-nums transition-colors aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+                      // Free: solid accent with a tick and a ring. Not free: a faint dashed outline, so the picks stand out.
+                      className="group inline-flex min-h-12 items-center justify-center gap-1 rounded-xl border-2 border-dashed border-border bg-transparent font-medium text-muted tabular-nums transition-colors hover:border-accent hover:text-foreground aria-pressed:border-solid aria-pressed:border-accent aria-pressed:bg-accent aria-pressed:font-extrabold aria-pressed:text-on-accent aria-pressed:shadow-[0_0_0_3px_var(--accent)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent motion-reduce:transition-none"
                     >
+                      <span aria-hidden="true" className="hidden group-aria-pressed:inline">
+                        ✓
+                      </span>
                       {clock(b.from)}
                     </button>
                   ) : null,
