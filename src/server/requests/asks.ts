@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { after } from "next/server";
 import { db } from "../../../db";
-import { asks, rejections, users } from "../../../db/schema";
+import { asks, rejections, requests, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
 import { routes } from "@/contracts/routes";
 import { getProfile } from "@/server/profile/service";
@@ -77,7 +77,7 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Stored ask is invalid.", 503);
   }
 
-  const [requester, { excludeIds, hiddenBelowRank }, excludedPeople] = await Promise.all([
+  const [requester, { excludeIds: rejectedIds, hiddenBelowRank }, excludedPeople, , requested] = await Promise.all([
     getProfile(userId),
     getExclusions(askId),
     Promise.resolve(db().select({ id: users.id }).from(users)
@@ -89,11 +89,16 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
       .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
     // Replaying the saved ID repairs search without another ask or AI call; failure must not block results.
     ask.status === "open" && ask.refined ? registerSavedAsk(ask.id, ask.userId, ask.refined.text) : undefined,
+    Promise.resolve(db().select({ id: requests.toPersonId }).from(requests).where(eq(requests.askId, askId)))
+      .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
   ]);
   try {
     const matches = await runMatch({
       ask, requester, query,
-      excludeIds: [...(ask.softBlocker ? excludeIds : []), ...excludedPeople.map(person => person.id)],
+      excludeIds: excludedPeople.map(person => person.id),
+      // Ranked, then left out: whoever this ask already passed on (while the blocker is on) or sent a
+      // request to. Ranking them keeps everyone else's rank, so the batch cutoff means the same place.
+      hideIds: [...(ask.softBlocker ? rejectedIds : []), ...requested.map(person => person.id)],
       hiddenBelowRank,
     });
     if (!matches.length) return [];

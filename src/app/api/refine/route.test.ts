@@ -60,7 +60,7 @@ describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
       query.mockResolvedValueOnce(savedAskRows(created.askId, sample.raw, created.refined))
         .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
+        .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
     }
     const matched = await match(request("match", { askId: created.askId }), context());
     expect(matched.status).toBe(200);
@@ -113,7 +113,7 @@ describe("real ask route failures", () => {
       query.mockResolvedValueOnce(savedAskRows(savedId, raw, savedRefined))
         .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
-        .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
+        .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
       const recovered = await match(request("match", { askId: savedId }), context());
       expect(recovered.status, `attempt ${attempt}`).toBe(200);
       expect(routes.match.response.parse(await recovered.json())[0].person.id).toBe(sampleAsks[0].expectedTop);
@@ -131,7 +131,7 @@ describe("real ask route failures", () => {
     query.mockResolvedValueOnce(savedAskRows("replay-failure", sampleAsks[0].raw, refined))
       .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
+      .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
     const response = await match(request("match", { askId: "replay-failure" }), context());
     expect(response.status).toBe(200);
     expect(routes.match.response.parse(await response.json())[0].person.id).toBe(sampleAsks[0].expectedTop);

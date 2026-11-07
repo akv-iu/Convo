@@ -37,12 +37,12 @@ const aiLinesOnEveryCardWithEvidence = (cards: { highlights: string[]; explanati
   return explained.length > 0 && explained.every((card) => card.explanation.startsWith("Explained card"));
 };
 
-/** Postgres, as far as these calls use it: asks, an empty rejection history, profiles and ai_cache. */
+/** Postgres, as far as these calls use it: asks, no passes or requests yet, profiles and ai_cache. */
 function database() {
   const cache = new Map<string, unknown>();
   const asks = new Map<string, unknown[]>();
   query.mockImplementation(async (sql: string, params: unknown[]) => {
-    if (sql.includes(" union ") || sql.includes('from "rejections"')) return { rows: [] };
+    if (sql.includes(" union ") || sql.includes('from "rejections"') || sql.includes('from "requests"')) return { rows: [] };
     if (sql.startsWith('insert into "ai_cache"')) {
       for (let i = 0; i < params.length; i += 3) cache.set(String(params[i]), JSON.parse(String(params[i + 2])));
       return { rows: [] };

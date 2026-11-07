@@ -94,7 +94,10 @@ export type Ask = z.infer<typeof Ask>;
 
 export const MatchResult = z.object({
   person: CardPerson,
-  /** Exact evidence snippets behind the match, for the card. */
+  /**
+   * Exact evidence snippets behind the match, for the card. Matched words are wrapped in
+   * <em>…</em>; render everything as text and treat only those two tags as marks.
+   */
   highlights: z.array(z.string()),
   /** Hard-filter badges, e.g. "not hiring". */
   badges: z.array(z.string()),
@@ -103,6 +106,10 @@ export const MatchResult = z.object({
   /** One "why this person" line. */
   explanation: z.string(),
   score: z.number(),
+  /**
+   * Place in this ask's ranking. People already rejected or sent a request keep their place but
+   * aren't returned, so ranks stay the same across refreshes and can have gaps.
+   */
   rank: z.number().int().nonnegative(),
 });
 export type MatchResult = z.infer<typeof MatchResult>;

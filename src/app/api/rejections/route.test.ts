@@ -85,17 +85,18 @@ describe.each(["fake", "real"] as const)("%s rejection HTTP contract", (mode) =>
     expect(original.length).toBeGreaterThanOrEqual(4);
     const first = original[0];
     expect(await rejectCandidate(first.person.id, first.rank)).toEqual({ rejections: 1, hiddenBelowRank: null });
-    expect((await matches()).some(({ person }) => person.id === first.person.id)).toBe(false);
+    const afterOne = await matches();
+    expect(afterOne.some(({ person }) => person.id === first.person.id)).toBe(false);
+    // Everyone else keeps their rank, so a later rejection's rank means the same place.
+    expect(afterOne.find(({ person }) => person.id === original[1].person.id)?.rank).toBe(original[1].rank);
     await toggle(false);
     expect((await matches()).map(({ person }) => person.id)).toEqual(original.map(({ person }) => person.id));
     await toggle(true);
     expect((await matches()).some(({ person }) => person.id === first.person.id)).toBe(false);
     expect(await rejectCandidate(original[1].person.id, original[1].rank)).toEqual({ rejections: 2, hiddenBelowRank: null });
     expect(await rejectCandidate(original[2].person.id, original[2].rank)).toEqual({ rejections: 3, hiddenBelowRank: 2 });
-    const remaining = await matches();
-    expect(remaining.length).toBeGreaterThan(0);
-    expect(remaining.length).toBeLessThanOrEqual(2);
-    expect(remaining.every(({ person, rank }) => !rejected.some(([id]) => id === person.id) && rank < 2)).toBe(true);
+    // Ranks 0-2 were passed on and everyone ranked below the last of them is hidden: no one is left.
+    expect(await matches()).toEqual([]);
     await toggle(false);
     expect((await matches()).map(({ person }) => person.id)).toEqual(original.slice(0, 2).map(({ person }) => person.id));
     if (mode === "fake") expect(query).not.toHaveBeenCalled();
@@ -108,17 +109,23 @@ describe.each(["fake", "real"] as const)("%s rejection HTTP contract", (mode) =>
     expect(query).not.toHaveBeenCalled();
   });
 
-  it("counts repeated submissions as events and honors a zero cutoff even with the blocker off", async () => {
+  it("does not count a repeated rejection and honors a zero cutoff even with the blocker off", async () => {
     const rejected = { personId: DEMO_USER_B, rank: 0 };
-    store.get().rejections.set(ask.id, [rejected, rejected]);
+    const saved: [string, number][] = [[DEMO_USER_B, 0], ["p_001", 0], ["p_002", 0]];
+    store.get().rejections.set(ask.id, saved.map(([personId, rank]) => ({ personId, rank })));
     store.get().asks.get(ask.id)!.softBlocker = false;
-    if (mode === "real") query.mockResolvedValueOnce({ rows: [["new-rejection"]] })
-      .mockResolvedValueOnce({ rows: Array.from({ length: 3 }, () => [DEMO_USER_B, 0]) });
+    // Real: the unique ask/person index inserts nothing, the owner check passes, the count is unchanged.
+    if (mode === "real") query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [[ask.id]] })
+      .mockResolvedValueOnce({ rows: saved });
     const response = await reject(request("rejections", { askId: ask.id, ...rejected }), context());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ rejections: 3, hiddenBelowRank: 0 });
-    if (mode === "real") query.mockResolvedValueOnce({ rows: [[ask.id, ask.userId, ask.rawText, null, "open", false, ask.createdAt]] })
-      .mockResolvedValueOnce({ rows: Array.from({ length: 3 }, () => [DEMO_USER_B, 0]) });
+    expect(store.get().rejections.get(ask.id)).toHaveLength(3);
+    if (mode === "real") {
+      expect(query.mock.calls[0][0]).toContain('on conflict ("ask_id","person_id") do nothing');
+      query.mockResolvedValueOnce({ rows: [[ask.id, ask.userId, ask.rawText, null, "open", false, ask.createdAt]] })
+        .mockResolvedValueOnce({ rows: saved });
+    }
     const matched = await match(request("match", { askId: ask.id }), context());
     expect(matched.status).toBe(200);
     expect(await matched.json()).toEqual([]);
@@ -140,7 +147,9 @@ describe.each(["fake", "real"] as const)("%s rejection HTTP contract", (mode) =>
     expect((await setBlocker(request("soft-blocker", { askId, enabled: false, userId: DEMO_USER_A }), context())).status).toBe(404);
     if (mode === "real") {
       expect(query.mock.calls[0][1].slice(-2)).toEqual([askId, DEMO_USER_B]);
-      expect(query.mock.calls[1][1]).toEqual([false, askId, DEMO_USER_B]);
+      // Nothing inserted, so the owner check decides between "already rejected" and 404.
+      expect(query.mock.calls[1][1]).toEqual([askId, DEMO_USER_B, 1]);
+      expect(query.mock.calls[2][1]).toEqual([false, askId, DEMO_USER_B]);
     }
     expect(store.get().asks.get(ask.id)?.softBlocker).toBe(true);
     expect(store.get().rejections.size).toBe(0);
@@ -199,6 +208,7 @@ it("hides both attendees until the rejecting attendee disables or resolves every
     if (sql.startsWith("select") && sql.includes('from "users"')) {
       return { rows: people.map(person => [person.id, JSON.stringify({ country: true, workplace: true, hiring: true }), false]) };
     }
+    if (sql.startsWith("select") && sql.includes('from "requests"')) return { rows: [] };
     throw new Error(`Unexpected test query: ${sql}`);
   });
   async function matches(userId: string, askId: string) {

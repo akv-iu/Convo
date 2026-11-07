@@ -1,8 +1,11 @@
 # Saved rejections and soft blocker
 
 This B2 slice implements POST `/api/rejections` and PUT `/api/soft-blocker`.
-It uses the existing tables; no migration, reset, dependency or credential change
-is needed. Local testing uses `FAKE_API=0`, `FAKES=search,ai`. Neon is real;
+Apply migration `0004_match_integrity.sql` before deploying the idempotent writes.
+It removes repeated ask/person pairs, keeping the earliest `created_at` then ID,
+and adds the unique indexes. Later duplicate requests (including their replies or
+bookings) are removed, so review existing duplicates before applying it.
+No new dependency or credential is needed. Local testing uses `FAKE_API=0`, `FAKES=search,ai`. Neon is real;
 search and AI remain fake. Production remains in fake mode until integration.
 
 ## Frontend handoff
@@ -15,8 +18,15 @@ search and AI remain fake. Production remains in fake mode until integration.
   Missing and foreign-owned asks both return 404. Signed-out requests return
   401; malformed bodies return 400; storage failures return sanitized 503.
 - Matching and rejection responses share the same exclusion reader. After
-  three submissions, the cutoff is the **maximum submitted rank**. Matching
-  retains ranks strictly less than that cutoff after filtering and reranking.
+  three rejected people, the cutoff is the **maximum submitted rank**. Matching
+  shows only ranks strictly less than that cutoff.
+- **Ranks are stable.** A match ranks the same top 50 people every time
+  (mutual-interest boost included), then leaves out people
+  this ask already rejected (blocker on) or sent a request to. They keep their
+  place, so the others keep their ranks across refreshes and ranks can have
+  gaps. Rejecting ranks 0, 1 and 2 therefore leaves **no one**: everyone else is
+  ranked below the last rejection. A rank from a search-box (`query`) list is
+  that list's rank; the cutoff applies it to whichever list is requested next.
 - Turning the switch off restores this ask's individually rejected candidates but keeps the batch
   cutoff active. Turning it back on reapplies all saved individual exclusions.
   Existing outgoing and batch-cutoff behavior, including old resolved-ask views,
@@ -29,21 +39,20 @@ search and AI remain fake. Production remains in fake mode until integration.
   search, ranking and explanations. A failed read stops matching with 503.
   Like the existing exclusion read, this uses the matching request's database
   snapshot; a later change takes effect on the next request.
-- Rejections count submissions, not unique people. Repeating the same POST
-  counts again, including after an uncertain network failure. Three submissions
-  of rank zero produce cutoff zero and therefore no matches. Disable duplicate
-  submissions, serialize saves for an ask, and do not automatically retry POSTs.
-- Each rejection is appended rather than replacing an in-memory count. Concurrent
-  inserts do not overwrite one another; the following count read reflects its
-  database snapshot. Switch updates use the last committed value. Avoid applying
-  stale responses from overlapping UI requests.
-- If insertion succeeds but reading the count fails, the 503 explicitly says
-  the rejection was saved and must not be resubmitted. If insertion itself times
-  out, the commit outcome is unknown. Refresh matching before deciding what to do.
-  The PUT switch request can safely repeat the same desired value.
+- **One rejection per person per ask** (unique `ask_id, person_id`). Repeating
+  the same POST (a retry, a double tap, a held arrow key) saves nothing new and
+  returns the current count; the first submitted rank is kept. Retrying after an
+  uncertain network failure is safe. Still serialize saves for an ask so the
+  screen applies responses in order.
+- Concurrent inserts for different people do not overwrite one another; the
+  following count read reflects its database snapshot. Switch updates use the
+  last committed value. Avoid applying stale responses from overlapping requests.
+- If insertion succeeds but reading the count fails, the 503 says the rejection
+  was saved; refreshing matches or resubmitting is safe. The PUT switch request
+  can safely repeat the same desired value.
 
-No shared contracts, B1 engine code or screens change. `FAKE_API=1` still uses
-the unchanged one-way fake. To check the real two-way rule, use `FAKE_API=0`
+The fake follows the same rules (one rejection per person, stable ranks).
+`FAKE_API=1` still uses the one-way fake for reverse blocking. To check the real two-way rule, use `FAKE_API=0`
 with `FAKES=search,ai`. See [Two-Way-Blocker.md](Two-Way-Blocker.md) for the
 complete two-account checklist. This implements the existing shared Ask type's
 "both ways" description without changing request or response shapes.
@@ -140,8 +149,8 @@ rejection step: repeating it adds another rejection. Keep the same browser tab.
    var third = await rejectAt(2);
    check(third.rejections === 3 && third.hiddenBelowRank === 2, "Expected count 3 and cutoff 2");
    var afterBatch = await matches();
-   check(afterBatch.length > 0 && afterBatch.length <= 2, "Wrong batch size");
-   check(afterBatch.every(x => x.rank < 2 && !saved().picks.some(p => p.id === x.person.id)), "Batch exclusions failed");
+   // Ranks 0-2 are rejected and everyone else is ranked below the last of them.
+   check(afterBatch.length === 0, "Batch cutoff should leave no one");
    console.log("PASS: three rejections and batch cutoff");
    ```
 
@@ -151,8 +160,7 @@ rejection step: repeating it adds another rejection. Keep the same browser tab.
 
    ```javascript
    var restarted = await matches();
-   check(restarted.length > 0 && restarted.length <= 2, "Cutoff did not survive restart");
-   check(restarted.every(x => x.rank < 2 && !saved().picks.some(p => p.id === x.person.id)), "Rejections did not survive restart");
+   check(restarted.length === 0, "Cutoff or rejections did not survive restart");
    await blocker(false);
    var switchedOff = await matches();
    check(switchedOff.length === 2 && switchedOff.every(x => x.rank < 2), "Switch off lost the persisted batch cutoff");

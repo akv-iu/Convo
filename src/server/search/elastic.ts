@@ -177,10 +177,11 @@ function hybrid(query: string, filters: SearchFilters): estypes.RetrieverContain
   };
 }
 
+/** One evidence line for the card. Matched words keep Elasticsearch's <em> marks; the screen renders them as text. */
 function highlightLine(hit: estypes.SearchHit<EvidenceSource>): string | undefined {
   const doc = hit._source;
   if (!doc) return undefined;
-  const snippet = hit.highlight?.text?.[0]?.replace(/<\/?em>/g, "");
+  const snippet = hit.highlight?.text?.[0];
   if (doc.kind === "profile") return snippet ?? (doc.text.length > 160 ? `${doc.text.slice(0, 157)}...` : doc.text);
   return snippet ? `${doc.title}: ${snippet}` : doc.title;
 }
