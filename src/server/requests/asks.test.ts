@@ -31,9 +31,10 @@ beforeEach(() => {
   refineAsk.mockReset().mockResolvedValue(refined);
   registerAsk.mockReset().mockResolvedValue(undefined);
   runMatch.mockReset().mockResolvedValue([]);
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("durable ask creation", () => {
   it("saves a new ask under its owner before registering its refined text", async () => {
@@ -100,13 +101,12 @@ describe("durable ask creation", () => {
     expect(registerAsk).not.toHaveBeenCalled();
   });
 
-  it("reports the saved ID when search registration fails, without deleting the ask or retrying", async () => {
+  it("returns the saved ask when registration fails and logs no provider details", async () => {
     registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
-    const error = await createAsk(person.id, "scheduler preemption").catch((e: unknown) => e);
-    expect(error).toMatchObject({ status: 503 });
-    expect(String(error)).toContain(query.mock.calls[0][1][0]);
-    expect(String(error)).toMatch(/saved/i);
-    expect(String(error)).not.toContain("private-search-token");
+    const saved = await createAsk(person.id, "scheduler preemption");
+    expect(saved).toEqual({ askId: query.mock.calls[0][1][0], refined });
+    expect(console.warn).toHaveBeenCalledExactlyOnceWith("[asks] Ask saved; search registration failed. A later match will retry.");
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("private-search-token");
     expect(query).toHaveBeenCalledOnce();
     expect(registerAsk).toHaveBeenCalledOnce();
   });
@@ -115,8 +115,7 @@ describe("durable ask creation", () => {
 describe("matching a saved ask", () => {
   it("repairs a saved ask after registration failed without saving or refining again", async () => {
     registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
-    await expect(createAsk(person.id, ask.rawText)).rejects.toMatchObject({ status: 503 });
-    const savedId = query.mock.calls[0][1][0];
+    const { askId: savedId } = await createAsk(person.id, ask.rawText);
     const saved = { ...ask, id: savedId };
     query.mockResolvedValueOnce(askRows(saved));
     runMatch.mockImplementationOnce(async () => {
@@ -129,19 +128,31 @@ describe("matching a saved ask", () => {
     expect(query.mock.calls.filter(([sql]) => String(sql).startsWith("insert"))).toHaveLength(1);
   });
 
-  it("reports registration failure safely and allows the same match request to retry", async () => {
+  it("continues matching when replay fails and retries registration on the next match", async () => {
     query.mockResolvedValueOnce(askRows());
     registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
-    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
-    expect(error).toMatchObject({ status: 503 });
-    expect(String(error)).toContain(`Ask saved with ID ${ask.id}`);
-    expect(String(error)).toContain("Retry POST /api/match");
-    expect(String(error)).not.toContain("private-search-token");
-    expect(runMatch).not.toHaveBeenCalled();
+    await expect(matchAsk(person.id, ask.id)).resolves.toEqual([]);
+    expect(console.warn).toHaveBeenCalledOnce();
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("private-search-token");
+    expect(runMatch).toHaveBeenCalledOnce();
     query.mockResolvedValueOnce(askRows());
     await expect(matchAsk(person.id, ask.id)).resolves.toEqual([]);
     expect(registerAsk).toHaveBeenCalledTimes(2);
     expect(refineAsk).not.toHaveBeenCalled();
+  });
+
+  it("starts registration alongside the profile, exclusion and pending-user reads", async () => {
+    let releaseProfile: (value: typeof person) => void = () => {};
+    getProfile.mockReturnValueOnce(new Promise(resolve => { releaseProfile = resolve; }));
+    query.mockResolvedValueOnce(askRows());
+    const matching = matchAsk(person.id, ask.id);
+    await vi.waitFor(() => {
+      expect(query).toHaveBeenCalledTimes(3);
+      expect(registerAsk).toHaveBeenCalledExactlyOnceWith(ask.id, person.id, refined.text);
+    });
+    expect(runMatch).not.toHaveBeenCalled();
+    releaseProfile(person);
+    await expect(matching).resolves.toEqual([]);
   });
 
   it.each([

@@ -39,12 +39,15 @@ Production stays in fake mode until the integration checkpoint.
 
 ## Failure and persistence boundaries
 
-Neon commits before search registration. If registration fails, the 503 message
-explicitly says the ask was saved and includes its ID. Keep that ID and retry
-`POST /api/match` with `{ askId }` after the service recovers. Matching replays
-registration for an owned, open ask with a saved refinement before running the
-pipeline. Registration uses the same ID, so repeated retries do not create
-another ask or repeat refinement. Resolved asks are never re-registered.
+Neon commits before search registration. If registration fails, `/api/refine`
+still returns its normal successful `{ askId, refined }` response, and the server
+logs a fixed warning without provider details. The next `/api/match` replays
+registration for an owned, open ask with a saved refinement alongside the
+profile, exclusion and pending-user lookups. A failed replay also logs a warning
+and does not prevent matching. Registration uses the same ID, so repeated retries
+do not create another ask or repeat refinement. Resolved asks are never
+re-registered. Storage, refinement and matching failures still report their
+normal errors; only registration failures are tolerated.
 There is no transaction across Neon and search or request idempotency key.
 Recovery requires a matching request; there is no background retry worker.
 A database timeout can also leave the commit outcome unknown; the error does

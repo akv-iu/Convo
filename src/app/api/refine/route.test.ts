@@ -38,6 +38,7 @@ beforeEach(() => {
   identity.userId = DEMO_USER_A;
   store.reset();
   query.mockReset().mockResolvedValue({ rows: [] });
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Unexpected live request")));
 });
@@ -97,20 +98,16 @@ describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
 });
 
 describe("real ask route failures", () => {
-  it("recovers registration through match after refinement saved the ask but returned 503", async () => {
+  it("returns a saved ask during registration failure and repairs its reverse count on match", async () => {
     const raw = `${sampleAsks[0].raw} RecoveryQuasarToken`;
     const recipient = { ...person, id: "recovery-count-target", bio: "RecoveryQuasarToken" };
     const registration = vi.spyOn(search, "registerAsk");
     registration.mockRejectedValueOnce(new Error("private-search-token"));
     query.mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] });
-    const failed = await refine(request("refine", { text: raw }), context());
-    expect(failed.status).toBe(503);
-    const savedId = query.mock.calls[1][1][0];
-    const savedRefined = JSON.parse(query.mock.calls[1][1][3]);
-    const { error } = await failed.json();
-    expect(error).toContain(savedId);
-    expect(error).toContain("Retry POST /api/match");
-    expect(error).not.toContain("private-search-token");
+    const created = await refine(request("refine", { text: raw }), context());
+    expect(created.status).toBe(200);
+    const { askId: savedId, refined: savedRefined } = routes.refine.response.parse(await created.json());
+    expect(savedId).toBe(query.mock.calls[1][1][0]);
     expect(await search.whoIsLookingFor(recipient)).toEqual([]);
     for (const attempt of [1, 2]) {
       query.mockResolvedValueOnce(savedAskRows(savedId, raw, savedRefined))
@@ -126,6 +123,20 @@ describe("real ask route failures", () => {
     expect(query.mock.calls.filter(([sql]) => String(sql).startsWith("insert"))).toHaveLength(1);
     expect(fetch).not.toHaveBeenCalled();
     await search.removeAsk(savedId);
+  });
+
+  it("returns match cards even when search registration fails again", async () => {
+    vi.spyOn(search, "registerAsk").mockRejectedValueOnce(new Error("private-search-token"));
+    const refined = { text: sampleAsks[0].raw, type: "knowledge" as const, minutes: 10 };
+    query.mockResolvedValueOnce(savedAskRows("replay-failure", sampleAsks[0].raw, refined))
+      .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
+    const response = await match(request("match", { askId: "replay-failure" }), context());
+    expect(response.status).toBe(200);
+    expect(routes.match.response.parse(await response.json())[0].person.id).toBe(sampleAsks[0].expectedTop);
+    expect(console.warn).toHaveBeenCalledOnce();
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain("private-search-token");
   });
 
   it("rejects whitespace-only questions without touching storage", async () => {

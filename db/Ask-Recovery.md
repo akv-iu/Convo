@@ -3,23 +3,26 @@
 Branch: `b2/ask-registration-recovery`. No new migration, key or shared API
 contract change. This work changes only B2 files.
 
-If `/api/refine` saves an ask but search registration fails, its 503 message gives
-the saved ID and directs the caller to retry `/api/match` with that ID. Do not
-resubmit `/api/refine`: each submission intentionally creates a different ask.
+If `/api/refine` saves an ask but search registration fails, it still returns
+200 with `{ askId, refined }`. A fixed server warning records the failure without
+provider details. The frontend retains the saved ID normally. Do not resubmit
+`/api/refine`: each submission intentionally creates a different ask.
 
-Before matching, the real handler re-registers an owned, open ask using its saved
-refined text. The search interface registers by ID and is safe to replay. This
-also repairs registration after an application restart clears fake search. A
-registration failure returns a sanitized 503 and matching does not proceed.
+The real handler re-registers an owned, open ask using its saved refined text
+alongside the profile, exclusion and pending-user lookups. The search interface
+registers by ID and is safe to replay. This also repairs registration after an
+application restart clears fake search. A failed replay logs a fixed warning and
+matching still runs; registration alone never causes a 503 from either endpoint.
 Resolved asks and older asks without a saved refinement retain their existing
 matching behavior without being registered again. A concurrent resolution is
 protected by B1's rule that a resolved ID cannot be reactivated.
 
 Recovery requires the owner to request matching. There is no background worker;
 until recovery runs, other users' reverse counts can omit the saved ask. Each
-matching request adds one registration round trip (an existing Elasticsearch ID
-returns its normal conflict, which B1 handles as success). Real-service latency
-still needs measurement at integration.
+matching request includes one registration round trip (an existing Elasticsearch
+ID returns its normal conflict, which B1 handles as success). It overlaps the
+lookups instead of following them. A slow registration can still outlast those
+lookups; real-service latency still needs measurement at integration.
 
 ## Complete manual checklist
 
@@ -33,12 +36,14 @@ credentials or change production settings to simulate an outage.
    cd D:\Projects\convo-b2-ask-recovery
    $env:FAKE_API = "0"
    $env:FAKES = "search,ai"
-   if ($env:NODE_OPTIONS -match '--env-file') { Remove-Item Env:NODE_OPTIONS }
+   $env:NODE_OPTIONS = "--enable-source-maps"
    node --env-file="D:\Projects\Convo\.env.local" .\node_modules\next\dist\bin\next dev --port 3000
    ```
 
    Use the database with the existing migrations, including
    `0003_github_evidence.sql`, already applied. This branch adds no migration.
+   The valid `NODE_OPTIONS` override prevents an `--env-file` value in your env
+   file from breaking Node startup; it applies only to this terminal session.
    Open `http://localhost:3000`, sign in, and complete onboarding if needed.
 
 2. In that signed-in tab's DevTools Console, paste this entire block once:
@@ -82,7 +87,7 @@ credentials or change production settings to simulate an outage.
 
    Expected: exactly one open row with the original refined text. There is no
    second refinement submission. Automated tests additionally verify that
-   registration occurs before the matching pipeline and no second insert occurs.
+   registration starts with the lookups and no second insert occurs.
 
 5. Cleanup in the original browser tab:
 
@@ -102,7 +107,8 @@ credentials or change production settings to simulate an outage.
    matching. The database row remains as history; removing session storage does
    not delete it. Keep the stored ID if any check fails so cleanup can be retried.
 
-Automated regressions cover initial registration failure followed by matching
-recovery, repeated matching failure and retry, owner scoping, resolved/unrefined
-asks, and the actual HTTP error and success responses. No live service is called
+Automated regressions cover successful refinement and matching during
+registration failure, recovery on later matches without duplicate counts,
+credential-free warnings, concurrent replay and lookups, owner scoping,
+resolved/unrefined asks, and the actual HTTP responses. No live service is called
 by those tests.
