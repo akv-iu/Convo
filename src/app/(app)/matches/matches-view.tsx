@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A2 steps 1 and 2: the people Convo found for an ask, one card at a time.
+ * A2 steps 1 and 2: the people Lanyard found for an ask, one card at a time.
  * Swipe right (or press "Send request", or →) to send them the question;
  * swipe left (or "Pass", or ←) to pass. A search box narrows the list.
  *
@@ -368,7 +368,7 @@ function AskMatches({ askId }: { askId: string }) {
     return (
       <div className="mx-auto max-w-xl">
         <h1 className={headingClass}>Matches</h1>
-        <p className="mt-4 text-lg">Ask a question first, then Convo finds people who can answer it.</p>
+        <p className="mt-4 text-lg">Ask a question first, then Lanyard finds people who can answer it.</p>
         <div className="mt-6">
           <Button href="/ask">Ask a question</Button>
         </div>
@@ -381,7 +381,7 @@ function AskMatches({ askId }: { askId: string }) {
       <div className="mx-auto flex max-w-xl flex-col">
         <h1 className={headingClass}>Marked as answered</h1>
         <p className="mt-3 text-lg text-muted">
-          Convo won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
+          Lanyard won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
         </p>
         {question && <p className="mt-2 text-muted">&ldquo;{question}&rdquo;</p>}
         {sentNotice}
@@ -556,7 +556,7 @@ function AskMatches({ askId }: { askId: string }) {
           <>
             {cutoffNote && (
               <p className="mb-3 rounded-xl border-2 border-border px-4 py-3 text-sm">
-                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
               </p>
             )}
             <div
@@ -632,7 +632,7 @@ function AskMatches({ askId }: { askId: string }) {
             </h2>
             {cutoffNote && (
               <p className="mt-2 font-medium">
-                You&apos;ve passed on three people, so Convo hid everyone ranked below them.
+                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
               </p>
             )}
             <p className="mt-2 text-muted">
@@ -657,7 +657,7 @@ function AskMatches({ askId }: { askId: string }) {
       {load.state === "ready" && (
         <div className="mt-10 border-t-2 border-border pt-6">
           <h2 className="text-lg font-bold">Got what you needed?</h2>
-          <p className="mt-1 text-sm text-muted">Marking it answered stops Convo matching this question with anyone new.</p>
+          <p className="mt-1 text-sm text-muted">Marking it answered stops Lanyard matching this question with anyone new.</p>
           <div className="mt-3">
             <Button variant="secondary" onClick={() => void resolve()} disabled={resolving}>
               {resolving ? "Saving…" : "Mark as answered"}

@@ -71,6 +71,13 @@ test.describe("workplace search (step 1)", () => {
     await expect(search(page)).toBeFocused();
   });
 
+  test("typing a listed workplace's exact name doesn't also offer it as typed", async ({ page }) => {
+    await search(page).fill("university of oxford");
+    const options = page.getByRole("listbox", { name: "Workplaces" }).getByRole("option");
+    await expect(options.first()).toContainText("University of Oxford");
+    await expect(page.getByRole("option", { name: /^Use / })).toHaveCount(0);
+  });
+
   test("the name as typed is the last option after real matches", async ({ page }) => {
     await search(page).fill("oxford");
     const options = page.getByRole("listbox", { name: "Workplaces" }).getByRole("option");

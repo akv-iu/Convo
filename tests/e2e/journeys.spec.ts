@@ -88,7 +88,7 @@ test.describe("done when (A1 and A2)", () => {
       // Ask and refine.
       await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
       // Reach the question box with Tab alone, from wherever navigation left focus.
-      await tabTo(page, page.getByRole("textbox", { name: "Your question" }));
+      await tabTo(page, page.getByRole("textbox", { name: "What do you want to ask?" }));
       await page.keyboard.type(QUESTION);
       await page.keyboard.press("Control+Enter");
       await expect(page.getByRole("heading", { level: 1 })).toBeFocused({ timeout: AFTER_SUBMIT });
@@ -116,7 +116,7 @@ test.describe("done when (A1 and A2)", () => {
 
     // A asks and sends to the expert.
     await a.goto("/ask");
-    await a.getByRole("textbox", { name: "Your question" }).fill(QUESTION);
+    await a.getByRole("textbox", { name: "What do you want to ask?" }).fill(QUESTION);
     await a.getByRole("button", { name: "Sharpen my question" }).click();
     const question = (await a.locator("blockquote").textContent())!.trim();
     await a.getByRole("link", { name: "Find people" }).click();

@@ -58,8 +58,6 @@ const sections = [
   { id: "hiring", label: "Hiring status" },
 ] as const;
 
-/** Faded on your own preview when hidden from other people. */
-const hiddenClass = (shown: boolean) => (shown ? "" : "opacity-35");
 
 export function BadgeForm() {
   const router = useRouter();
@@ -184,17 +182,33 @@ export function BadgeForm() {
     }
   }
 
+  function toggleSection(id: (typeof sections)[number]["id"]) {
+    setVisibility((cur) => ({ ...cur, [id]: !cur[id] }));
+  }
+
+  /**
+   * A line on the badge people can hide: tap it (pointer) to hide or show
+   * it. The badge is decorative for screen readers, so the labelled
+   * switches beside it do the same for keyboard and screen-reader users.
+   */
+  const tappable = (id: (typeof sections)[number]["id"]) =>
+    `cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10 ${visibility[id] ? "" : "opacity-40 line-through"}`;
+
   const badge = (
     <Badge
       name={about.name}
       handle={handle ?? "your-github"}
-      label={<span className={hiddenClass(visibility.country)}>{countryName(about.country)}</span>}
+      label={
+        <span role="presentation" onClick={() => toggleSection("country")} className={tappable("country")}>
+          {countryName(about.country)}
+        </span>
+      }
     >
-      <span className={`mt-4 block ${hiddenClass(visibility.workplace)}`}>
+      <span role="presentation" onClick={() => toggleSection("workplace")} className={`mt-4 block ${tappable("workplace")}`}>
         <span className="block text-xs text-muted">Works at</span>
         <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
       </span>
-      <span className={`flex flex-wrap gap-1.5 pt-3 ${hiddenClass(visibility.hiring)}`}>
+      <span role="presentation" onClick={() => toggleSection("hiring")} className={`mt-3 flex w-fit flex-wrap gap-1.5 ${tappable("hiring")}`}>
         {hiring === null ? (
           <BadgeChip className="w-20" />
         ) : (
@@ -210,52 +224,32 @@ export function BadgeForm() {
     <form
       onSubmit={submit}
       noValidate
-      className={`grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16 ${colourFollowsPicker}`}
+      className={`grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-x-16 ${colourFollowsPicker}`}
     >
-      <div className="flex flex-col">
+      <div className="lg:col-start-1 lg:row-start-1">
         <h1 className={headingClass}>Your badge</h1>
         <p className="mt-3 max-w-md text-lg text-muted">Three quick answers so you make the right connections.</p>
+      </div>
 
-        {/* Phone: the card first, so the choices below visibly change it. */}
-        <div className="mt-8 lg:hidden">{badge}</div>
-
-        <div className="mt-8 flex flex-col gap-9">
-          <fieldset ref={hiringRef} className="flex flex-col gap-3 border-0 p-0" aria-describedby={hiringProblem ? "hiring-problem" : undefined}>
-            <legend className={legendClass}>Are you hiring?</legend>
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { value: true, label: "Yes, I'm hiring", hint: "People looking for jobs can find you." },
-                { value: false, label: "Not right now", hint: "Career asks won't be sent to you." },
-              ].map((o) => (
-                <label
-                  key={String(o.value)}
-                  className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
-                >
-                  <input type="radio" name="hiring" checked={hiring === o.value} onChange={() => setHiring(o.value)} className="sr-only" />
-                  <span className="text-lg font-semibold leading-snug">{o.label}</span>
-                  <span className="text-sm text-muted">{o.hint}</span>
-                </label>
-              ))}
-            </div>
-            {hiringProblem && (
-              <p id="hiring-problem" className={errorClass}>
-                {missingMessage.hiring}
-              </p>
-            )}
-          </fieldset>
-
+      {/* The badge with everything that changes how it looks right beside it (rendered once: on a phone it
+          follows the heading, on a laptop it's the right-hand column). */}
+      <section aria-label="Your badge's look" className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div className="mx-auto flex w-full max-w-[19rem] flex-col gap-6 lg:sticky lg:top-6">
+          {badge}
+          <p className="text-center text-sm text-muted" aria-hidden="true">
+            Tap a line on your badge to hide it from other people.
+          </p>
           <ColourPicker defaultColour={colour} />
-
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
-            <legend className={legendClass}>Show on your badge</legend>
-            <p id="visibility-note" className="-mt-1 mb-3 text-sm text-muted">
-              What other people see on your card. Your name and GitHub are always shown.
+            <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
+            <p id="visibility-note" className="mb-2 text-sm text-muted">
+              Your name and GitHub are always shown.
             </p>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               {sections.map((v) => (
                 <label
                   key={v.id}
-                  className="flex min-h-12 cursor-pointer items-center gap-4 rounded-xl border-2 border-border bg-surface px-4 py-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
+                  className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border-2 border-border bg-surface px-3 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
                 >
                   <span className="flex-1 font-semibold">{v.label}</span>
                   <span className="text-sm text-muted" aria-hidden="true">
@@ -277,6 +271,32 @@ export function BadgeForm() {
             </div>
           </fieldset>
         </div>
+      </section>
+
+      <div className="flex flex-col lg:col-start-1 lg:row-start-2">
+        <fieldset ref={hiringRef} className="flex flex-col gap-3 border-0 p-0" aria-describedby={hiringProblem ? "hiring-problem" : undefined}>
+          <legend className={legendClass}>Are you hiring?</legend>
+          <div className="grid grid-cols-2 gap-2.5">
+            {[
+              { value: true, label: "Yes, I'm hiring", hint: "People looking for jobs can find you." },
+              { value: false, label: "Not right now", hint: "Career asks won't be sent to you." },
+            ].map((o) => (
+              <label
+                key={String(o.value)}
+                className="flex min-h-24 cursor-pointer flex-col justify-center rounded-xl border-2 border-border bg-surface px-4 py-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent/10 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
+              >
+                <input type="radio" name="hiring" checked={hiring === o.value} onChange={() => setHiring(o.value)} className="sr-only" />
+                <span className="text-lg font-semibold leading-snug">{o.label}</span>
+                <span className="text-sm text-muted">{o.hint}</span>
+              </label>
+            ))}
+          </div>
+          {hiringProblem && (
+            <p id="hiring-problem" className={errorClass}>
+              {missingMessage.hiring}
+            </p>
+          )}
+        </fieldset>
 
         <div className="sticky bottom-0 -mx-4 mt-8 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
           {tried && step1Missing.length > 0 && (
@@ -304,10 +324,6 @@ export function BadgeForm() {
             {saving ? "Saving…" : "Continue"}
           </Button>
         </div>
-      </div>
-
-      <div className="hidden lg:block">
-        <div className="lg:sticky lg:top-6">{badge}</div>
       </div>
     </form>
   );

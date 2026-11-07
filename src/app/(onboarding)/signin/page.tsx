@@ -6,7 +6,7 @@ import { StartForm } from "./start-form";
 
 export const metadata: Metadata = { title: "About you" };
 
-/** Step 1: name, workplace, country, and where Convo should look. No badge yet. */
+/** Step 1: name, workplace, country, and where Lanyard should look. No badge yet. */
 export default function SignInPage() {
   return (
     <>
