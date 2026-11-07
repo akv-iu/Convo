@@ -3,7 +3,6 @@ import OpenAI from "openai";
 import { client } from "@/server/search/elastic";
 
 const TIMEOUT_MS = 5_000;
-const MODEL = "gpt-5.4-mini";
 type DependencyStatus = "up" | "down";
 type Health = { status: DependencyStatus; dependencies: Record<"postgres" | "elasticsearch" | "openai", DependencyStatus> };
 let cached: { until: number; result: Promise<Health> } | undefined;
@@ -34,9 +33,9 @@ async function inspect(): Promise<Health> {
     }),
     probe(async () => {
       const api = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: TIMEOUT_MS, maxRetries: 0 });
-      // Model metadata checks authentication/access without generating billable tokens.
-      const model = await api.models.retrieve(MODEL);
-      if (model.id !== MODEL) throw new Error("Unexpected model response");
+      // One metadata request, no generation or model constant shared with B1.
+      const models = await api.models.list();
+      if (!Array.isArray(models.data)) throw new Error("Unexpected model response");
     }),
   ]);
   return {

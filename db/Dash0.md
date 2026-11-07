@@ -157,8 +157,10 @@ prices are hardcoded in Convo.
    they're the feature, not test data. To stop scheduled probes, disable/delete
    **Convo dependency health**; disable the burn check separately if decommissioning.
 
-The OpenAI probe retrieves model metadata; it does not test generation, billing
-quota or moderation. The Elastic ping does not test ELSER, reranking or index
+The OpenAI probe makes one `GET /v1/models` metadata request (no pagination or
+generation); its key needs model-list permission. It does not test the generation
+model's access, billing quota or moderation. This avoids duplicating B1's model
+constant or coupling health to a retired model. The Elastic ping does not test ELSER, reranking or index
 contents. The SQL probe does not validate migrations. Full matching verifies
 those paths separately. Failed remote calls are sanitized to `down`, not hidden
 as a healthy fake or an empty success.
@@ -168,4 +170,4 @@ Sources: [span metrics](https://www.dash0.com/docs/dash0/opentelemetry/semconvs/
 [SLO definitions](https://www.dash0.com/docs/dash0/monitoring/alerting/create-slos),
 [burn alerts](https://www.dash0.com/docs/dash0/monitoring/alerting/alert-on-slos),
 [CLI](https://www.dash0.com/docs/dash0/miscellaneous/tooling/dash0-cli/commands),
-[OpenAI model metadata](https://developers.openai.com/api/reference/resources/models/methods/retrieve).
+[OpenAI model metadata](https://developers.openai.com/api/reference/resources/models/methods/list).

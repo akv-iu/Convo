@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { query, ping, retrieve, construct, neonClient } = vi.hoisted(() => ({
-  query: vi.fn(), ping: vi.fn(), retrieve: vi.fn(), construct: vi.fn(), neonClient: vi.fn(),
+const { query, ping, list, construct, neonClient } = vi.hoisted(() => ({
+  query: vi.fn(), ping: vi.fn(), list: vi.fn(), construct: vi.fn(), neonClient: vi.fn(),
 }));
 vi.mock("@neondatabase/serverless", () => ({ neon: neonClient }));
+vi.mock("next/server", () => ({ connection: async () => undefined }));
 vi.mock("@/server/search/elastic", () => ({ client: () => ({ ping }) }));
 vi.mock("openai", () => ({ default: class {
   constructor(options: unknown) { construct(options); }
-  models = { retrieve };
+  models = { list };
 } }));
 
 let get: typeof import("./route").GET;
@@ -19,7 +20,7 @@ beforeEach(async () => {
   neonClient.mockReturnValue({ query });
   query.mockResolvedValue([{ ok: 1 }]);
   ping.mockResolvedValue(true);
-  retrieve.mockResolvedValue({ id: "gpt-5.4-mini" });
+  list.mockResolvedValue({ data: [] });
   get = (await import("./route")).GET;
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -33,11 +34,11 @@ describe("operational health", () => {
     expect(query).toHaveBeenCalledWith("select 1 as ok", [], { fetchOptions: { signal: expect.any(AbortSignal) } });
     expect(ping).toHaveBeenCalledWith({}, { requestTimeout: 5_000, maxRetries: 0 });
     expect(construct).toHaveBeenCalledWith({ apiKey: "private-api-key", timeout: 5_000, maxRetries: 0 });
-    expect(retrieve).toHaveBeenCalledExactlyOnceWith("gpt-5.4-mini");
+    expect(list).toHaveBeenCalledExactlyOnceWith();
   });
 
   it.each(["postgres", "elasticsearch", "openai"] as const)("reports %s down without exposing provider errors", async dependency => {
-    const mock = { postgres: query, elasticsearch: ping, openai: retrieve }[dependency];
+    const mock = { postgres: query, elasticsearch: ping, openai: list }[dependency];
     mock.mockRejectedValueOnce(new Error("private-password private-api-key upstream error body"));
     const response = await get();
     expect(response.status).toBe(503);
@@ -46,7 +47,7 @@ describe("operational health", () => {
     });
     expect(query).toHaveBeenCalledOnce();
     expect(ping).toHaveBeenCalledOnce();
-    expect(retrieve).toHaveBeenCalledOnce();
+    expect(list).toHaveBeenCalledOnce();
   });
 
   it("reports missing configuration and synchronous client errors safely", async () => {
@@ -61,18 +62,18 @@ describe("operational health", () => {
   it("rejects unexpected provider replies", async () => {
     query.mockResolvedValueOnce([]);
     ping.mockResolvedValueOnce(false);
-    retrieve.mockResolvedValueOnce({ id: "unrelated-model" });
+    list.mockResolvedValueOnce({ unexpected: "private provider response" });
     expect(await (await get()).json()).toEqual({ status: "down", dependencies: { postgres: "down", elasticsearch: "down", openai: "down" } });
   });
 
   it("coalesces concurrent calls and refreshes an unhealthy result after thirty seconds", async () => {
     vi.useFakeTimers();
-    retrieve.mockRejectedValueOnce(new Error("timeout"));
+    list.mockRejectedValueOnce(new Error("timeout"));
     const responses = await Promise.all([get(), get(), get()]);
     expect(responses.map(response => response.status)).toEqual([503, 503, 503]);
-    expect(retrieve).toHaveBeenCalledOnce();
+    expect(list).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(30_000);
     expect((await get()).status).toBe(200);
-    expect(retrieve).toHaveBeenCalledTimes(2);
+    expect(list).toHaveBeenCalledTimes(2);
   });
 });
