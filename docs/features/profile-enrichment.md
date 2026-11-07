@@ -2,7 +2,7 @@
 
 Owner: Person B, coordinated with Person A's frontend/B1 work. PRs: not opened yet.
 
-This checklist is staged in B2's db/ folder pending the requested permission to add docs/features/profile-enrichment.md under the user's earlier folder instructions. It is not final feature sign-off.
+This tracks the whole feature across the foundation, backend and screens. A checked foundation box is not final feature sign-off.
 
 ## What it covers
 
@@ -19,7 +19,7 @@ This checklist is staged in B2's db/ folder pending the requested permission to 
 
 ## How to try it
 
-The foundation API-only checklist is in db/Profile-Enrichment-Contract.md. Real enrichment and Google OAuth are not available yet. When the complete feature reaches preview, the final checklist must cover Google-only and GitHub users, all four sources, cancel/retry/expiry, owner isolation, explicit approval, indexing/rebuild and source removal.
+The complete foundation API-only checklist is in [the contract handoff](../../db/Profile-Enrichment-Contract.md#complete-local-manual-checklist-api-foundation-only). Real enrichment and Google OAuth are not available yet. When the complete feature reaches preview, the final checklist must cover Google-only and GitHub users, all four sources, cancel/retry/expiry, owner isolation, explicit approval, indexing/rebuild and source removal.
 
 ## Not covered
 

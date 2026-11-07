@@ -167,3 +167,11 @@ console.log("REVISED FOUNDATION PASSED");
 Then stop the server, set PROFILE_ENRICHMENT_ENABLED=0 and restart. GET /api/profile-enrichment must return 404/feature_disabled; existing /api/me for demo A still returns 200. Cleanup: stop the server and restore your previous shell environment values (or close this task's terminal); all fake data disappears. Do not modify .env.local or Vercel for this checklist.
 
 Real OAuth, real extraction, indexing/rebuild, cleanup/retention and the complete browser journey require the later integration checklist. A passing fake does not establish any of them.
+
+## Verification and review handoff (7 November)
+
+The foundation was critically reviewed and tested in two rounds; fixes included stale-tab identity protection, stable numeric fake GitHub identity, and explicit per-category import consent. Latest integrated validation: **709 tests in 51 files, 98.63% line coverage; lint and typecheck pass**. This validation combines the foundation with Claude's existing nullable-screen commit `ad0c26f` in a disposable checkout; that screen patch is not authored or bundled into this branch. Without it, existing screen callers still fail nullable-handle typecheck. CI on the foundation must be rerun after that patch lands.
+
+The complete API checklist below passed against the local Next server twice with recorded fakes. A separate HTTP check confirmed private identity staging survives another owner-state request. Flag-off and unchanged demo-profile checks also passed. No live providers, credentials or Neon migration were used; no new screen journey or Playwright coverage is claimed. Real routes remain unavailable until their implementation phase.
+
+The approved [feature checklist](../docs/features/profile-enrichment.md) tracks unfinished backend, screens, migrations and live acceptance. Next: Claude pushes/merges the nullable-handle compatibility patch, returns CONTRACT ACK on these revised schemas, and coordinates the flag-on browser project. PR creation still waits for the user's approval; merging additionally requires current CI and the other person's contract/sign-in/consent approval. Production remains disabled.
