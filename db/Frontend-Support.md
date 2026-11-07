@@ -73,7 +73,11 @@ Resolution preserves ask history, requests and booked meetings; it does not dele
 rows, cancel meetings or prohibit explicitly matching the saved question again.
 It removes the ask's contribution to reverse-search counts and mutual interest.
 The fake search is memory-only: restarting clears registered asks, while resolved
-status in Postgres remains saved. Durable Elasticsearch registration is B1/C2 work.
+status in Postgres remains saved. Real Elasticsearch ask registration and removal
+are implemented on main. Matching a saved open ask also retries its registration
+after a failed write; resolved asks are not re-registered. See
+[Ask-Recovery.md](Ask-Recovery.md) for the retry behavior. C2 still needs to verify
+these paths with real services; the checklist below uses in-memory search.
 
 PR #13's screen wiring is still Person A's task. This branch supplies the shared
 contract, fake and backend; it does not silently modify that open frontend PR.

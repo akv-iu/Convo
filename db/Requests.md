@@ -32,8 +32,10 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
   Concurrent responses use the last committed status; only reply actions replace
   the reply field. Avoid automatic POST retries and overlapping UI saves.
 - This is persisted in-app delivery, not email or GitHub messaging. Synthetic
-  people cannot sign in to read or respond. Real Elasticsearch lookup remains
-  B1's later implementation. Booking, resolution and the counter are later slices.
+  people cannot sign in to read or respond. Real Elasticsearch recipient lookup,
+  booking, ask resolution and the reverse-search counter are implemented on main.
+  `FAKES=search,ai` keeps this checklist on in-memory search and canned AI; it
+  does not verify those live integrations. Use two real accounts for the full flow.
 
 ## Automated verification
 
