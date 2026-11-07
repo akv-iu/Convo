@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { saveDraft } from "../_components/draft";
 import { consentSources } from "../consent";
 import { aboutYouMissing, missingMessage, NAME_MAX, type Missing, type Workplace } from "../onboarding/answers";
-import { countries } from "../onboarding/countries";
+import { countries } from "@/components/ui/countries";
 import { WorkplaceSearch } from "../onboarding/workplace-search";
 
 const sources = [
