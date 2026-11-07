@@ -226,6 +226,16 @@ export const elasticSearch: SearchService = {
     }
   },
 
+  async getPeople(ids) {
+    if (!ids.length) return [];
+    const { docs } = await client().mget<{ person: unknown }>({ index: INDEX.people, ids, _source_includes: ["person"] });
+    return docs.flatMap((doc) => {
+      if ("error" in doc) throw new Error(`People lookup failed for ${doc._id}`);
+      const person = doc.found ? parsePerson(doc._source?.person) : undefined;
+      return person ? [person] : [];
+    });
+  },
+
   async ingestPerson(person, evidence, revision) {
     const es = client();
     const version = revision ?? 0;

@@ -60,6 +60,38 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await receiver.context().close();
   });
 
+  test("the receiver sees who is asking, and the asker sees the answer under You asked", async ({ page, browser }) => {
+    const me = async (id: string) => (await (await page.request.get("/api/me", { headers: { "x-demo-user": id } })).json()) as { name: string; githubLogin: string };
+    const [asker, receiverProfile] = [await me(SENDER), await me("p_001")];
+    const { id } = await sendTo(page, "p_001", "how do I get started contributing to OpenTelemetry");
+
+    const receiver = await asPerson(browser, "p_001");
+    await receiver.goto("/inbox");
+    const incoming = card(receiver, id);
+    await expect(incoming).toContainText("Asked by");
+    await expect(incoming).toContainText(asker.name);
+    await expect(incoming.getByRole("link", { name: `@${asker.githubLogin} on GitHub (opens in a new tab)` })).toHaveAttribute(
+      "href",
+      `https://github.com/${asker.githubLogin}`,
+    );
+    await incoming.getByRole("button", { name: "Reply instead" }).click();
+    await incoming.getByRole("textbox", { name: "Your reply" }).fill("Start with the collector's good first issues.");
+    await incoming.getByRole("button", { name: "Send reply" }).click();
+    await expect(incoming).toContainText("You replied");
+    await expect(incoming).toContainText(asker.name); // the badge stays after answering
+
+    const sender = await asPerson(browser, SENDER);
+    await sender.goto("/inbox");
+    const mine = sender.locator(`article[aria-labelledby="sent-${id}-q"]`);
+    await expect(sender.getByRole("heading", { name: "You asked" })).toBeVisible();
+    await expect(mine).toContainText("Sent to");
+    await expect(mine).toContainText(receiverProfile.name);
+    await expect(mine).toContainText(`${receiverProfile.name} replied`);
+    await expect(mine).toContainText("Start with the collector's good first issues.");
+    await receiver.context().close();
+    await sender.context().close();
+  });
+
   test("decline is saved", async ({ page, browser }) => {
     const { id } = await sendTo(page, "p_005", "how do eBPF maps work");
     const receiver = await asPerson(browser, "p_005");

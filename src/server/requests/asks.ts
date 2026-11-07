@@ -62,7 +62,8 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
   return { askId, refined };
 }
 
-export async function matchAsk(userId: string, askId: string, query?: string): Promise<MatchResult[]> {
+/** One of the caller's asks; someone else's ask is reported as missing (404). */
+export async function getAsk(userId: string, askId: string): Promise<Ask> {
   let row: typeof asks.$inferSelect | undefined;
   try {
     [row] = await db().select().from(asks).where(and(eq(asks.id, askId), eq(asks.userId, userId))).limit(1);
@@ -70,12 +71,15 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     throw new AskError("Ask storage is unavailable. Try again.", 503);
   }
   if (!row) throw new AskError("Ask not found.", 404);
-  let ask: Ask;
   try {
-    ask = Ask.parse({ ...row, createdAt: row.createdAt.toISOString() });
+    return Ask.parse({ ...row, createdAt: row.createdAt.toISOString() });
   } catch {
     throw new AskError("Stored ask is invalid.", 503);
   }
+}
+
+export async function matchAsk(userId: string, askId: string, query?: string): Promise<MatchResult[]> {
+  const ask = await getAsk(userId, askId);
 
   const [requester, { excludeIds: rejectedIds, hiddenBelowRank }, excludedPeople, , requested] = await Promise.all([
     getProfile(userId),

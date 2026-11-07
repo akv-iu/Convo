@@ -26,6 +26,8 @@ export interface SearchFilters {
 export interface SearchService {
   /** Look up a recipient, including synthetic profiles; undefined means not found. */
   getPerson(id: string): Promise<Person | undefined>;
+  /** Several people in one read; IDs that aren't found are left out. */
+  getPeople(ids: string[]): Promise<Person[]>;
   /**
    * Omit evidence to preserve it, or pass a list to replace it.
    * Atomically ignore older revisions (and unversioned writes after versioned ones).
