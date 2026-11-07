@@ -52,18 +52,18 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const ranked = candidates
     .map((c) => ({ ...c, score: c.score + (mutual.has(c.person.id) ? 1 : 0) }))
     .sort((a, b) => b.score - a.score);
+  // Hidden results are never shown, so they are never explained (or paid for).
+  const shown = input.hiddenBelowRank === null ? ranked : ranked.slice(0, input.hiddenBelowRank);
 
-  const explanations = await step("explain", () => ai.explain(refined, ranked));
+  const explanations = await step("explain", () => ai.explain(refined, shown));
 
-  return ranked
-    .map((c, rank) => ({
-      person: c.person,
-      highlights: c.highlights,
-      badges: badgesFor(c.person),
-      mutual: mutual.has(c.person.id),
-      explanation: explanations[rank] ?? "",
-      score: c.score,
-      rank,
-    }))
-    .filter((r) => input.hiddenBelowRank === null || r.rank < input.hiddenBelowRank);
+  return shown.map((c, rank) => ({
+    person: c.person,
+    highlights: c.highlights,
+    badges: badgesFor(c.person),
+    mutual: mutual.has(c.person.id),
+    explanation: explanations[rank] ?? "",
+    score: c.score,
+    rank,
+  }));
 }

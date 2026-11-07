@@ -10,9 +10,10 @@ vi.mock("@neondatabase/serverless", async (importOriginal) => ({
   ...await importOriginal<typeof import("@neondatabase/serverless")>(), neon: () => ({ query }),
 }));
 vi.mock("@/server/profile/service", () => ({ getProfile }));
-vi.mock("@/server/ai", () => ({ ai: { refineAsk } }));
+vi.mock("@/server/ai", async () => ({ ai: { refineAsk }, ...await import("@/server/ai/blocked") }));
 vi.mock("@/server/search", () => ({ search: { registerAsk } }));
 vi.mock("@/server/pipeline", () => ({ runMatch }));
+import { AskBlockedError } from "@/server/ai/blocked";
 import { createAsk, matchAsk } from "./asks";
 
 const person = people[0];
@@ -82,6 +83,13 @@ describe("durable ask creation", () => {
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-provider-key");
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it("passes a blocked ask to the screen as 422 and saves nothing", async () => {
+    refineAsk.mockRejectedValueOnce(new AskBlockedError());
+    await expect(createAsk(person.id, "an offensive ask")).rejects.toMatchObject({ status: 422, message: new AskBlockedError().message });
+    expect(query).not.toHaveBeenCalled();
+    expect(registerAsk).not.toHaveBeenCalled();
   });
 
   it("never registers a question that failed to save", async () => {

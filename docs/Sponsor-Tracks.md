@@ -81,12 +81,11 @@ Keep the quotes around `'--'`, because PowerShell can drop a bare `--`. The toke
 
 ## Dash0
 
-**Have now:** OpenTelemetry is registered in `src/instrumentation.ts`, and Phases 1 and 2 add one span per match step. The trial includes every feature for 14 days from sign-up.
+**Have now:** OpenTelemetry is registered in `src/instrumentation.ts`, with one span per match step. Each OpenAI call has its own span with `gen_ai.*` attributes (model, input and output tokens), so Dash0's Gen AI view shows tokens and cost per ask, a PRD metric. AI cache hits and misses, and any fallback to evidence lines, are recorded on the step's span. The trial includes every feature for 14 days from sign-up.
 
 | | Add | What it gives Convo | Effort |
 | --- | --- | --- | --- |
 | ⭐ | **The Vercel integration** (vercel.com/integrations/dash0) | Our server logs in Dash0, plus a ready-made Vercel dashboard and four alert rules, with no code | S |
-| ⭐ | **AI spans**: `gen_ai.*` attributes (model, input and output tokens) on each OpenAI call | Dash0's Gen AI view shows tokens and cost per ask with no custom dashboard (a PRD metric) | S |
 | ⭐ | **Real-user monitoring**: Dash0's web SDK in `src/app/layout.tsx` | Page speed, JS errors, session replay, and each click linked to its backend trace. Judges ask for this when there's a frontend. It's a shared file, so it needs a PR both of you approve | M |
 | ⭐ | **An SLO**: "95% of matches under 2 s", with a burn-rate alert to Slack or email | The bonus point, and the number we show in the demo | S |
 | ⭐ | **A health route and synthetic check**: `GET /api/health` checks Postgres, Elasticsearch and OpenAI, and Dash0 calls it on a schedule from outside | We learn "Neon is down" or "the Elastic key expired" before the demo, not during it | S |
