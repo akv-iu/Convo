@@ -8,7 +8,7 @@ actions: "Add the search-reindex label and post the rebuild checklist as a comme
 
 # Search index rebuild
 
-`npm run es:rebuild` deletes and recreates the `people`, `evidence` and `asks` indices. Every indexed person, their evidence and every registered ask are gone until they are loaded again, and the deployed app shares the same cluster.
+`npm run es:rebuild` deletes and recreates the `people`, `evidence` and `asks` indices. Every indexed person, their evidence and every registered ask are gone until they are loaded again, and the deployed app shares the same cluster. Either person may run the rebuild and the seed; it doesn't need the other person's approval.
 
 When a PR changes a mapping or the fields search reads and writes:
 

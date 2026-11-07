@@ -14,7 +14,7 @@ When a PR adds a migration:
 
 1. Add the `migration` label.
 2. Post one comment naming the new SQL file(s), stating whether each statement only adds (columns, tables, indexes) or changes or drops existing data, and this checklist:
-   - [ ] Migration applied to Neon with `npm run db:migrate` before the deployed app runs this code
+   - [ ] Migration applied to Neon by the PR's author with `npm run db:migrate` before the deployed app runs this code (either person can)
    - [ ] Snapshot and `_journal.json` updated in `db/migrations/meta/`
    - [ ] No edits to migrations already merged to main
-3. If any statement drops or rewrites data, say so first in the comment.
+3. If any statement drops or rewrites data, say so first in the comment: that needs the other person's approval (see the needs-approval rule).
