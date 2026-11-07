@@ -10,6 +10,11 @@
  * matches (the server leaves out whoever was saved as passed). After three
  * passes the server may hide everyone ranked below them; the deck follows
  * the returned cutoff.
+ *
+ * A2 step 3: the soft-blocker switch (PUT /api/soft-blocker). On, people
+ * passed on for this ask stay hidden here (and, on the real backend, this
+ * user is hidden from them); off brings them back. The batch cutoff stays
+ * either way. Changing it reloads the matches.
  */
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
@@ -17,7 +22,18 @@ import { Button } from "@/components/ui/button";
 import type { MatchResult } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
 import { MatchCard } from "./match-card";
-import { matchFailure, passFailure, sendFailure, swipeOutcome, withinCutoff, type Failure, type Swipe } from "./matches";
+import {
+  blockerFailure,
+  matchFailure,
+  passFailure,
+  recallBlocker,
+  rememberBlocker,
+  sendFailure,
+  swipeOutcome,
+  withinCutoff,
+  type Failure,
+  type Swipe,
+} from "./matches";
 
 const headingClass =
   "text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl";
@@ -43,6 +59,9 @@ export function MatchesView() {
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
   const [question, setQuestion] = useState<string | null>(null);
+  const [blocker, setBlocker] = useState(true);
+  const [blockerSaving, setBlockerSaving] = useState(false);
+  const [blockerFailed, setBlockerFailed] = useState<Failure | null>(null);
 
   useEffect(() => {
     if (!askId) return;
@@ -56,8 +75,9 @@ export function MatchesView() {
         });
         const body = await res.json().catch(() => null);
         if (!live) return;
-        // The question text comes from this tab's copy (there's no route to read an ask back).
+        // The question and switch come from this tab's copies (there's no route to read an ask back).
         setQuestion(recallAsk(askId)?.refined.text ?? null);
+        setBlocker(recallBlocker(askId));
         if (!res.ok) return setLoad({ state: "failed", failure: matchFailure(res.status, body) });
         setLoad({ state: "ready", matches: [...(body as MatchResult[])].sort((a, b) => a.rank - b.rank) });
         setIndex(0);
@@ -164,6 +184,33 @@ export function MatchesView() {
     else setDx(0);
   }
 
+  async function toggleBlocker(enabled: boolean) {
+    if (blockerSaving) return;
+    setBlockerSaving(true);
+    setBlockerFailed(null);
+    try {
+      const res = await fetch("/api/soft-blocker", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ askId, enabled }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        setBlockerFailed(blockerFailure(res.status, body));
+        return;
+      }
+      const saved = (body as { enabled: boolean }).enabled;
+      setBlocker(saved);
+      rememberBlocker(askId, saved);
+      setAnnounce(saved ? "People you passed on are hidden." : "People you passed on are back in the list.");
+      refresh();
+    } catch {
+      setBlockerFailed(blockerFailure(0, null));
+    } finally {
+      setBlockerSaving(false);
+    }
+  }
+
   function onSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCutoffNote(false);
@@ -226,6 +273,43 @@ export function MatchesView() {
           </button>
         </p>
       )}
+
+      <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
+        <label className="flex min-h-11 cursor-pointer items-center gap-4 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-4 has-[:focus-visible]:outline-accent">
+          <span className="flex-1 font-semibold">Keep people I pass on hidden</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={blocker}
+            disabled={blockerSaving}
+            onChange={(e) => void toggleBlocker(e.target.checked)}
+            aria-describedby="blocker-hint"
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden="true"
+            className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--skeleton)] transition-colors peer-checked:bg-accent peer-disabled:opacity-50 after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-surface after:shadow after:transition-[left] peer-checked:after:left-6 motion-reduce:transition-none motion-reduce:after:transition-none"
+          />
+        </label>
+        <p id="blocker-hint" className="mt-1 text-sm text-muted">
+          {blocker
+            ? "On: people you passed on stay out of this list, and you're kept out of theirs."
+            : "Off: people you passed on can show up again."}
+        </p>
+        {blockerFailed && (
+          <p role="alert" className={`mt-2 ${errorClass}`}>
+            {blockerFailed.message}
+            {blockerFailed.action && (
+              <>
+                {" "}
+                <a href={blockerFailed.action.href} className="underline underline-offset-4">
+                  {blockerFailed.action.label}
+                </a>
+              </>
+            )}
+          </p>
+        )}
+      </div>
 
       <p role="status" aria-live="polite" className="sr-only">
         {announce}

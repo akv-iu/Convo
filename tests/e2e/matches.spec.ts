@@ -277,6 +277,39 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(page.getByText("You sent a request to Person 1.")).toBeVisible();
   });
 
+  test("turning the soft blocker off brings back people passed on, and the server keeps the choice", async ({ page }) => {
+    const askId = await newAsk(page);
+    const [first] = await serverMatches(page, askId);
+    await open(page, askId);
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await expect(blocker).toBeChecked();
+    await passButton(page).click();
+    await expect(page.getByRole("status").filter({ hasText: "Passed" })).toHaveText(`Passed on ${first.person.name}.`);
+
+    const saving = page.waitForRequest((r) => r.url().endsWith("/api/soft-blocker") && r.method() === "PUT");
+    await blocker.click({ force: true });
+    expect((await saving).postDataJSON()).toEqual({ askId, enabled: false });
+    await expect(blocker).not.toBeChecked();
+    await expect(page.getByText("Off: people you passed on can show up again.")).toBeVisible();
+    // The list reloads with the passed person back, as the server now matches them again.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
+    expect((await serverMatches(page, askId)).map((m) => m.person.id)).toContain(first.person.id);
+
+    await page.reload();
+    await expect(blocker).not.toBeChecked();
+  });
+
+  test("a failed soft-blocker save leaves the switch as it was", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await page.route("**/api/soft-blocker", (route) => route.fulfill({ status: 503, json: { error: "Storage unavailable" } }));
+    await open(page, "made-up");
+    const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });
+    await blocker.click({ force: true });
+    await expect(alertWithText(page)).toHaveText("Storage unavailable");
+    await expect(blocker).toBeChecked();
+    await expect(blocker).toBeEnabled();
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
