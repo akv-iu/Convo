@@ -20,6 +20,7 @@ import { showSavedColour } from "../../_components/badge-prefs";
 import { saveErrorMessage } from "../answers";
 import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
+import { SeenByOthers } from "./seen-by-others";
 import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
 export const NEXT_STEP = "/ask";
@@ -258,6 +259,7 @@ export function ProfileForm() {
 
   if (!editing) {
     return (
+      <>
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
         <div className="flex flex-col">
           <h1 className={headingClass}>{HEADING}</h1>
@@ -276,6 +278,9 @@ export function ProfileForm() {
           <div className="lg:sticky lg:top-6">{badge}</div>
         </div>
       </div>
+      {/* Before sending any requests: the row other people see, and what it shows. */}
+      <SeenByOthers person={person} onSaved={(saved) => setLoad({ state: "ready", person: saved })} />
+      </>
     );
   }
 

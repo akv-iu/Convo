@@ -26,6 +26,9 @@ const LILAC = "rgb(196, 181, 253)";
 const CORAL = "rgb(255, 163, 138)";
 const visibilitySwitch = (page: Page, name: string) =>
   page.getByRole("group", { name: "Show on your badge" }).getByRole("switch", { name });
+/** The visible row a person taps (the input itself is visually hidden), so the click is hit-tested like a real tap. */
+const switchRow = (page: Page, name: string) =>
+  page.getByRole("group", { name: "Show on your badge" }).locator("label").filter({ has: page.getByRole("switch", { name }) });
 
 /** Leave step 1's answers in this tab, as step 1 would, then open step 2. */
 async function openWithDraft(page: Page, person: string, draft: object = { name: "Ada Lovelace", country: "GB", workplace: { kind: "org", org: OXFORD } }) {
@@ -131,8 +134,10 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your badge");
     const before = await stored(page, person);
     await expect(visibilitySwitch(page, "Country")).toBeChecked();
-    await visibilitySwitch(page, "Country").uncheck({ force: true });
-    await visibilitySwitch(page, "Hiring status").uncheck({ force: true });
+    await switchRow(page, "Country").click();
+    await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
+    await switchRow(page, "Hiring status").click();
+    await expect(visibilitySwitch(page, "Hiring status")).not.toBeChecked();
     await expect(page.getByRole("group", { name: "Show on your badge" })).toContainText("Hidden");
 
     const saving = page.waitForRequest(isSave);
@@ -228,12 +233,19 @@ test.describe("your badge (step 2)", () => {
     await openWithDraft(page, "p_003");
     const badge = visibleBadge(page);
     await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    // Each line you can remove carries an eraser (country, workplace, hiring); name and GitHub don't.
+    await expect(badge.locator("[data-eraser]")).toHaveCount(3);
     await badge.getByText("University of Oxford").click();
+    await expect(badge.locator("[data-eraser]")).toHaveCount(2); // it went with the line
     await expect(visibilitySwitch(page, "Workplace")).not.toBeChecked();
+    await expect(badge).not.toContainText("University of Oxford"); // gone, not struck through
     await badge.getByText("United Kingdom").click();
     await expect(visibilitySwitch(page, "Country")).not.toBeChecked();
-    await badge.getByText("University of Oxford").click();
+    await expect(badge).not.toContainText("United Kingdom");
+    // The switch beside the badge brings a hidden line back.
+    await switchRow(page, "Workplace").click();
     await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    await expect(badge).toContainText("University of Oxford");
     // The colour picker and the switches sit with the badge, in one section.
     const look = page.getByRole("region", { name: "Your badge's look" });
     await expect(look.getByRole("radio", { name: "Lilac" })).toHaveCount(1);

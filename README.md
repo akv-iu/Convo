@@ -29,12 +29,13 @@ npm run test:e2e    # Playwright: click-through tests at phone and laptop size, 
 
 ## Quality gates
 
-Every change reaches `main` through a pull request that must pass four checks:
+Every change reaches `main` through a pull request that must pass these checks ([how it works](docs/Quality-Gates.md)):
 
 1. **CI**: lint, type-check, unit and contract tests with coverage, then Playwright click-through tests with an axe accessibility scan.
 2. **SonarQube Cloud**: the quality gate on new code (coverage, duplication, bugs, vulnerabilities, security hotspots). A failed gate fails CI, and a report step lists the exact files and lines.
-3. **Gitar**: AI review against the project's own rules in [`AGENTS.md`](AGENTS.md) and [`.gitar/review/`](.gitar/review/), with a risk level from [`.gitar/config/risk.md`](.gitar/config/risk.md). Repository rules in [`.gitar/rules/`](.gitar/rules/) post checklists when a PR changes the shared API contract, adds a migration, crosses folder ownership, changes a search mapping or adds an environment variable.
-4. **Fixes stay honest**: Gitar can push fixes for review findings and CI failures, Sonar's included, but only within [`.gitar/config/apply.md`](.gitar/config/apply.md) and never by weakening a test or silencing a check ([`keep-the-gates-honest.md`](.gitar/instructions/keep-the-gates-honest.md)).
+3. **Gitar**: AI review against the project's own rules in [`AGENTS.md`](AGENTS.md) and [`.gitar/review/`](.gitar/review/), with a risk level from [`.gitar/config/risk.md`](.gitar/config/risk.md). Repository rules in [`.gitar/rules/`](.gitar/rules/) post checklists when a PR changes the shared API contract, adds a migration, needs the other person's approval, changes a search mapping or adds an environment variable.
+4. **Feature sign-off**: each of us merges our own PRs without waiting, unless a PR completes a feature (its checklist in [`docs/features/`](docs/features/)) or Gitar marks it as needing the other person; then it waits for their approval.
+5. **Fixes stay honest**: Gitar can push fixes for review findings and CI failures, Sonar's included, but only within [`.gitar/config/apply.md`](.gitar/config/apply.md) and never by weakening a test or silencing a check ([`keep-the-gates-honest.md`](.gitar/instructions/keep-the-gates-honest.md)).
 
 ## Stack
 

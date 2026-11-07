@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts", ".github/scripts/**/*.test.mjs"],
     env: { FAKE_API: "1" },
     coverage: {
       provider: "v8",

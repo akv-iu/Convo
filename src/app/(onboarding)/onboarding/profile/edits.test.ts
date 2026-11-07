@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
 import { people } from "@/contracts/fixtures";
-import { addChip, addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip } from "./edits";
+import { addChip, addPending, asSeenByOthers, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, removeChip } from "./edits";
+import { SHOW_ALL } from "../answers";
 
 const person = people[0];
 
@@ -78,5 +79,16 @@ describe("loadProblem", () => {
     expect(loadProblem(401).action?.href).toBe("/signin");
     expect(loadProblem(404).action?.href).toBe("/signin");
     expect(loadProblem(503).action).toBeNull();
+  });
+});
+
+describe("asSeenByOthers (step 4's preview of your row in other people's matches)", () => {
+  it("empties the sections you hid, as the server does", () => {
+    const me = { ...person, workplaceName: "Acme", filters: { country: "GB", rorId: "https://ror.org/x", hiring: true } };
+    expect(asSeenByOthers(me, SHOW_ALL)).toMatchObject({ workplaceName: "Acme", filters: { country: "GB", hiring: true } });
+    const seen = asSeenByOthers(me, { country: false, workplace: false, hiring: false });
+    expect(seen.workplaceName).toBeNull();
+    expect(seen.filters).toEqual({ country: null, rorId: null, hiring: null });
+    expect(seen.name).toBe(me.name);
   });
 });

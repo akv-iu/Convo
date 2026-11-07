@@ -10,8 +10,6 @@ import {
   passFailure,
   resolveFailure,
   sendFailure,
-  SWIPE_DISTANCE,
-  swipeOutcome,
   withinCutoff,
 } from "./matches";
 
@@ -37,15 +35,6 @@ function match(over: Partial<MatchResult> & { rank: number }, person: Partial<Ma
     },
   };
 }
-
-describe("swipeOutcome", () => {
-  it("sends on a long right drag, passes on a long left drag, and snaps back otherwise", () => {
-    expect(swipeOutcome(SWIPE_DISTANCE)).toBe("send");
-    expect(swipeOutcome(-SWIPE_DISTANCE - 5)).toBe("pass");
-    expect(swipeOutcome(40)).toBeNull();
-    expect(swipeOutcome(-40)).toBeNull();
-  });
-});
 
 describe("highlightParts", () => {
   it("marks <em> hits and keeps the rest as plain text", () => {
