@@ -284,6 +284,30 @@ test.describe("match cards and swipe (A2 steps 1-2)", () => {
     await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
   });
 
+  test("Search waits while a pass is saving, so the save can't land on a new deck", async ({ page }) => {
+    let loads = 0;
+    await page.route("**/api/match", (route) => {
+      loads++;
+      return route.fulfill({ json: fakeMatches(3) });
+    });
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    await page.route("**/api/rejections", async (route) => {
+      await held;
+      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
+    });
+    await open(page, "made-up");
+    await expect(card(page)).toBeVisible();
+    await passButton(page).click();
+    const search = page.getByRole("button", { name: "Search", exact: true });
+    await expect(search).toHaveAttribute("aria-disabled", "true");
+    await search.click({ force: true });
+    release();
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    expect(loads).toBe(1);
+    await expect(search).not.toHaveAttribute("aria-disabled", "true");
+  });
+
   test("Pass and Send keep keyboard focus while they save", async ({ page, isMobile }) => {
     test.skip(isMobile, "keyboard path is checked on the laptop project");
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
