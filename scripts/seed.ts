@@ -30,7 +30,7 @@ async function eachInParallel<T>(items: readonly T[], ingest: (item: T) => Promi
   await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, worker));
 }
 
-async function seedSynthetic(): Promise<number> {
+export async function seedSynthetic(): Promise<number> {
   const file = z.object({ people: Person.array(), evidence: EvidenceDoc.array() })
     .parse(JSON.parse(await readFile(SYNTHETIC, "utf8")));
   const docs = new Map<string, EvidenceDoc[]>();
@@ -39,7 +39,7 @@ async function seedSynthetic(): Promise<number> {
   return file.people.length;
 }
 
-async function seedUsers(): Promise<number> {
+export async function seedUsers(): Promise<number> {
   // syncProfile ingests the GitHub evidence saved in Postgres, so a rebuilt index gets it back.
   const onboarded = await db().select().from(users).where(isNotNull(users.filters));
   await eachInParallel(onboarded, syncProfile);
@@ -73,7 +73,10 @@ async function main() {
   await client().indices.refresh({ index: [INDEX.people, INDEX.evidence, INDEX.asks] });
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Only when run as a script (`npm run seed`), so the tests can import the loaders without seeding anything.
+if (process.argv[1]?.endsWith("seed.ts")) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
