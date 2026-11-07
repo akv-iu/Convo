@@ -67,7 +67,7 @@ describe("refineAsk", () => {
     expect(statements("insert")).toHaveLength(0);
   });
 
-  it("blocks an ask that moderation flags with a 422, and caches nothing", async () => {
+  it("blocks an ask that moderation flags with a 422, and caches the verdict", async () => {
     moderate.mockResolvedValueOnce({ results: [{ flagged: true }] });
     create.mockRejectedValueOnce(new Error("The model refused too")); // moderation's verdict still wins
 
@@ -75,7 +75,17 @@ describe("refineAsk", () => {
 
     expect(error).toBeInstanceOf(AskBlockedError);
     expect(error).toMatchObject({ status: 422 });
-    expect(statements("insert")).toHaveLength(0);
+    expect(statements("insert")).toHaveLength(1);
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify({ blocked: true })]));
+  });
+
+  it("blocks a repeat from the cache without calling OpenAI", async () => {
+    cacheHolds({ blocked: true });
+
+    await expect(openAi.refineAsk("something hateful", requester)).rejects.toBeInstanceOf(AskBlockedError);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(moderate).not.toHaveBeenCalled();
   });
 
   it("sets the meeting length from the kind of ask", async () => {

@@ -63,6 +63,8 @@ const FORMAT: Record<Kind, OpenAI.Responses.ResponseFormatTextJSONSchemaConfig> 
 };
 
 const Refined = z.object({ text: z.string().trim().min(1).max(400), type: AskType });
+/** A cached moderation verdict: the same ask is blocked again without calling OpenAI. */
+const Blocked = z.object({ blocked: z.literal(true) });
 const Line = z.string().trim().min(1).max(200);
 const Explained = z.object({ lines: z.array(z.object({ ref: z.number().int(), why: z.string() })) });
 
@@ -154,14 +156,18 @@ export const openAi: AiService = {
   async refineAsk(rawText) {
     const question = rawText.trim();
     const key = cacheKey("refine", question);
-    const cached = Refined.safeParse((await readCache([key])).get(key));
-    noteCache(cached.success ? 1 : 0, cached.success ? 0 : 1);
-    let refined = cached.data;
+    const hit = Refined.or(Blocked).safeParse((await readCache([key])).get(key)).data;
+    noteCache(hit ? 1 : 0, hit ? 0 : 1);
+    if (hit && "blocked" in hit) throw new AskBlockedError();
+    let refined = hit;
     if (!refined) {
       // Moderation runs alongside the model, so it adds no wait. Its verdict wins, since the model may refuse a
-      // hateful ask. Blocked asks are never cached, so a cache hit needs no check.
+      // hateful ask. The verdict is cached like a reply, so a repeat costs one database read.
       const [flagged, reply] = await Promise.allSettled([isFlagged(question), generate("refine", question, 300)]);
-      if (flagged.status === "fulfilled" && flagged.value) throw new AskBlockedError();
+      if (flagged.status === "fulfilled" && flagged.value) {
+        await writeCache("refine", new Map([[key, { blocked: true }]]));
+        throw new AskBlockedError();
+      }
       if (reply.status === "rejected") throw reply.reason;
       refined = Refined.parse(reply.value);
       await writeCache("refine", new Map([[key, refined]]));
