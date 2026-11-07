@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { after } from "next/server";
 import { db } from "../../../db";
 import { asks, rejections, requests, users } from "../../../db/schema";
 import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
@@ -23,6 +24,21 @@ async function registerSavedAsk(askId: string, userId: string, text: string): Pr
   }
 }
 
+/**
+ * Best effort: runs the ask's first match after the response is sent, while the asker reads the
+ * refined question, so its explanations (about 3 s for ten new cards) are usually cached by the
+ * time the asker opens the results. If the asker is quicker, both runs pay for the same lines.
+ */
+function warmFirstMatch(userId: string, askId: string): void {
+  try {
+    after(() => matchAsk(userId, askId).catch(() => {
+      console.warn("[asks] Background first match failed; the asker's own first match computes it.");
+    }));
+  } catch {
+    // after() throws outside a request (unit tests, scripts), where nothing waits on a response.
+  }
+}
+
 export async function createAsk(userId: string, text: string): Promise<{ askId: string; refined: RefinedAsk }> {
   if (text.trim().length < 3) throw new AskError("Enter a question with at least three characters.", 400);
   const requester = await getProfile(userId);
@@ -42,6 +58,7 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }
   await registerSavedAsk(askId, userId, refined.text);
+  warmFirstMatch(userId, askId);
   return { askId, refined };
 }
 

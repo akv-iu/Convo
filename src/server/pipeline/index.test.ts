@@ -57,17 +57,36 @@ describe("people already passed on or sent a request", () => {
     { person: third, highlights: ["c"], score: 1 },
   ];
 
-  it("are ranked but not shown, so everyone else keeps their rank and is searched with room for them", async () => {
+  it("are ranked but not shown, so everyone else keeps their rank", async () => {
     search.searchCandidates.mockResolvedValueOnce(ranked());
     search.whoIsLookingFor.mockResolvedValueOnce([]);
 
     const results = await runMatch({ ask, requester, excludeIds: [], hideIds: [onlyWanted.id], hiddenBelowRank: null });
 
     expect(results.map((r) => [r.person.id, r.rank])).toEqual([[alsoLooking.id, 1], [third.id, 2]]);
-    expect(search.searchCandidates).toHaveBeenLastCalledWith(expect.any(String), expect.anything(), 11);
     expect(ai.explain).toHaveBeenLastCalledWith(ask.refined, [
       expect.objectContaining({ person: alsoLooking }), expect.objectContaining({ person: third }),
     ]);
+  });
+
+  it("move nobody when a mutual match from further down outranks the people shown", async () => {
+    // Eleven people by search score; the eleventh also wants to meet the requester, and +1 lifts it to second.
+    const pool = Array.from({ length: 11 }, (_, i) => ({
+      person: { ...structuredClone(onlyWanted), id: `p${i}` }, highlights: [], score: i ? 4.5 - i / 10 : 5,
+    }));
+    const ranks = async (hideIds: string[]) => {
+      search.searchCandidates.mockImplementationOnce(async (_q: string, _f: unknown, limit = 10) => pool.slice(0, limit));
+      search.whoIsLookingFor.mockResolvedValueOnce(["p10"]);
+      const results = await runMatch({ ask, requester, excludeIds: [], hideIds, hiddenBelowRank: null });
+      return new Map(results.map((r) => [r.person.id, r.rank]));
+    };
+
+    const before = await ranks([]);
+    const after = await ranks(["p0"]); // passed on the first card
+
+    const both = [...after].filter(([id]) => before.has(id));
+    expect(both).toEqual(both.map(([id]) => [id, before.get(id)]));
+    expect(after.size).toBe(10); // the next person fills the hidden place
   });
 
   it("leave nobody below the cutoff: only ranks above it can show", async () => {
