@@ -40,15 +40,20 @@ Production stays in fake mode until the integration checkpoint.
 ## Failure and persistence boundaries
 
 Neon commits before search registration. If registration fails, the 503 message
-explicitly says the ask was saved and includes its ID. Keep that ID; matching
-can use it after the service recovers. Do not automatically repeat refinement:
-that would create a second ask. There is no transaction across Neon and search,
-durable registration retry, or request idempotency key. C2 must add reliable
-registration before using the real search backend. A database timeout can also
-leave the commit outcome unknown; the error does not claim it was rolled back.
+explicitly says the ask was saved and includes its ID. Keep that ID and retry
+`POST /api/match` with `{ askId }` after the service recovers. Matching replays
+registration for an owned, open ask with a saved refinement before running the
+pipeline. Registration uses the same ID, so repeated retries do not create
+another ask or repeat refinement. Resolved asks are never re-registered.
+There is no transaction across Neon and search or request idempotency key.
+Recovery requires a matching request; there is no background retry worker.
+A database timeout can also leave the commit outcome unknown; the error does
+not claim it was rolled back. See [Ask-Recovery.md](Ask-Recovery.md) for the
+complete recovery check.
 
-Saved asks survive restarts. Fake search registrations do not. Therefore mutual
-flags/ranking may change after restarting even though the ask remains saved.
+Saved asks survive restarts. Fake search registrations do not. Matching an open,
+refined ask restores its registration after a restart. Until that request runs,
+reverse counts and mutual flags can still omit the ask.
 Real Elasticsearch, OpenAI, reverse counters, rejection writes, requests,
 scheduling and resolution are separate steps and are not completed by this PR.
 

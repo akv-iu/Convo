@@ -15,6 +15,14 @@ class AskError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
+async function registerSavedAsk(askId: string, userId: string, text: string): Promise<void> {
+  try {
+    await search.registerAsk(askId, userId, text);
+  } catch {
+    throw new AskError(`Ask saved with ID ${askId}, but search registration failed. Retry POST /api/match with this askId; do not resubmit the question.`, 503);
+  }
+}
+
 export async function createAsk(userId: string, text: string): Promise<{ askId: string; refined: RefinedAsk }> {
   if (text.trim().length < 3) throw new AskError("Enter a question with at least three characters.", 400);
   const requester = await getProfile(userId);
@@ -33,12 +41,7 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
   } catch {
     throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
   }
-  try {
-    await search.registerAsk(askId, userId, refined.text);
-  } catch {
-    // shortcut: no durable search retry; add an outbox before C2 needs reliable registration.
-    throw new AskError(`Ask saved with ID ${askId}, but search registration failed. Keep this ID; do not resubmit the question.`, 503);
-  }
+  await registerSavedAsk(askId, userId, refined.text);
   return { askId, refined };
 }
 
@@ -64,6 +67,8 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
       .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters))))
       .catch(() => { throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503); }),
   ]);
+  // Replaying the saved ID repairs failed registration or lost search state without another ask or AI call.
+  if (ask.status === "open" && ask.refined) await registerSavedAsk(ask.id, ask.userId, ask.refined.text);
   try {
     const matches = await runMatch({
       ask, requester, query,

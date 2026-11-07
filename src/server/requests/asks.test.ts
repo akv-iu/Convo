@@ -113,6 +113,46 @@ describe("durable ask creation", () => {
 });
 
 describe("matching a saved ask", () => {
+  it("repairs a saved ask after registration failed without saving or refining again", async () => {
+    registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
+    await expect(createAsk(person.id, ask.rawText)).rejects.toMatchObject({ status: 503 });
+    const savedId = query.mock.calls[0][1][0];
+    const saved = { ...ask, id: savedId };
+    query.mockResolvedValueOnce(askRows(saved));
+    runMatch.mockImplementationOnce(async () => {
+      expect(registerAsk).toHaveBeenLastCalledWith(savedId, person.id, refined.text);
+      return [];
+    });
+    await expect(matchAsk(person.id, savedId)).resolves.toEqual([]);
+    expect(registerAsk).toHaveBeenCalledTimes(2);
+    expect(refineAsk).toHaveBeenCalledOnce();
+    expect(query.mock.calls.filter(([sql]) => String(sql).startsWith("insert"))).toHaveLength(1);
+  });
+
+  it("reports registration failure safely and allows the same match request to retry", async () => {
+    query.mockResolvedValueOnce(askRows());
+    registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
+    const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).toContain(`Ask saved with ID ${ask.id}`);
+    expect(String(error)).toContain("Retry POST /api/match");
+    expect(String(error)).not.toContain("private-search-token");
+    expect(runMatch).not.toHaveBeenCalled();
+    query.mockResolvedValueOnce(askRows());
+    await expect(matchAsk(person.id, ask.id)).resolves.toEqual([]);
+    expect(registerAsk).toHaveBeenCalledTimes(2);
+    expect(refineAsk).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ...ask, status: "resolved" as const },
+    { ...ask, refined: null },
+  ])("does not register a closed or unrefined ask: $status, $refined", async (saved) => {
+    query.mockResolvedValueOnce(askRows(saved));
+    await matchAsk(person.id, saved.id);
+    expect(registerAsk).not.toHaveBeenCalled();
+  });
+
   it("excludes pending imports before search and explanations even with the soft blocker off", async () => {
     query.mockResolvedValueOnce(askRows({ ...ask, softBlocker: false }))
       .mockResolvedValueOnce({ rows: [["rejected", 1]] }).mockResolvedValueOnce({ rows: [["pending-user"]] });
@@ -201,6 +241,7 @@ describe("matching a saved ask", () => {
     expect(query.mock.calls[0][1]).toEqual([ask.id, "different-user", 1]);
     expect(query).toHaveBeenCalledOnce();
     expect(getProfile).not.toHaveBeenCalled();
+    expect(registerAsk).not.toHaveBeenCalled();
     expect(runMatch).not.toHaveBeenCalled();
   });
 

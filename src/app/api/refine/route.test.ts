@@ -3,6 +3,7 @@ import { DEMO_USER_A, DEMO_USER_B, people, sampleAsks } from "@/contracts/fixtur
 import { routes } from "@/contracts/routes";
 import type { RefinedAsk } from "@/contracts/types";
 import { store } from "@/contracts/fake/store";
+import { search } from "@/server/search";
 
 const { query, runtime, identity } = vi.hoisted(() => ({
   query: vi.fn(), identity: { userId: "u_demo_a" as string | null },
@@ -40,7 +41,7 @@ beforeEach(() => {
   vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused");
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Unexpected live request")));
 });
-afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
   beforeEach(() => { runtime.fakeApi = mode === "fake"; });
@@ -96,6 +97,37 @@ describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
 });
 
 describe("real ask route failures", () => {
+  it("recovers registration through match after refinement saved the ask but returned 503", async () => {
+    const raw = `${sampleAsks[0].raw} RecoveryQuasarToken`;
+    const recipient = { ...person, id: "recovery-count-target", bio: "RecoveryQuasarToken" };
+    const registration = vi.spyOn(search, "registerAsk");
+    registration.mockRejectedValueOnce(new Error("private-search-token"));
+    query.mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] });
+    const failed = await refine(request("refine", { text: raw }), context());
+    expect(failed.status).toBe(503);
+    const savedId = query.mock.calls[1][1][0];
+    const savedRefined = JSON.parse(query.mock.calls[1][1][3]);
+    const { error } = await failed.json();
+    expect(error).toContain(savedId);
+    expect(error).toContain("Retry POST /api/match");
+    expect(error).not.toContain("private-search-token");
+    expect(await search.whoIsLookingFor(recipient)).toEqual([]);
+    for (const attempt of [1, 2]) {
+      query.mockResolvedValueOnce(savedAskRows(savedId, raw, savedRefined))
+        .mockResolvedValueOnce(profileRows()).mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: people.map(p => [p.id, JSON.stringify(p.visibility), false]) });
+      const recovered = await match(request("match", { askId: savedId }), context());
+      expect(recovered.status, `attempt ${attempt}`).toBe(200);
+      expect(routes.match.response.parse(await recovered.json())[0].person.id).toBe(sampleAsks[0].expectedTop);
+      expect(await search.whoIsLookingFor(recipient)).toEqual([person.id]);
+    }
+    expect(registration).toHaveBeenLastCalledWith(savedId, person.id, savedRefined.text);
+    expect(query.mock.calls.filter(([sql]) => String(sql).startsWith("insert"))).toHaveLength(1);
+    expect(fetch).not.toHaveBeenCalled();
+    await search.removeAsk(savedId);
+  });
+
   it("rejects whitespace-only questions without touching storage", async () => {
     const response = await refine(request("refine", { text: "   " }), context());
     expect(response.status).toBe(400);
