@@ -52,7 +52,7 @@ describe("refineAsk", () => {
       model: "gpt-5.4-mini", input: "k8s preemption?", store: false, reasoning: { effort: "none" },
       text: { format: { type: "json_schema", name: "refined_ask", strict: true } },
     });
-    expect(moderate).toHaveBeenCalledWith({ model: "omni-moderation-latest", input: "k8s preemption?" }, { timeout: 3000, maxRetries: 0 });
+    expect(moderate).toHaveBeenCalledWith({ model: "omni-moderation-latest", input: "k8s preemption?" }, { timeout: 3000, maxRetries: 1 });
     expect(statements("insert")).toHaveLength(1);
     expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["refine", JSON.stringify(modelReply)]));
   });
@@ -106,12 +106,23 @@ describe("refineAsk", () => {
     expect(statements("insert")).toHaveLength(0);
   });
 
-  it("still refines when the cache or moderation is down", async () => {
+  it("still refines when the cache is down", async () => {
     query.mockRejectedValue(new Error("Neon is down"));
-    moderate.mockRejectedValueOnce(new Error("Moderation timed out"));
     create.mockResolvedValueOnce(reply(modelReply));
 
     await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);
+  });
+
+  it("refuses an ask while moderation is down, caches nothing, and checks the retry", async () => {
+    moderate.mockRejectedValueOnce(new Error("Moderation timed out"));
+    create.mockResolvedValue(reply(modelReply)); // the model answers both times
+
+    await expect(openAi.refineAsk("k8s?", requester)).rejects.toThrow("Moderation timed out");
+    expect(statements("insert")).toHaveLength(0);
+
+    await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);
+    expect(moderate).toHaveBeenCalledTimes(2);
+    expect(statements("insert")).toHaveLength(1);
   });
 });
 

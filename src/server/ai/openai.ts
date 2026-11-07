@@ -2,8 +2,9 @@
  * Real AI (B1): the OpenAI Responses API with strict JSON-schema output.
  * Every reply is cached in Postgres (ai_cache) under a hash of everything that
  * shapes it, so a repeat costs one database read. Explanations never fail a
- * match: on any error a card keeps its evidence line. Asks that OpenAI's
- * moderation check flags are blocked rather than rewritten.
+ * match: on any error a card keeps its evidence line. Every ask goes through
+ * OpenAI's moderation check: a flagged ask is blocked rather than rewritten,
+ * and if the check fails, the ask is refused rather than refined unchecked.
  */
 import { createHash } from "node:crypto";
 import { SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
@@ -18,6 +19,7 @@ import { AskBlockedError } from "./blocked";
 import { cannedAi } from "./canned";
 
 const MODEL = "gpt-5.4-mini";
+const MODERATION_MODEL = "omni-moderation-latest";
 /** Suggested meeting length per kind of ask; the asker can change it on the refine screen. */
 const MINUTES: Record<AskType, number> = { knowledge: 10, career: 15, collaboration: 20, hiring: 20 };
 /** A match waits this long for explanations, then shows evidence lines instead. */
@@ -110,15 +112,15 @@ function generate(kind: Kind, input: string, maxTokens: number, options?: OpenAI
   });
 }
 
-/** OpenAI's free moderation check. If it is down, the ask goes through: the refine prompt still drops insults. */
+/** OpenAI's free moderation check. If it fails, so does refinement: a 503 the asker can retry. */
 async function isFlagged(text: string): Promise<boolean> {
   try {
     const { results } = await client().moderations.create(
-      { model: "omni-moderation-latest", input: text }, { timeout: 3000, maxRetries: 0 });
+      { model: MODERATION_MODEL, input: text }, { timeout: 3000, maxRetries: 1 });
     return results.some((result) => result.flagged);
   } catch (error) {
-    console.warn("Moderation unavailable; refining without it", error);
-    return false;
+    console.warn("Moderation unavailable; refusing to refine an unchecked ask", error);
+    throw error;
   }
 }
 
@@ -155,7 +157,9 @@ function noteCache(hits: number, misses: number) {
 export const openAi: AiService = {
   async refineAsk(rawText) {
     const question = rawText.trim();
-    const key = cacheKey("refine", question);
+    // Only moderated answers are cached. The moderation model is in the key, so anything cached
+    // before that rule, or under another moderation model, is checked again.
+    const key = cacheKey("refine", [MODERATION_MODEL, question]);
     const hit = Refined.or(Blocked).safeParse((await readCache([key])).get(key)).data;
     noteCache(hit ? 1 : 0, hit ? 0 : 1);
     if (hit && "blocked" in hit) throw new AskBlockedError();
@@ -164,7 +168,8 @@ export const openAi: AiService = {
       // Moderation runs alongside the model, so it adds no wait. Its verdict wins, since the model may refuse a
       // hateful ask. The verdict is cached like a reply, so a repeat costs one database read.
       const [flagged, reply] = await Promise.allSettled([isFlagged(question), generate("refine", question, 300)]);
-      if (flagged.status === "fulfilled" && flagged.value) {
+      if (flagged.status === "rejected") throw flagged.reason; // never rewrite or cache an unchecked ask
+      if (flagged.value) {
         await writeCache("refine", new Map([[key, { blocked: true }]]));
         throw new AskBlockedError();
       }
