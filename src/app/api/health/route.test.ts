@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { query, ping, list, construct, neonClient } = vi.hoisted(() => ({
-  query: vi.fn(), ping: vi.fn(), list: vi.fn(), construct: vi.fn(), neonClient: vi.fn(),
+const { query, ping, list, construct, neonClient, connection } = vi.hoisted(() => ({
+  query: vi.fn(), ping: vi.fn(), list: vi.fn(), construct: vi.fn(), neonClient: vi.fn(), connection: vi.fn(),
 }));
 vi.mock("@neondatabase/serverless", () => ({ neon: neonClient }));
-vi.mock("next/server", () => ({ connection: async () => undefined }));
+vi.mock("next/server", () => ({ connection }));
 vi.mock("@/server/search/elastic", () => ({ client: () => ({ ping }) }));
 vi.mock("openai", () => ({ default: class {
   constructor(options: unknown) { construct(options); }
@@ -17,6 +17,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.stubEnv("DATABASE_URL", "postgresql://private-password@database.invalid/convo");
   vi.stubEnv("OPENAI_API_KEY", "private-api-key");
+  connection.mockResolvedValue(undefined);
   neonClient.mockReturnValue({ query });
   query.mockResolvedValue([{ ok: 1 }]);
   ping.mockResolvedValue(true);
@@ -26,6 +27,19 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe("operational health", () => {
+  it("waits for a real request before starting provider probes", async () => {
+    let release = () => {};
+    connection.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+    const response = get();
+    await Promise.resolve();
+    expect(connection).toHaveBeenCalledOnce();
+    expect(query).not.toHaveBeenCalled();
+    expect(ping).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
+    release();
+    expect((await response).status).toBe(200);
+  });
+
   it("checks all three real dependencies even with the application's fake API enabled", async () => {
     const response = await get();
     expect(response.status).toBe(200);
