@@ -14,6 +14,7 @@
   --accent-hover: #1f45d6;
   --on-accent: #ffffff;
   --badge: #ffd23f; /* badge stripe only */
+  --logo-stripe: #ffd23f; /* the stripe on the Lanyard logo's badge */
   --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
   --skeleton: #dfe4ee;
   --danger: #c2410c; /* error text, 5.2:1 on surface */
@@ -51,3 +52,10 @@
 .badge-follows-picker:has(#colour-sky:checked) { --badge: #7dd3fc; }
 .badge-follows-picker:has(#colour-lilac:checked) { --badge: #c4b5fd; }
 .badge-follows-picker:has(#colour-coral:checked) { --badge: #ffa38a; }
+
+/*
+ * Onboarding's badge stripe shows no colour until BadgeColourSync has
+ * applied the saved one (it runs before the browser paints once React is
+ * up), so a fresh page load never flashes the default colour.
+ */
+.onb[data-badge-pending] [data-badge-stripe] { background-color: transparent; }

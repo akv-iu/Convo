@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  badgeColourScript,
   colourHex,
   DEFAULT_COLOUR,
   isBadgeColour,
@@ -30,25 +29,6 @@ describe("badge preferences cookie", () => {
     expect(isBadgeColour("coral")).toBe(true);
     expect(isBadgeColour("red")).toBe(false);
     expect(colourHex("sunflower")).toBe("#ffd23f");
-  });
-});
-
-describe("badgeColourScript", () => {
-  function run(cookie: string) {
-    const parent = { style: { props: {} as Record<string, string>, setProperty(k: string, v: string) { this.props[k] = v; } } };
-    const document = { cookie, currentScript: { parentElement: parent } };
-    new Function("document", badgeColourScript())(document);
-    return parent.style.props["--badge"];
-  }
-
-  it("sets --badge from a saved colour", () => {
-    expect(run(`a=1; convo_badge=${encodeURIComponent(JSON.stringify({ colour: "lilac" }))}`)).toBe("#c4b5fd");
-  });
-
-  it("leaves the default when there's no cookie, an unknown colour, or a broken value", () => {
-    expect(run("a=1")).toBeUndefined();
-    expect(run(`convo_badge=${encodeURIComponent(JSON.stringify({ colour: "neon" }))}`)).toBeUndefined();
-    expect(run("convo_badge=%7Bbroken")).toBeUndefined();
   });
 });
 

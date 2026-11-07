@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-/** Step 1, "About you": name, workplace, country and where Convo should look. Fake API. */
+/** Step 1, "About you": name, workplace, country and where Lanyard should look. Fake API. */
 
 /** A form submit on a busy test server can take a few seconds before the redirect. */
 const AFTER_SUBMIT = 15_000;
@@ -34,7 +34,7 @@ test.describe("about you (step 1)", () => {
     await page.getByRole("link", { name: "Get started" }).click();
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make your badge");
-    await expect(page.getByText("Convo fills it in from your public info such as GitHub.")).toBeVisible();
+    await expect(page.getByText("Lanyard fills it in from your public info such as GitHub.")).toBeVisible();
   });
 
   test("shows no badge, and offers GitHub with the other sources coming soon", async ({ page }) => {
@@ -98,7 +98,7 @@ test.describe("about you (step 1)", () => {
   });
 
   test("each GitHub source can be declined, and only the ticked ones are saved", async ({ page }) => {
-    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    const choices = page.getByRole("group", { name: "What Lanyard may read from GitHub" });
     for (const name of [/^Bio/, /^Repos and languages/, /^Organisations/]) {
       await expect(choices.getByRole("checkbox", { name })).toBeChecked();
     }
@@ -110,7 +110,7 @@ test.describe("about you (step 1)", () => {
   });
 
   test("declining every GitHub source still signs in, with an empty consent", async ({ page }) => {
-    const choices = page.getByRole("group", { name: "What Convo may read from GitHub" });
+    const choices = page.getByRole("group", { name: "What Lanyard may read from GitHub" });
     for (const box of await choices.getByRole("checkbox").all()) await box.uncheck();
     await answerAll(page);
     await continueButton(page).click();
@@ -121,9 +121,9 @@ test.describe("about you (step 1)", () => {
   });
 
   test("turning GitHub off hides its choices", async ({ page }) => {
-    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "What Lanyard may read from GitHub" })).toBeVisible();
     await page.getByText("GitHub", { exact: true }).click();
-    await expect(page.getByRole("group", { name: "What Convo may read from GitHub" })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "What Lanyard may read from GitHub" })).toHaveCount(0);
   });
 
   test("'Not with an organisation' is enough for the workplace", async ({ page }) => {

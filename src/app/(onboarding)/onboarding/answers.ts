@@ -137,3 +137,8 @@ export function saveErrorMessage(status: number, body: unknown): string {
   if (status === 400) return "One of the answers wasn't accepted. Check them and try again.";
   return "Your answers weren't saved. Try again.";
 }
+/** Same workplace name, ignoring case and extra spaces. */
+export function sameName(a: string, b: string): boolean {
+  const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLocaleLowerCase("en");
+  return norm(a) === norm(b);
+}

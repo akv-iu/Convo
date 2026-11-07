@@ -2,7 +2,7 @@
 
 /**
  * Step 1: the minimum to start searching (name, workplace, country) and
- * where Convo should look. Continue keeps the answers in this tab (see
+ * where Lanyard should look. Continue keeps the answers in this tab (see
  * _components/draft.ts) and runs the server action, which saves the
  * consent choice and starts GitHub sign-in (or skips it on the fake API).
  *
@@ -22,7 +22,7 @@ const sources = [
   {
     id: "github",
     label: "GitHub",
-    hint: "You'll sign in with GitHub next. Choose what Convo may read below.",
+    hint: "You'll sign in with GitHub next. Choose what Lanyard may read below.",
     ready: true,
   },
   {
@@ -87,7 +87,7 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
       <h1 className="text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl">
         Make your badge
       </h1>
-      <p className="mt-3 text-lg text-muted">Convo fills it in from your public info such as GitHub.</p>
+      <p className="mt-3 text-lg text-muted">Lanyard fills it in from your public info such as GitHub.</p>
 
       <div className="mt-8 flex flex-col gap-9">
         <div
@@ -219,9 +219,9 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
                 </label>
                 {s.id === "github" && github && (
                   <fieldset className="ml-4 flex flex-col gap-1 border-0 border-l-2 border-l-border py-1 pl-4">
-                    <legend className="sr-only">What Convo may read from GitHub</legend>
+                    <legend className="sr-only">What Lanyard may read from GitHub</legend>
                     <p className="text-sm text-muted" aria-hidden="true">
-                      From GitHub, Convo may read:
+                      From GitHub, Lanyard may read:
                     </p>
                     {consentSources.map((c) => (
                       <label
@@ -275,7 +275,7 @@ export function StartForm({ action, demo }: { action: (formData: FormData) => Pr
           </summary>
           <p className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-xl border border-border bg-surface p-4 text-sm text-foreground shadow-[var(--popover-shadow)] sm:left-0 sm:right-auto">
             We only use public info and anything you upload, and we never post to GitHub. Turning a source off means
-            Convo won&apos;t read it next time you sign in. Your saved bio and organisations stay until you edit them;
+            Lanyard won&apos;t read it next time you sign in. Your saved bio and organisations stay until you edit them;
             turning off repositories also removes your repo highlights.
           </p>
         </details>

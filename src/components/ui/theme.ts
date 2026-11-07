@@ -1,7 +1,7 @@
 import { Bricolage_Grotesque } from "next/font/google";
 
 /**
- * The Convo look shared by onboarding and the app screens: the wrapper
+ * The Lanyard look shared by onboarding and the app screens: the wrapper
  * gets `convoThemeClass`, and ./convo.css (imported by each layout)
  * scopes the colour tokens to it.
  */

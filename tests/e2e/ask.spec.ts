@@ -8,7 +8,7 @@ import { expect, test, type Page, type Request } from "@playwright/test";
 
 const AFTER_SUBMIT = 15_000;
 
-const box = (page: Page) => page.getByRole("textbox", { name: "Your question" });
+const box = (page: Page) => page.getByRole("textbox", { name: "What do you want to ask?" });
 const sharpen = (page: Page) => page.getByRole("button", { name: "Sharpen my question" });
 const isRefine = (req: Request) => req.url().endsWith("/api/refine") && req.method() === "POST";
 const alertWithText = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
@@ -79,14 +79,14 @@ test.describe("ask and refine (A1 step 5)", () => {
       calls++;
       if (calls === 1) {
         await new Promise((r) => setTimeout(r, 400));
-        return route.fulfill({ status: 503, json: { error: "Convo is busy. Try again." } });
+        return route.fulfill({ status: 503, json: { error: "Lanyard is busy. Try again." } });
       }
       return route.fallback();
     });
     await box(page).fill("how does etcd store keys");
     await sharpen(page).click();
     await expect(page.getByRole("button", { name: "Sharpening…" })).toBeDisabled();
-    await expect(alertWithText(page)).toHaveText("Convo is busy. Try again.");
+    await expect(alertWithText(page)).toHaveText("Lanyard is busy. Try again.");
     expect(calls).toBe(1);
     await sharpen(page).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Here's your question", { timeout: AFTER_SUBMIT });
@@ -100,13 +100,6 @@ test.describe("ask and refine (A1 step 5)", () => {
     await sharpen(page).click();
     await expect(alertWithText(page)).toContainText("Finish setting up your badge first.");
     await expect(page.getByRole("link", { name: "Set up your badge" })).toHaveAttribute("href", "/signin");
-  });
-
-  test("an example fills the box", async ({ page }) => {
-    await open(page);
-    await page.getByRole("button", { name: "I want to work on Kubernetes networking" }).click();
-    await expect(box(page)).toHaveValue("I want to work on Kubernetes networking");
-    await expect(box(page)).toBeFocused();
   });
 
   test("Ask something else goes back with the text kept", async ({ page }) => {

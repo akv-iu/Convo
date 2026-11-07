@@ -37,7 +37,7 @@ test.describe("requests and inbox (A2 step 4)", () => {
   test("two people: one sends from the cards, the other sees the question and accepts", async ({ browser }) => {
     const sender = await asPerson(browser, SENDER);
     await sender.goto("/ask");
-    await sender.getByRole("textbox", { name: "Your question" }).fill("how does the Kubernetes scheduler do preemption");
+    await sender.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
     await sender.getByRole("button", { name: "Sharpen my question" }).click();
     const question = (await sender.locator("blockquote").textContent())!.trim();
     await sender.getByRole("link", { name: "Find people" }).click();

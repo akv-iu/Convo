@@ -9,7 +9,7 @@ import { CONSENT_COOKIE, consentSources } from "../consent";
 const NEXT_STEP = "/onboarding";
 
 /**
- * Save which GitHub sources Convo may use, then hand over to GitHub (or skip
+ * Save which GitHub sources Lanyard may use, then hand over to GitHub (or skip
  * it on the fake API). Only the sources the user left ticked are written, in
  * B2's consent cookie format (db/Consent.md); none ticked writes an empty
  * value, which still signs in with basic identity. Step 1's name, country
