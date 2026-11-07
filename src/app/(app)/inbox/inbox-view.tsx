@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel, typeLabel } from "../ask/asks";
-import { PersonBadge } from "./person-badge";
+import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 import {
   inboxFailure,

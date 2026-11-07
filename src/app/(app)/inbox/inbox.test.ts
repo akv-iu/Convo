@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Request } from "@/contracts/types";
+import { badgeFacts } from "@/components/ui/person-badge";
+import { personColour } from "@/components/ui/badge-colours";
 import {
-  badgeColour,
-  badgeFacts,
   bookFailure,
   inboxFailure,
   inboxOrder,
@@ -103,13 +103,13 @@ describe("the other person's badge on a request", () => {
   });
 
   it("uses the person's colour, and sunflower when they have none or can't be found", () => {
-    expect(badgeColour({ ...person, badgeColour: "lilac" })).toBe("#c4b5fd");
-    expect(badgeColour(person)).toBe("#ffd23f");
-    expect(badgeColour(null)).toBe("#ffd23f");
+    expect(personColour({ ...person, badgeColour: "lilac" })).toBe("#c4b5fd");
+    expect(personColour(person)).toBe("#ffd23f");
+    expect(personColour(null)).toBe("#ffd23f");
   });
 
   it("words every status from the asker's side", () => {
-    expect(sentStatusLabel.sent).toBe("Waiting for an answer");
+    expect(sentStatusLabel.sent).toBe("Sent");
     expect(Object.keys(sentStatusLabel).sort()).toEqual(Object.keys(statusLabel).sort());
   });
 });

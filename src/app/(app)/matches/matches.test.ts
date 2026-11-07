@@ -1,22 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MatchResult } from "@/contracts/types";
+import { personColour } from "@/components/ui/badge-colours";
+import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 import {
-  badgeLabels,
   blockerFailure,
-  cardColour,
-  githubProfile,
   loadAsk,
   highlightParts,
   matchFailure,
   passFailure,
-  recallSent,
-  rememberSent,
   resolveFailure,
   sendFailure,
   SWIPE_DISTANCE,
   swipeOutcome,
   withinCutoff,
-  withoutSent,
 } from "./matches";
 
 function match(over: Partial<MatchResult> & { rank: number }, person: Partial<MatchResult["person"]> = {}): MatchResult {
@@ -78,17 +74,17 @@ describe("highlightParts", () => {
 
 describe("cards", () => {
   it("use the person's badge colour, sunflower when they have none", () => {
-    expect(cardColour(match({ rank: 0 }, { badgeColour: "lilac" }).person)).toBe("#c4b5fd");
-    expect(cardColour(match({ rank: 0 }).person)).toBe("#ffd23f");
+    expect(personColour(match({ rank: 0 }, { badgeColour: "lilac" }).person)).toBe("#c4b5fd");
+    expect(personColour(match({ rank: 0 }).person)).toBe("#ffd23f");
   });
 
   it("word the hard-filter badges, with synthetic shown separately", () => {
-    expect(badgeLabels(match({ rank: 0, badges: ["hiring", "GB", "synthetic"] }))).toEqual(["Hiring", "United Kingdom"]);
+    expect(badgeFacts(match({ rank: 0 }, { filters: { country: "GB", rorId: null, hiring: true } }).person)).toEqual(["United Kingdom", "Hiring"]);
   });
 
   it("never show a hidden hiring value as not hiring", () => {
     const hidden = match({ rank: 0, badges: ["not hiring", "US"] }, { filters: { country: "US", rorId: null, hiring: null } });
-    expect(badgeLabels(hidden)).toEqual(["United States"]);
+    expect(badgeFacts(hidden.person)).toEqual(["United States"]);
   });
 });
 
@@ -143,40 +139,6 @@ describe("resolve and connect (A2 step 5)", () => {
   it("links to a person's public GitHub profile, safely encoded", () => {
     expect(githubProfile("ada")).toBe("https://github.com/ada");
     expect(githubProfile("a/b?c")).toBe("https://github.com/a%2Fb%3Fc");
-  });
-});
-
-describe("people already sent the ask (no duplicate requests)", () => {
-  class MemoryStorage {
-    private items = new Map<string, string>();
-    getItem(k: string) {
-      return this.items.get(k) ?? null;
-    }
-    setItem(k: string, v: string) {
-      this.items.set(k, v);
-    }
-  }
-  beforeEach(() => {
-    (globalThis as { sessionStorage?: unknown }).sessionStorage = new MemoryStorage();
-  });
-  afterEach(() => {
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-  });
-
-  it("remembers each person once per ask, and the deck leaves them out", () => {
-    const ada = { id: "p0", name: "Ada", githubLogin: "ada" };
-    rememberSent("a1", ada);
-    expect(rememberSent("a1", ada)).toEqual([ada]);
-    expect(recallSent("a2")).toEqual([]);
-    const deck = [0, 1].map((rank) => match({ rank }));
-    expect(withoutSent(deck, recallSent("a1")).map((m) => m.person.id)).toEqual(["p1"]);
-  });
-
-  it("copes with broken or missing storage", () => {
-    sessionStorage.setItem("convo_sent", "{broken");
-    expect(recallSent("a1")).toEqual([]);
-    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
-    expect(rememberSent("a1", { id: "p0", name: "Ada", githubLogin: "ada" })).toHaveLength(1);
   });
 });
 

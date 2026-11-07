@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel, typeLabel } from "../ask/asks";
 import { inboxFailure, sentStatusLabel, venueRange, venueTime, type Failure } from "./inbox";
-import { PersonBadge } from "./person-badge";
+import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 
 type Load = { state: "loading" } | { state: "ready"; requests: RequestView[] } | { state: "failed"; failure: Failure };

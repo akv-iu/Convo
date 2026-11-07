@@ -3,7 +3,7 @@
  * user's own badge in onboarding (A1) and other people's cards on the
  * match screen (A2). The IDs are the contract's BadgeColour values.
  */
-import type { BadgeColour } from "@/contracts/types";
+import type { BadgeColour, CardPerson } from "@/contracts/types";
 
 export type { BadgeColour };
 
@@ -25,4 +25,8 @@ export function isBadgeColour(value: unknown): value is BadgeColour {
 
 export function colourHex(id: BadgeColour): string {
   return badgeColours.find((c) => c.id === id)?.hex ?? badgeColours[0].hex;
+}
+
+export function personColour(person: CardPerson | null): string {
+  return colourHex(person?.badgeColour ?? DEFAULT_COLOUR);
 }
