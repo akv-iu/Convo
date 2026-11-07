@@ -28,7 +28,8 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
   themselves aren't returned). Accounts are read from Postgres. People without
   an account (synthetic) come from one batched search read. A real account found
   only in search shows nothing, and an unfinished profile gives `person: null`,
-  as does someone who can't be found. If search is down, the list returns 503
+  as does someone who can't be found. An invalid completed profile returns a
+  sanitized 503 instead of a missing badge. If search is down, the list returns 503
   rather than leaving out badges. Other routes (send, respond, schedule) still
   return a plain `Request`; keep the badge you already have when you update an
   item.
