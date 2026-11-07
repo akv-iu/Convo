@@ -13,6 +13,7 @@ function ctx<N extends RouteName>(body?: unknown, userId = DEMO_USER_A, id = "")
 const discover = (source: "research" | "public_profile", name = enrichmentIdentity.name, userId = DEMO_USER_A) =>
   fake.discoverEnrichment(ctx({ source, name, workplaceName: enrichmentIdentity.workplaceName, rorId: null, orcid: null }, userId));
 async function ready(input = enrichmentStart(), userId = DEMO_USER_A) {
+  await fake.saveEnrichmentIdentity(ctx(input.identity, userId));
   const job = await fake.startEnrichment(ctx(input, userId));
   await fake.getEnrichment(ctx(undefined, userId, job.jobId));
   await fake.getEnrichment(ctx(undefined, userId, job.jobId));
@@ -79,6 +80,12 @@ describe("revised enrichment contract", () => {
     await expect(fake.startEnrichment(ctx(input, DEMO_USER_B))).rejects.toMatchObject({ status: 404 });
     input.identity.name = "Different name";
     await expect(fake.startEnrichment(ctx(input))).rejects.toMatchObject({ code: "selection_stale" });
+  });
+
+  it("does not overwrite page-one answers saved by another tab", async () => {
+    await fake.saveEnrichmentIdentity(ctx({ ...enrichmentIdentity, name: "Newer tab's answer" }));
+    await expect(fake.startEnrichment(ctx(enrichmentStart()))).rejects.toMatchObject({ code: "selection_stale" });
+    expect((await fake.enrichmentState(ctx())).identity?.name).toBe("Newer tab's answer");
   });
   it("snapshots four sources, connects claims to excerpts and requires explicit approval", async () => {
     const a = await discover("research"), p = await discover("public_profile");

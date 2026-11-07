@@ -231,6 +231,8 @@ export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
       if (previous.fingerprint !== digest) fail("idempotency_conflict");
       return structuredClone(jobFor(userId, previous.value.jobId).value);
     }
+    const currentIdentity = state().identities.get(userId);
+    if (currentIdentity && fingerprint(currentIdentity) !== fingerprint(body.identity)) fail("selection_stale");
     const sources = selectedSources(userId, body);
     for (const old of state().jobs.values()) if (old.owner === userId && !["accepted","cancelled","superseded"].includes(old.value.state)) discard(old, "superseded", body.cv?.uploadId);
     versions(userId).generation++;

@@ -1,6 +1,6 @@
 # Profile enrichment foundation: revised contract and handoff
 
-Status: proposal for Claude's CONTRACT ACK; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. This branch still starts from main `dde538d` and requires #44 plus Claude's nullable-handle compatibility commit `ad0c26f` before its typecheck can pass on main. No feature PR has been opened or merged.
+Status: proposal for Claude's CONTRACT ACK; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. Main advanced to `1f763c7` while this revision was built: #44, #45 and the gate update #46 are merged and included here. Claude's nullable-handle compatibility commit `ad0c26f` is still needed before typecheck passes on main. No feature PR has been opened or merged by Codex.
 
 Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-plan/db/Profile-Enrichment-Plan.md), AGENTS.md and the quality gates. The user's 7 November decision supersedes GitHub-only authentication: **Google or GitHub sign-in, no ORCID sign-in**. Research still reads OpenAlex.
 
@@ -93,9 +93,9 @@ Existing demo A/B handles remain unchanged.
 
 ## Coordination and gates
 
-1. Review/merge #44 separately, then Claude's `a1/nullable-handle` compatibility patch.
+1. #44/#45 are now merged. Review/merge Claude's `a1/nullable-handle` compatibility patch next.
 2. Both people review this foundation and Claude returns CONTRACT ACK. Its nullable type intentionally exposes old screen callers until that patch lands. No screen files are changed by Codex.
-3. Rebase/retest against the resulting exact main; get user approval before opening the foundation PR. No gate bypass.
+3. Update/retest against the resulting exact main; get user approval before opening the foundation PR. Main now requires five checks including Feature sign-off; this breaking identity/consent change needs the other person's approval. No gate bypass.
 4. After the foundation merges, parallel backend and frontend/B1 implementation from the same commit, behind PROFILE_ENRICHMENT_ENABLED=0.
 5. Claude owns UI/e2e tests. The flag-on Playwright configuration/specs from request 18 still require the agreed config owner/approval and must land with the frontend; no empty “passing” browser gate is added before screens exist. Existing flag-off browser checks remain required.
 6. Account setup, migration, cleanup and live acceptance remain user-controlled. Ask before any live providers or paid tests.
