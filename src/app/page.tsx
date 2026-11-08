@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import "@/components/ui/convo.css";
 import { HeroBadge } from "@/components/ui/hero-badge";
-import { LogoMark } from "@/components/ui/logo";
+import { Wordmark } from "@/components/ui/logo";
 import { convoThemeClass } from "@/components/ui/theme";
 
 /**
@@ -13,9 +13,9 @@ export default function Home() {
     <div className={`${convoThemeClass} flex flex-1 flex-col`}>
       <main className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-10 px-4 py-12 md:grid-cols-[minmax(0,1fr)_auto] md:gap-16">
         <div className="flex flex-col gap-6">
-          <LogoMark className="size-14" />
-          <h1 className="text-[3rem] font-extrabold leading-none tracking-[-0.03em] [font-stretch:85%] sm:text-7xl">
-            Lanyard
+          {/* The name is the logo: its y is the badge on its strap. */}
+          <h1 className="text-[3.5rem] font-extrabold leading-none tracking-[-0.03em] [font-stretch:85%] sm:text-8xl">
+            <Wordmark />
           </h1>
           <p className="max-w-xl text-xl text-muted">
             Ask one question. Meet the few people at the conference who can actually answer it.

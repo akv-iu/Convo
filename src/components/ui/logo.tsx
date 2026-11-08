@@ -26,3 +26,35 @@ export function Logo({ className = "" }: { className?: string }) {
     </span>
   );
 }
+
+/**
+ * "Lanyard" with the logo as its y: a thicker strap makes the V of the letter's top half, and the
+ * badge hangs below as its tail. Sized in em, so it follows the heading's font size. Screen
+ * readers get the plain word.
+ */
+export function Wordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={className}>
+      <span className="sr-only">Lanyard</span>
+      <span aria-hidden="true" className="whitespace-nowrap">
+        Lan
+        <svg
+          viewBox="0 0 60 100"
+          focusable="false"
+          className="mx-[0.01em] inline-block h-[0.98em] w-[0.6em] align-[-0.4em]"
+        >
+          {/* The strap: the y's two arms, meeting at the clip. */}
+          <path d="M8 6 30 45 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="22" y="40" width="16" height="11" rx="3" fill="currentColor" />
+          {/* The badge: the y's tail. */}
+          <rect x="11" y="49" width="38" height="48" rx="7" fill="var(--accent)" />
+          <path d="M11 56a7 7 0 0 1 7-7h24a7 7 0 0 1 7 7v4H11z" fill="var(--logo-stripe)" />
+          <circle cx="23" cy="76" r="6" fill="var(--on-accent)" />
+          <rect x="33" y="71" width="11" height="4" rx="2" fill="var(--on-accent)" />
+          <rect x="33" y="79" width="8" height="4" rx="2" fill="var(--on-accent)" />
+        </svg>
+        ard
+      </span>
+    </span>
+  );
+}
