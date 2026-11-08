@@ -94,6 +94,17 @@ export const Ask = z.object({
 });
 export type Ask = z.infer<typeof Ask>;
 
+/**
+ * One piece of evidence behind a match, for the open profile: what it is, its title, and a
+ * link when it has a public https one (other schemes are dropped before they get here).
+ */
+export const MatchEvidence = z.object({
+  kind: EvidenceKind,
+  title: z.string(),
+  url: z.string().url().startsWith("https://").optional(),
+});
+export type MatchEvidence = z.infer<typeof MatchEvidence>;
+
 export const MatchResult = z.object({
   person: CardPerson,
   /**
@@ -101,6 +112,8 @@ export const MatchResult = z.object({
    * <em>…</em>; render everything as text and treat only those two tags as marks.
    */
   highlights: z.array(z.string()),
+  /** The evidence behind the match, best match first (the search's order), at most 5. */
+  evidence: z.array(MatchEvidence).max(5),
   /** Hard-filter badges, e.g. "not hiring". */
   badges: z.array(z.string()),
   /** True when this person's own asks match the requester. */

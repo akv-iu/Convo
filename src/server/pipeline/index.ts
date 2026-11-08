@@ -78,13 +78,15 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
     .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank))
     .slice(0, SHOWN);
 
-  // The model reads plain evidence; the card keeps the <em> marks on matched words.
+  // The model reads plain evidence lines only (not the evidence links), so its cache keys don't
+  // change; the card keeps the <em> marks on matched words.
   const explanations = await step("explain", () =>
-    ai.explain(refined, shown.map((c) => ({ ...c, highlights: c.highlights.map(plain) }))));
+    ai.explain(refined, shown.map((c) => ({ person: c.person, highlights: c.highlights.map(plain), evidence: [], score: c.score }))));
 
   return shown.map((c, i) => ({
     person: c.person,
     highlights: c.highlights,
+    evidence: c.evidence,
     badges: badgesFor(c.person),
     mutual: mutual.has(c.person.id),
     explanation: explanations[i] ?? "",

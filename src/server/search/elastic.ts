@@ -9,7 +9,8 @@
  * an older save can never overwrite a newer one.
  */
 import { Client, errors, type estypes } from "@elastic/elasticsearch";
-import { Person, type EvidenceDoc, type TimeBlock } from "@/contracts/types";
+import { Person, type EvidenceDoc, type MatchEvidence, type TimeBlock } from "@/contracts/types";
+import { addEvidence } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
 export const INDEX = { people: "people", evidence: "evidence", asks: "asks" } as const;
@@ -186,27 +187,31 @@ function highlightLine(hit: estypes.SearchHit<EvidenceSource>): string | undefin
   return snippet ? `${doc.title}: ${snippet}` : doc.title;
 }
 
-/** Group the ranked hits by person (best first), attach up to three evidence lines, score 0 to 5. */
+/**
+ * Group the ranked hits by person (best first), attach up to three evidence lines and, in the
+ * same pass, up to five evidence items with their links; score 0 to 5.
+ */
 async function toCandidates(es: Client, hits: estypes.SearchHit<EvidenceSource>[], limit: number): Promise<Candidate[]> {
-  const byPerson = new Map<string, { score: number; highlights: string[] }>();
+  const byPerson = new Map<string, { score: number; highlights: string[]; evidence: MatchEvidence[] }>();
   for (const hit of hits) {
     const personId = hit._source?.person_id;
     if (!personId) continue;
     let entry = byPerson.get(personId);
     if (!entry) {
       if (byPerson.size >= limit) continue;
-      entry = { score: hit._score ?? 0, highlights: [] };
+      entry = { score: hit._score ?? 0, highlights: [], evidence: [] };
       byPerson.set(personId, entry);
     }
     const line = highlightLine(hit);
     if (line && entry.highlights.length < 3 && !entry.highlights.includes(line)) entry.highlights.push(line);
+    if (hit._source) addEvidence(entry.evidence, hit._source);
   }
   if (!byPerson.size) return [];
   const people = await fetchPeople(es, [...byPerson.keys()]);
   const top = Math.max(...[...byPerson.values()].map((e) => e.score), Number.EPSILON);
   return [...byPerson.entries()].flatMap(([id, entry]) => {
     const person = people.get(id);
-    return person ? [{ person, highlights: entry.highlights, score: Math.round((5000 * entry.score) / top) / 1000 }] : [];
+    return person ? [{ person, highlights: entry.highlights, evidence: entry.evidence, score: Math.round((5000 * entry.score) / top) / 1000 }] : [];
   });
 }
 
@@ -286,7 +291,7 @@ export const elasticSearch: SearchService = {
   async searchCandidates(query, filters, limit = 10) {
     const es = client();
     const request = (retriever: estypes.RetrieverContainer) => es.search<EvidenceSource>({
-      index: INDEX.evidence, size: WINDOW, retriever, _source: ["person_id", "kind", "title", "text"], allow_partial_search_results: false,
+      index: INDEX.evidence, size: WINDOW, retriever, _source: ["person_id", "kind", "title", "text", "url"], allow_partial_search_results: false,
       highlight: {
         highlight_query: { multi_match: { query, fields: ["title", "text"] } },
         fields: { text: { number_of_fragments: 1, fragment_size: 160 } },

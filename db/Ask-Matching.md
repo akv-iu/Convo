@@ -19,6 +19,37 @@ Production stays in fake mode until the integration checkpoint.
   containing the word "idiot" gets the same 422, for building that screen.
 - Each refinement submission creates a new ask. Keep its ID for subsequent
   matching requests. Disable duplicate submissions while a save is pending.
+
+### Asking as written; sharpening optional
+
+The ask screen no longer calls `/api/refine` (scripts and tests still use it).
+
+- **`POST /api/refine/preview`** takes `{ text }` (trimmed, 3 to 500
+  characters) and returns `{ refined: { text, type, minutes } }`. It saves
+  nothing, registers nothing for matching and starts no background match. A
+  flagged ask returns 422 with the usual message, and an AI failure returns a
+  sanitized 503.
+- **`POST /api/asks`** takes `{ text, type?, minutes? }`. `type` defaults to
+  `knowledge`, and `minutes` to 5 (an integer from 5 to 30). It saves the text
+  **exactly as given**, with no rewrite, as `raw_text` and as
+  `refined: { text, type, minutes }`. Setting `refined` matters, because
+  `runMatch` calls the AI on `raw_text` whenever `refined` is null. The soft
+  blocker starts off. It returns `{ askId, ask }`, the saved ask. After saving,
+  it registers the ask for matching and warms the first match, as `/api/refine`
+  does.
+- **Moderation still runs** on a saved ask, as its own step:
+  `AiService.moderate(text)`.
+  - The OpenAI version calls the moderation model only and caches the verdict
+    (`{ blocked }`) in `ai_cache` under kind `moderate`, keyed by the moderation
+    model and the trimmed text. `kind` is a text column, so this needs no
+    migration.
+  - A flagged ask returns 422 and nothing is saved.
+  - If the check itself fails, the ask is refused with a 503 rather than saved
+    unchecked.
+  - With `FAKE_API=1` or `FAKES=ai`, "idiot" is flagged as before.
+- **The screen** sends what's in the box: the asker's words, or an AI suggestion
+  they kept or edited. "Use my original" puts their words back.
+  Ctrl/Cmd+Enter sends.
 - After `/api/refine` responds, the real backend starts that ask's first match
   in the background, as a best effort (about 3.5 s). If it finishes before the
   asker opens the results, `/api/match` reuses its cached AI explanations
@@ -30,7 +61,14 @@ Production stays in fake mode until the integration checkpoint.
 - `/api/match` accepts `{ askId, query? }`, loads the owned ask and current
   profile, reads its persisted rejections, and calls the existing four-span
   pipeline. Matches conform to the frozen schema, including highlights,
-  explanation, rank, badges and mutual-interest flag. The optional query is
+  explanation, rank, badges and mutual-interest flag. Each match also carries
+  `evidence: { kind, title, url? }[]`: the person's distinct evidence in the
+  search's order, at most five. Only `https://` links are kept; a document with
+  any other link, or none, keeps its title without one. Elasticsearch reads
+  `url` with the hits it already fetches (no extra calls), and the generated
+  `profile` document is left out. Because search collapses to one hit per
+  person in each retriever, a real match usually lists one or two items. The
+  explain step never sees evidence links, so its cache keys are unchanged. The optional query is
   passed to B1's pipeline; it does not modify the saved question.
 - Missing asks and asks owned by another user both return 404. Signed-out calls
   return 401. Storage, invalid provider replies and pipeline failures return

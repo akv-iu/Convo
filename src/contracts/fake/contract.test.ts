@@ -95,6 +95,14 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     }
   });
 
+  it("lists each match's evidence, best first, with only https links", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const results = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId })));
+    expect(results.every((r) => r.evidence.length <= 5 && r.evidence.every((e) => !e.url || e.url.startsWith("https://")))).toBe(true);
+    const b = results.find((r) => r.person.id === DEMO_USER_B);
+    expect(b?.evidence[0]).toMatchObject({ kind: "commit_area", url: expect.stringMatching(/^https:\/\/github\.com\//) });
+  });
+
   it("marks mutual interest and counts who is looking for you", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const results = await api.match(ctx(DEMO_USER_A, { askId }));
@@ -167,6 +175,39 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     [mine] = await api.sentRequests(ctx(DEMO_USER_A));
     expect(mine).toMatchObject({ status: "answered", reply: "Use priority classes." });
     expect(await api.sentRequests(ctx(DEMO_USER_B))).toEqual([]);
+  });
+
+  it("previews a sharper question without saving or registering an ask", async () => {
+    const before = store.get().asks.size;
+    const preview = routes.previewRefine.response.parse(await api.previewRefine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw })));
+    expect(preview.refined.text).toContain(sampleAsks[0].raw.replace(/[.?!]+$/, ""));
+    expect(store.get().asks.size).toBe(before);
+    await expect(api.previewRefine(ctx(DEMO_USER_A, { text: "you idiot" }))).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("saves an ask exactly as written, with the defaults, and it matches like any other", async () => {
+    const text = "How do you size etcd for a 500-node cluster?";
+    const saved = routes.saveAsk.response.parse(await api.saveAsk(ctx(DEMO_USER_A, { text })));
+    expect(saved.ask).toMatchObject({ id: saved.askId, userId: DEMO_USER_A, rawText: text, status: "open", softBlocker: false });
+    expect(saved.ask.refined).toEqual({ text, type: "knowledge", minutes: 5 });
+    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: saved.askId }))).toEqual(saved.ask);
+    expect(Array.isArray(await api.match(ctx(DEMO_USER_A, { askId: saved.askId })))).toBe(true);
+    const chosen = await api.saveAsk(ctx(DEMO_USER_A, { text, type: "collaboration", minutes: 15 }));
+    expect(chosen.ask.refined).toEqual({ text, type: "collaboration", minutes: 15 });
+    const before = store.get().asks.size;
+    await expect(api.saveAsk(ctx(DEMO_USER_A, { text: "you idiot" }))).rejects.toMatchObject({ status: 422 });
+    expect(store.get().asks.size).toBe(before);
+  });
+
+  it("checks the as-written bodies at the contract", () => {
+    expect(routes.saveAsk.body.parse({ text: "  Hi there  " })).toEqual({ text: "Hi there" });
+    expect(routes.saveAsk.body.safeParse({ text: "  ok  " }).success).toBe(false); // trimmed below 3
+    expect(routes.saveAsk.body.safeParse({ text: "x".repeat(501) }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", type: "gossip" }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 4 }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 31 }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 7.5 }).success).toBe(false);
+    expect(routes.previewRefine.body.safeParse({ text: "x".repeat(501) }).success).toBe(false);
   });
 
   it("reads back the caller's own ask, including its soft-blocker setting", async () => {

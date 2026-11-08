@@ -6,6 +6,7 @@
 import { z } from "zod";
 import {
   Ask,
+  AskType,
   MatchResult,
   Person,
   RefinedAsk,
@@ -32,6 +33,12 @@ export interface RouteDef {
 function def<const D extends RouteDef>(d: D): D {
   return d;
 }
+
+/** Bounds on an ask's text as the asker writes it (the ask box uses the same maximum). */
+export const ASK_TEXT_MIN = 3;
+export const ASK_TEXT_MAX = 500;
+/** An ask's text as written: trimmed, then 3 to 500 characters. */
+const AskText = z.string().trim().min(ASK_TEXT_MIN).max(ASK_TEXT_MAX);
 
 export const routes = {
   getMe: def({
@@ -78,6 +85,26 @@ export const routes = {
     usedBy: "A1",
     body: z.object({ text: z.string().min(3) }),
     response: z.object({ askId: z.string(), refined: RefinedAsk }),
+  }),
+  previewRefine: def({
+    method: "POST",
+    path: "/api/refine/preview",
+    description:
+      "Suggest a sharper question, its type and a meeting length. Saves nothing and registers nothing. " +
+      "422 if moderation flags the text; 503 if the AI is unavailable.",
+    usedBy: "A1",
+    body: z.object({ text: AskText }),
+    response: z.object({ refined: RefinedAsk }),
+  }),
+  saveAsk: def({
+    method: "POST",
+    path: "/api/asks",
+    description:
+      "Save the question exactly as given, with no rewrite: the asker's words, or a suggestion they kept or edited. " +
+      "Type defaults to knowledge and minutes to 5. Moderation still runs: 422 if flagged, 503 if the check is unavailable.",
+    usedBy: "A1",
+    body: z.object({ text: AskText, type: AskType.optional(), minutes: z.number().int().min(5).max(30).optional() }),
+    response: z.object({ askId: z.string(), ask: Ask }),
   }),
   match: def({
     method: "POST",

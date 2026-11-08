@@ -3,8 +3,8 @@ import { people } from "@/contracts/fixtures";
 import { routes } from "@/contracts/routes";
 import type { Ask } from "@/contracts/types";
 
-const { query, getProfile, refineAsk, registerAsk, runMatch, after, afterTasks } = vi.hoisted(() => ({
-  query: vi.fn(), getProfile: vi.fn(), refineAsk: vi.fn(), registerAsk: vi.fn(), runMatch: vi.fn(),
+const { query, getProfile, refineAsk, moderate, registerAsk, runMatch, after, afterTasks } = vi.hoisted(() => ({
+  query: vi.fn(), getProfile: vi.fn(), refineAsk: vi.fn(), moderate: vi.fn(), registerAsk: vi.fn(), runMatch: vi.fn(),
   after: vi.fn(), afterTasks: [] as (() => Promise<unknown>)[],
 }));
 vi.mock("@neondatabase/serverless", async (importOriginal) => ({
@@ -12,11 +12,11 @@ vi.mock("@neondatabase/serverless", async (importOriginal) => ({
 }));
 vi.mock("next/server", async (importOriginal) => ({ ...await importOriginal<typeof import("next/server")>(), after }));
 vi.mock("@/server/profile/service", () => ({ getProfile }));
-vi.mock("@/server/ai", async () => ({ ai: { refineAsk }, ...await import("@/server/ai/blocked") }));
+vi.mock("@/server/ai", async () => ({ ai: { refineAsk, moderate }, ...await import("@/server/ai/blocked") }));
 vi.mock("@/server/search", () => ({ search: { registerAsk } }));
 vi.mock("@/server/pipeline", () => ({ runMatch }));
 import { AskBlockedError } from "@/server/ai/blocked";
-import { createAsk, matchAsk } from "./asks";
+import { createAsk, matchAsk, previewAsk, saveAskAsWritten } from "./asks";
 
 const person = people[0];
 const refined = { text: "How does scheduler preemption work?", type: "knowledge" as const, minutes: 10 };
@@ -31,6 +31,7 @@ beforeEach(() => {
   query.mockReset().mockResolvedValue({ rows: [] });
   getProfile.mockReset().mockResolvedValue(person);
   refineAsk.mockReset().mockResolvedValue(refined);
+  moderate.mockReset().mockResolvedValue(undefined);
   registerAsk.mockReset().mockResolvedValue(undefined);
   runMatch.mockReset().mockResolvedValue([]);
   afterTasks.length = 0;
@@ -144,6 +145,90 @@ describe("durable ask creation", () => {
   });
 });
 
+describe("previewing a sharper question", () => {
+  it("returns the suggestion and saves, registers and matches nothing", async () => {
+    await expect(previewAsk(person.id, "  scheduler preemption  ")).resolves.toEqual({ refined });
+    expect(refineAsk).toHaveBeenCalledWith("scheduler preemption", person);
+    expect(query).not.toHaveBeenCalled();
+    expect(registerAsk).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("passes a blocked ask on as 422 and sanitizes other AI failures as 503", async () => {
+    refineAsk.mockRejectedValueOnce(new AskBlockedError());
+    await expect(previewAsk(person.id, "an offensive ask")).rejects.toMatchObject({ status: 422 });
+    refineAsk.mockRejectedValueOnce(new Error("private-provider-key"));
+    const error = await previewAsk(person.id, "scheduler preemption").catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-provider-key");
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it.each(["  ", "x".repeat(501)])("refuses text outside 3 to 500 characters before calling anything", async (text) => {
+    await expect(previewAsk(person.id, text)).rejects.toMatchObject({ status: 400 });
+    expect(getProfile).not.toHaveBeenCalled();
+    expect(refineAsk).not.toHaveBeenCalled();
+  });
+});
+
+describe("saving an ask as written", () => {
+  it("stores exactly the given text with the defaults, then registers it and warms the first match", async () => {
+    registerAsk.mockImplementationOnce(async () => {
+      expect(query).toHaveBeenCalledOnce(); // saved before it's registered
+    });
+    const saved = await saveAskAsWritten(person.id, { text: "  how does Raft do the voting thing  " });
+    const asWritten = { text: "how does Raft do the voting thing", type: "knowledge", minutes: 5 };
+    expect(routes.saveAsk.response.parse(saved)).toEqual({
+      askId: expect.any(String),
+      ask: { id: saved.askId, userId: person.id, rawText: asWritten.text, refined: asWritten, status: "open", softBlocker: false, createdAt: expect.any(String) },
+    });
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toContain('insert into "asks"');
+    expect(params).toEqual(expect.arrayContaining([saved.askId, person.id, asWritten.text, JSON.stringify(asWritten), false]));
+    expect(moderate).toHaveBeenCalledWith(asWritten.text);
+    expect(refineAsk).not.toHaveBeenCalled(); // no rewrite
+    expect(registerAsk).toHaveBeenCalledWith(saved.askId, person.id, asWritten.text);
+    expect(after).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a chosen type and length", async () => {
+    const saved = await saveAskAsWritten(person.id, { text: "Would you mentor me?", type: "career", minutes: 15 });
+    expect(saved.ask.refined).toEqual({ text: "Would you mentor me?", type: "career", minutes: 15 });
+  });
+
+  it("refuses a flagged ask with 422 and saves nothing", async () => {
+    moderate.mockRejectedValueOnce(new AskBlockedError());
+    await expect(saveAskAsWritten(person.id, { text: "an offensive ask" })).rejects.toMatchObject({ status: 422, message: new AskBlockedError().message });
+    expect(query).not.toHaveBeenCalled();
+    expect(registerAsk).not.toHaveBeenCalled();
+  });
+
+  it("refuses with a sanitized 503 when moderation is unavailable, rather than saving unchecked", async () => {
+    moderate.mockRejectedValueOnce(new Error("private-provider-key"));
+    const error = await saveAskAsWritten(person.id, { text: "scheduler preemption" }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-provider-key");
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed save as 503 and registers nothing", async () => {
+    query.mockRejectedValueOnce(new Error("private-database-url"));
+    const error = await saveAskAsWritten(person.id, { text: "scheduler preemption" }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 503 });
+    expect(String(error)).not.toContain("private-database-url");
+    expect(registerAsk).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("requires a completed profile and valid text before moderation or storage", async () => {
+    await expect(saveAskAsWritten(person.id, { text: "hi" })).rejects.toMatchObject({ status: 400 });
+    getProfile.mockRejectedValueOnce(Object.assign(new Error("Complete onboarding first"), { status: 409 }));
+    await expect(saveAskAsWritten(person.id, { text: "scheduler preemption" })).rejects.toMatchObject({ status: 409 });
+    expect(moderate).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
 describe("matching a saved ask", () => {
   it("repairs a saved ask after registration failed without saving or refining again", async () => {
     registerAsk.mockRejectedValueOnce(new Error("private-search-token"));
@@ -245,7 +330,7 @@ describe("matching a saved ask", () => {
     const ready = { ...person, id: "ready-evidence", synthetic: false };
     const visible = { country: true, workplace: true, hiring: true };
     runMatch.mockResolvedValueOnce([pending, ready].map((candidate, rank) => ({ person: candidate,
-      badges: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
+      badges: [], evidence: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
         [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
@@ -257,7 +342,7 @@ describe("matching a saved ask", () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
     const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
-    runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const [card] = await matchAsk(person.id, ask.id);
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
@@ -268,7 +353,7 @@ describe("matching a saved ask", () => {
 
   it("fails closed when a real candidate's current privacy cannot be loaded", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });
-    runMatch.mockResolvedValueOnce([{ person: { ...person, synthetic: false }, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person: { ...person, synthetic: false }, badges: [], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     expect((await matchAsk(person.id, ask.id))[0].person.filters).toEqual({ country: null, rorId: null, hiring: null });
   });
 
@@ -276,7 +361,7 @@ describe("matching a saved ask", () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(new Error("private-database-token"));
-    runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person, badges: [], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-token");
