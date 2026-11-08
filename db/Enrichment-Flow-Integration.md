@@ -7,7 +7,7 @@ Status: frontend development integration on `b/enrichment-flow-integration`. It 
 - `origin/main` 576692d.
 - Pages 3–4 `b/profile-enrichment-preferences` d6ef30a. This already contains the foundation 87ae076 and pages 1–2 `b/profile-enrichment-screens` 8eb3f0a.
 - Page 5 `b/profile-enrichment-review` c157619.
-- Claude 1's backend checkpoint `b/enrichment-backend-integration` 0151790.
+- Claude 1's final backend checkpoint `b/enrichment-backend-integration` 411e086 (first merged at 0151790; the later commits add only the referee-heading CV fix and backend docs, with no contract, fake, screen or test-config change).
 
 All merges were conflict-free. The checkpoint changes no contract or fake file and no Playwright config. It adds the CV parser dependencies, so run `npm ci` after pulling.
 
@@ -65,6 +65,21 @@ Commands:
 npx vitest run "src/app/(onboarding)"
 $env:CI="1"; npx playwright test -c playwright.flag-check.config.ts tests/e2e/enrichment --workers=2 --retries=0 --reporter=list
 ```
+
+## Central testing handoff (final backend checkpoint)
+
+After merging 411e086, checked again on the merged branch:
+
+- **Draft-edit preservation finding: resolved.**
+  - The editor remounts per draft version (`key=jobId:draftVersion`) and starts from `carryEdits(draft, readKept(jobId))`. Edits are saved on every change.
+  - A retry keeps them (only approve and discard clear them). "Load the latest" after `draft_superseded`, `consent_changed` or `invalid_input` remounts with the kept edits.
+  - An edited bio or expertise list wins over the newer draft. Picks survive only for evidence still in the draft, and deselections stay deselected. Evidence new to the person starts as usual, so new CV excerpts stay unticked.
+  - Covered by the `carryEdits`/`keepEdits` unit tests and the browser test "edits survive a retry, a newer draft and a reload".
+- **Contract:** every screen call goes through the contract routes in `signin/sources/api.ts`, validated with the contract schemas. The backend checkpoint changes no contract or fake file, so the fake-backed browser results apply to the same shapes the real routes return.
+- **Tests run here, under the single-pass workflow:**
+  - `npx vitest run "src/app/(onboarding)/onboarding/profile"`: 27 passed.
+  - `review.spec.ts` (flag on, fake API, axe on light and dark, phone and laptop): 28 passed.
+- **Reused:** the full flag-on enrichment browser run on 8e03503 passed (`.last-run.json`: passed, no failures). Nothing on screens changed since, so it wasn't repeated.
 
 ## Live acceptance checklist (not run; needs your authorization)
 
