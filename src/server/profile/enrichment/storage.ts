@@ -28,8 +28,10 @@ export async function mutateOwner<T>(userId: string, change: (data: OwnerData) =
       const before = row ? JSON.stringify(data) : null;
       const result = change(data);
       const checked = OwnerData.parse(data);
-      if (before === JSON.stringify(checked)) return structuredClone(result);
       const deadline = nextSweepAt(checked);
+      // Unchanged and correctly scheduled: no write. A stale stored deadline is rewritten even when the
+      // document is unchanged, or cleanup would select the same row first on every run.
+      if (before === JSON.stringify(checked) && (row?.nextSweepAt?.getTime() ?? null) === (deadline?.getTime() ?? null)) return structuredClone(result);
       const removed = previousKeys.filter(key => !cacheKeys(checked).includes(key));
       const saved = row && removed.length
         ? (await db().execute<{userId:string}>(sql`with saved as (

@@ -1,6 +1,7 @@
 /**
  * The scheduled cleanup route over the real cleanup kernel (state.ts) with an in-memory stand-in for
- * Postgres storage that keeps storage.ts's contract: unchanged documents are not rewritten, due owners
+ * Postgres storage that keeps storage.ts's contract: unchanged, correctly scheduled documents are not
+ * rewritten (a stale deadline is), due owners
  * come oldest deadline first in batches of 25, a deferral moves only a due row, and a saved change
  * deletes the job's discarded synthesis cache keys with it.
  */
@@ -31,10 +32,11 @@ vi.mock("@/server/profile/enrichment/storage", async (actual) => {
       const before = row ? JSON.stringify(data) : null;
       const result = change(data);
       const checked = OwnerData.parse(data);
-      if (before === JSON.stringify(checked)) return structuredClone(result); // as storage.ts: no write, no new deadline
+      const deadline = real.nextSweepAt(checked)?.getTime() ?? null;
+      if (before === JSON.stringify(checked) && row?.nextSweepAt === deadline) return structuredClone(result); // as storage.ts
       const removed = row ? cacheKeys(row.document).filter((key) => !cacheKeys(checked).includes(key)) : [];
       for (const key of removed) if (key.startsWith(profileCachePrefix(owner))) db.cache.delete(key);
-      db.rows.set(owner, { document: checked, nextSweepAt: real.nextSweepAt(checked)?.getTime() ?? null });
+      db.rows.set(owner, { document: checked, nextSweepAt: deadline });
       return structuredClone(result);
     },
     async ownersDueForCleanup(limit = 25): Promise<string[]> {
@@ -189,6 +191,19 @@ describe("partial failures", () => {
     const result = await body(await authorized());
     expect(result).toMatchObject({ status: 503, json: { status: "failed", processed: 0, failed: 0 } });
     expect(result.text).not.toMatch(/provider|google:/);
+  });
+
+  it("is not starved by rows whose stored deadline is stale but have nothing to expire", async () => {
+    for (let i = 0; i < 30; i++) db.rows.set(`google:stale-${i}`, { document: emptyOwnerData(), nextSweepAt: start - 3_600_000 });
+    await stageCv("google:expired");
+    vi.setSystemTime(start + INPUT_TTL_MS + 60_000);
+
+    const result = await body(await authorized());
+
+    expect(result).toMatchObject({ status: 200, json: { status: "complete", processed: 31, failed: 0, stoppedEarly: false } });
+    expect(db.rows.get("google:expired")!.document.cv).toBeNull();
+    // Every row is rescheduled: none is left due to be picked first again.
+    expect([...db.rows.values()].every((row) => row.nextSweepAt === null || row.nextSweepAt > Date.now())).toBe(true);
   });
 
   it("stops starting batches at its time budget and says work may remain", async () => {

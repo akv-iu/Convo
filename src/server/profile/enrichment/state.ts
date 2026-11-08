@@ -298,6 +298,9 @@ export function finishDraft(owner: string, id: string, token: string,
     const failed = job.value.sources.some(s => s.status === "failed");
     job.value.state = job.collected.length ? failed ? "partial" : "ready" : failed ? "failed" : "manual";
     job.value.phase = "done"; job.lease = null;
+    // Nothing to review and manual can't be retried: drop the private input now rather than holding it
+    // (and a due cleanup deadline that expire() would never clear) until the job's history ends.
+    if (job.value.state === "manual") { job.input = null; job.collected = []; }
     return job.value;
   });
 }

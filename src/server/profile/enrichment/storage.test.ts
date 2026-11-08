@@ -101,3 +101,21 @@ it("deletes discarded synthesis cache keys in the same version-guarded statement
   expect(statement).toContain('delete from "ai_cache"'); expect(statement).toContain("exists (select 1 from saved)");
   expect(params).toContain(JSON.stringify(["profile:owner:hash"]));
 });
+it("rewrites a stale cleanup deadline even when the document itself is unchanged", async () => {
+  // Due since yesterday, but nothing in the document expires: without a rewrite the row is picked first forever.
+  const stale = new Date(Date.now() - 86_400_000).toISOString();
+  mocks.query.mockResolvedValueOnce({ rows: [[owner, 3, JSON.stringify(emptyOwnerData()), stale]] }).mockResolvedValueOnce({ rows: [[owner]] });
+  await mutateOwner(owner, () => undefined);
+  expect(mocks.query).toHaveBeenCalledTimes(2);
+  const [statement, parameters] = mocks.query.mock.calls[1];
+  expect(statement).toMatch(/^update "profile_enrichment_states" set .*"next_sweep_at" = \$\d+/);
+  expect(parameters).toContain(null); // nothing left to expire: no deadline
+  expect(parameters.slice(-2)).toEqual([owner, 3]); // version-guarded like every write
+});
+it("leaves an unchanged row with a correct deadline untouched", async () => {
+  const deadline = new Date(Date.now() + INPUT_TTL_MS);
+  const data = { ...emptyOwnerData(), cv: { metadata: { uploadId: "u", filename: null, characters: 1, warnings: [], expiresAt: deadline.toISOString() }, text: "x" } };
+  mocks.query.mockResolvedValueOnce({ rows: [[owner, 3, JSON.stringify(data), deadline.toISOString()]] });
+  await mutateOwner(owner, () => undefined);
+  expect(mocks.query).toHaveBeenCalledTimes(1);
+});

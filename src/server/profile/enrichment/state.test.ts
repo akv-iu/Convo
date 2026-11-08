@@ -233,3 +233,15 @@ it("resumes the writing phase without losing successfully collected sources", as
   expect(retried.collected).toEqual([evidence()]);
   expect(retried.value.sources.find(s => s.source === "public_profile")?.status).toBe("done");
 });
+it("keeps no private input once an all-empty import finishes manual, so cleanup has nothing left to find", async () => {
+  const job = await createJob(owner, activeInput(), null); const lease = await claimJob(owner, job.jobId);
+  await recordCollection(owner, job.jobId, lease.token, lease.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "empty" as const, items: 0 }), []);
+  expect(await finishDraft(owner, job.jobId, lease.token, { bio: "", bioEvidenceIds: [], expertise: [] })).toMatchObject({ state: "manual", draft: null });
+  const stored = mocks.data.get(owner)!.jobs[0];
+  expect(stored).toMatchObject({ input: null, collected: [], lease: null });
+  expect(JSON.stringify(mocks.data.get(owner))).not.toContain("Private page input");
+  // Past the input lifetime the row is not due again until its metadata history ends.
+  vi.setSystemTime(Date.now() + INPUT_TTL_MS + 60_000);
+  const { nextSweepAt } = await vi.importActual<typeof import("./storage")>("./storage");
+  expect(nextSweepAt(mocks.data.get(owner)!)!.getTime()).toBeGreaterThan(Date.now());
+});
