@@ -105,12 +105,36 @@ export function removeCv(owner: string, uploadId: string) {
     return { removed: true as const };
   });
 }
-export function recordDiscovery(owner: string, input: RouteBody<"discoverEnrichment">, value: RouteResponse<"discoverEnrichment">) {
+/** How long page two can use a candidate list before searching again. */
+export const DISCOVERY_TTL_MS = 60 * 60 * 1000;
+type Searched = Pick<RouteBody<"discoverEnrichment">, "name" | "workplaceName" | "rorId" | "orcid">;
+const searched = ({ name, workplaceName, rorId, orcid }: Searched) => fingerprint({ name, workplaceName, rorId, orcid });
+/** A search must use the owner's saved page-one identity (country isn't searched). */
+function confirmedLookup(data: OwnerData, lookup: Searched) {
+  if (!data.identity || searched(data.identity) !== searched(lookup)) enrichmentError("selection_stale");
+}
+/**
+ * Counts a search before any provider is contacted, so failed and abandoned
+ * searches use the limit too. Returns the consent generation the result must still match.
+ */
+export function reserveDiscovery(owner: string, input: RouteBody<"discoverEnrichment">) {
+  const lookup = DiscoverEnrichment.parse(input);
+  return mutate(owner, data => { confirmedLookup(data, lookup); rate(data, "discovery", 12); return data.generation; });
+}
+/**
+ * Keeps a finished search, unless an identity change, a start or a withdrawal
+ * happened while it ran. Only results with candidates are kept; when full, the
+ * oldest list from the same source goes first, so the other source's list stays usable.
+ */
+export function recordDiscovery(owner: string, input: RouteBody<"discoverEnrichment">, value: RouteResponse<"discoverEnrichment">, generation: number) {
   const lookup = DiscoverEnrichment.parse(input); const result = EnrichmentDiscovery.parse(value);
-  if (lookup.source !== result.source || Date.parse(result.expiresAt) <= Date.now()) enrichmentError("invalid_input", 400);
+  const expires = Date.parse(result.expiresAt);
+  if (lookup.source !== result.source || expires <= Date.now() || expires > Date.now() + DISCOVERY_TTL_MS) enrichmentError("invalid_input", 400);
   return mutate(owner, data => {
-    rate(data, "discovery", 12);
-    if (data.discoveries.length >= 16) data.discoveries.shift();
+    if (data.generation !== generation) enrichmentError("selection_stale");
+    confirmedLookup(data, lookup);
+    if (!result.candidates.length) return;
+    if (data.discoveries.length >= 16) data.discoveries.splice(Math.max(0, data.discoveries.findIndex(d => d.value.source === result.source)), 1);
     data.discoveries.push({ input: lookup, value: result });
   });
 }
