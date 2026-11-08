@@ -17,6 +17,8 @@ export const config = {
   fakeAi: fakes.has("ai"),
   /** Keep the complete enrichment flow off until all implementation PRs land. */
   profileEnrichmentEnabled: process.env.PROFILE_ENRICHMENT_ENABLED === "1",
+  /** Authenticates Vercel's scheduled private-input cleanup (Authorization: Bearer <secret>). Unset: the endpoint refuses every request. */
+  cronSecret: process.env.CRON_SECRET || null,
   /** Rejections for one ask before lower-ranked results are hidden too. */
   batchRejectAfter: 3,
   /** A suggested slot is never closer than this. */
