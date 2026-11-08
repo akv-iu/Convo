@@ -19,7 +19,7 @@ const ENTITIES: Record<string, string> = {
 export function decodeEntities(text: string): string {
   return text.replace(/&(#x[\da-f]{1,6}|#\d{1,7}|[a-z]{2,8});/gi, (whole, entity: string) => {
     if (entity[0] !== "#") return ENTITIES[entity] ?? ENTITIES[entity.toLowerCase()] ?? whole;
-    const value = entity[1].toLowerCase() === "x" ? parseInt(entity.slice(2), 16) : Number(entity.slice(1));
+    const value = entity[1].toLowerCase() === "x" ? Number.parseInt(entity.slice(2), 16) : Number(entity.slice(1));
     return value > 0 && value <= 0x10ffff && !(value >= 0xd800 && value <= 0xdfff) ? String.fromCodePoint(value) : " ";
   });
 }
@@ -164,7 +164,7 @@ export function robotsDirectiveBlocks(html: string, header: string | string[] | 
   const blocks = (value: string) => /\b(noindex|none)\b/i.test(value);
   const headers = (Array.isArray(header) ? header : header ? [header] : []).flatMap((h) => h.split(/,(?=\s*[\w-]+\s*:)/));
   for (const value of headers) {
-    const agent = /^\s*([\w-]+)\s*:\s*(.*)$/.exec(value);
+    const agent = /^\s*([\w-]+)\s*:(.*)$/.exec(value); // the value is only searched for words
     // "googlebot: noindex" is for that crawler only; an unnamed directive is for everyone.
     if (agent && !/^(noindex|none|nofollow|all|noarchive|nosnippet)$/i.test(agent[1])) {
       if ([token.toLowerCase(), "robots"].includes(agent[1].toLowerCase()) && blocks(agent[2])) return true;

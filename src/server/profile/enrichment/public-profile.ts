@@ -26,6 +26,12 @@ const ROBOTS_TOKEN = "Lanyard";
 // Login-walled sites this release doesn't import (LinkedIn scraping is out of scope); offering them would only fail.
 const LOGIN_WALLED = ["linkedin.com", "facebook.com", "instagram.com", "x.com", "twitter.com", "tiktok.com"];
 const onHost = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
+/** "/a/b//" → "/a/b", in linear time (a /\/+$/ regex backtracks on long runs of slashes). */
+function withoutTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
 
 const braveResults = z.object({
   web: z.object({
@@ -99,7 +105,7 @@ export async function findPublicProfilePages(input: RouteBody<"discoverEnrichmen
   for (const result of results.data.web?.results ?? []) {
     const page = safeUrl(result.url);
     if (!page || LOGIN_WALLED.some((d) => onHost(page.hostname, d)) || /\.(pdf|docx?|pptx?|xlsx?|zip)$/i.test(page.pathname)) continue;
-    const key = `${page.hostname.replace(/^www\./, "")}${page.pathname.replace(/\/+$/, "")}${page.search}`;
+    const key = `${page.hostname.replace(/^www\./, "")}${withoutTrailingSlashes(page.pathname)}${page.search}`;
     const title = oneLine(result.title, 200);
     if (!title || seen.has(key)) continue;
     seen.add(key);

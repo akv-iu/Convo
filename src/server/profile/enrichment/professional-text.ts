@@ -3,7 +3,7 @@ import type { ApprovedEvidence } from "../evidence";
 
 const personal = /\b(?:date of birth|dob|marital status|nationality|citizenship|passport|social security|ssn|sexual orientation|religion|ethnicity|medical history)\b/i;
 const contact = /^\s*(?:e-?mail|phone|tel(?:ephone)?|mobile|contact|address|gender|referees?|references)\b/i;
-const email = /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/;
+const email = /(?<![^\s@])[^\s@]+@\.*[^\s@.]+(?:\.+[^\s@.]+)+/; // dots and the rest never compete: linear time
 const address = /\b\d+\s+[\p{L}\s]{1,60}\b(?:street|st|road|rd|avenue|ave|lane|drive|boulevard)\b\.?/iu;
 
 /** Conservative line filtering, not a guarantee against obfuscated personal information. */

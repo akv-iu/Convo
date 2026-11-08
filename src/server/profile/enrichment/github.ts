@@ -28,7 +28,7 @@ export async function collectGitHubEvidence(owner: string, accountId: string | n
     const bio = chosen.bio ? (profile.bio ?? "").replace(/\s+/g, " ").trim().slice(0, 600) : "";
     let summary = bio ? `Bio: ${bio}` : "";
     const orgs: string[] = [];
-    for (const org of [...new Set(profile.orgs.map(o => o.login))].sort()) {
+    for (const org of [...new Set(profile.orgs.map(o => o.login))].sort((a, b) => a.localeCompare(b))) {
       const text = `${bio ? `Bio: ${bio}\n` : ""}Public organisations: ${[...orgs, org].join(", ")}`;
       if (text.length > 3000) break;
       orgs.push(org); summary = text;
