@@ -17,11 +17,10 @@ import { AskType } from "@/contracts/types";
 import type { AiService } from "./index";
 import { AskBlockedError } from "./blocked";
 import { cannedAi } from "./canned";
+import { MEETING_MINUTES } from "./minutes";
 
 const MODEL = "gpt-5.4-mini";
 const MODERATION_MODEL = "omni-moderation-latest";
-/** Suggested meeting length per kind of ask; the asker can change it on the refine screen. */
-const MINUTES: Record<AskType, number> = { knowledge: 10, career: 15, collaboration: 20, hiring: 20 };
 /** A match waits this long for explanations, then shows evidence lines instead. */
 const EXPLAIN_TIMEOUT_MS = 4000;
 
@@ -67,6 +66,8 @@ const FORMAT: Record<Kind, OpenAI.Responses.ResponseFormatTextJSONSchemaConfig> 
 const Refined = z.object({ text: z.string().trim().min(1).max(400), type: AskType });
 /** A cached moderation verdict: the same ask is blocked again without calling OpenAI. */
 const Blocked = z.object({ blocked: z.literal(true) });
+/** moderate()'s cached verdict, either way: a clean ask isn't checked again either. */
+const Verdict = z.object({ blocked: z.boolean() });
 const Line = z.string().trim().min(1).max(200);
 const Explained = z.object({ lines: z.array(z.object({ ref: z.number().int(), why: z.string() })) });
 
@@ -140,7 +141,7 @@ async function readCache(keys: string[]): Promise<Map<string, unknown>> {
   return new Map(rows.map((row) => [row.key, row.value]));
 }
 
-async function writeCache(kind: Kind, entries: Map<string, unknown>): Promise<void> {
+async function writeCache(kind: Kind | "moderate", entries: Map<string, unknown>): Promise<void> {
   if (!entries.size) return;
   try {
     await db().insert(aiCache).values([...entries].map(([key, value]) => ({ key, kind, value }))).onConflictDoNothing();
@@ -177,7 +178,22 @@ export const openAi: AiService = {
       refined = Refined.parse(reply.value);
       await writeCache("refine", new Map([[key, refined]]));
     }
-    return { ...refined, minutes: MINUTES[refined.type] };
+    return { ...refined, minutes: MEETING_MINUTES };
+  },
+
+  async moderate(text) {
+    const question = text.trim();
+    // Its own key: the moderation model and the text, nothing from the refine prompt.
+    const key = createHash("sha256").update(JSON.stringify(["moderate", MODERATION_MODEL, question])).digest("hex");
+    const hit = Verdict.safeParse((await readCache([key])).get(key)).data;
+    noteCache(hit ? 1 : 0, hit ? 0 : 1);
+    if (hit) {
+      if (hit.blocked) throw new AskBlockedError();
+      return;
+    }
+    const blocked = await isFlagged(question); // a failed check throws: never pass an unchecked ask
+    await writeCache("moderate", new Map([[key, { blocked }]]));
+    if (blocked) throw new AskBlockedError();
   },
 
   async explain(ask, candidates) {

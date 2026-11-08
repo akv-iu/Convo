@@ -4,7 +4,7 @@
  * because B2's API needs country, workplace and hiring in one complete
  * `filters` object (db/Profile-API.md).
  */
-import type { BadgeColour, HardFilters, ProfileVisibility, RorMatch } from "@/contracts/types";
+import type { AvatarId, BadgeColour, HardFilters, ProfileVisibility, RorMatch } from "@/contracts/types";
 import { isCountryCode } from "@/components/ui/countries";
 
 /**
@@ -93,16 +93,18 @@ export const VISIBILITY_SECTIONS = [
 
 /**
  * The whole PUT /api/me body for step 2 (db/Frontend-Support.md): name,
- * complete filters, the workplace label, badge colour and the complete
- * visibility object. Only call once nothing is missing.
+ * complete filters, the workplace label, badge colour, the complete
+ * visibility object and the picture (null for initials). Only call once
+ * nothing is missing.
  */
-export function toProfileBody(a: Answers, badgeColour: BadgeColour, visibility: ProfileVisibility) {
+export function toProfileBody(a: Answers, badgeColour: BadgeColour, visibility: ProfileVisibility, avatar: AvatarId | null = null) {
   return {
     name: a.name.trim(),
     filters: toFilters(a),
     workplaceName: workplaceName(a.workplace),
     badgeColour,
     visibility,
+    avatar,
   };
 }
 

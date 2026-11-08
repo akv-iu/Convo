@@ -1,6 +1,6 @@
 # Google/GitHub authentication: implementation and handoff
 
-Status: backend implementation for review, not production-ready. Branch `b/google-github-auth`, based on the revised enrichment foundation. Do not open/merge its PR before the foundation and nullable-screen compatibility patch land and Claude returns CONTRACT ACK. No live OAuth or Neon test has been run, and no migration or environment setting has been applied.
+Status: backend implementation for review, not production-ready. Branch `b/google-github-auth`, based on the revised enrichment foundation. Claude has ACKed the foundation/auth behavior, and nullable-screen compatibility #51 is on main. This branch integrates the regenerated foundation; its eventual PR still follows the foundation and requires user authorization. No live OAuth or Neon test has been run, and no migration or environment setting has been applied.
 
 ## What changed
 
@@ -27,9 +27,9 @@ One provider subject has one owner. Renaming a GitHub handle does not change own
 3. The app requests only `openid profile`. Do not add Gmail, Drive, email or offline-access permissions for this feature. No Google API key or service account is used.
 4. Copy that client's Client ID and Client Secret privately into the matching environment as `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`. Keep the existing `AUTH_SECRET`, GitHub credentials and database/search configuration. Do not change or share the existing secret. A Google token must never be placed in a GitHub variable.
 5. Keep separate existing local/production GitHub OAuth apps. Their callback stays `/api/auth/callback/github`; the new internal connection URL is not a new OAuth callback. No new GitHub scopes are needed.
-**Migration hold:** #47/#50 and the foundation currently collide at 0005. Do not apply them now. Each later branch must merge the schema/snapshot chain and regenerate its migration, retaining backfills; renaming files alone is not valid. Authentication's following attempt migration must be regenerated against that final chain too.
+**Regenerated chain:** main `576692d` includes #47/#50/#51. The foundation now owns `0007_provider-identities`; this branch regenerates `0008_auth-link-attempts` after it. Old provisional 0005/0006 enrichment proposals were never applied and are removed. Existing main migration SQL is unchanged. See [the integration ledger](Enrichment-Integration.md). No live application is authorized by this update.
 
-6. Once that order is settled and the migrations are regenerated/reviewed, review outstanding migrations. Foundation migration 0005 makes handles nullable and backfills provider ownership; this branch adds 0006, the attempt table. Apply only to the intended approved Neon target, preserving shared data. From this worktree, the explicit command is:
+6. Once that order is settled and the migrations are regenerated/reviewed, review outstanding migrations. Foundation migration 0007 makes handles nullable and backfills provider ownership; this branch adds 0008, the attempt table. Apply only to the intended approved Neon target, preserving shared data. From this worktree, the explicit command is:
 
 ~~~powershell
 node --env-file="D:\Projects\Convo\.env.local" .\node_modules\drizzle-kit\bin.cjs migrate

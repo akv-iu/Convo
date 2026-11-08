@@ -3,6 +3,9 @@
 Branch: `b2/two-way-soft-blocker`, starting from main after PR #25. No migration,
 credential, shared contract, screen or B1 change is needed.
 
+New asks start with the soft blocker off, so the two-way rule applies only once
+the asker turns it on for that ask.
+
 If A rejects B for an open ask with A's soft blocker enabled, B is hidden from
 that ask's results and A is hidden from B's matching requests. B switching off
 their own blocker does not override A's choice. A disabling the source blocker

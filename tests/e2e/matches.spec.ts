@@ -15,6 +15,7 @@ type Match = {
   rank: number;
   explanation: string;
   highlights: string[];
+  evidence: { kind: string; title: string; url?: string }[];
 };
 
 const passButton = (page: Page) => page.getByRole("button", { name: /^Pass$/ });
@@ -32,6 +33,12 @@ async function newAsk(page: Page, text = "how does the Kubernetes scheduler do p
   const res = await page.request.post("/api/refine", { headers: { "x-demo-user": ME }, data: { text } });
   expect(res.ok()).toBe(true);
   return (await res.json()).askId as string;
+}
+
+/** New asks start with "Keep people I pass on hidden" off; tests about hiding turn it on first. */
+async function hidePassed(page: Page, askId: string) {
+  const res = await page.request.put("/api/soft-blocker", { headers: { "x-demo-user": ME }, data: { askId, enabled: true } });
+  expect(res.ok()).toBe(true);
 }
 
 async function serverMatches(page: Page, askId: string): Promise<Match[]> {
@@ -70,10 +77,18 @@ function fakeMatches(n: number) {
       filters: { country: rank === 0 ? null : "US", rorId: null, hiring: rank === 0 ? null : true },
       workplaceName: null,
       badgeColour: "mint",
+      avatar: rank === 1 ? "star" : null,
       synthetic: rank % 2 === 1,
       freeTimes: [],
     },
     highlights: ["Raft <em>leader election</em>"],
+    evidence:
+      rank === 0
+        ? [
+            { kind: "repo", title: "etcd-io/raft", url: "https://github.com/etcd-io/raft" },
+            { kind: "talk", title: "Raft at KubeCon" },
+          ]
+        : [],
     badges: rank === 0 ? [] : ["hiring", "US"],
     mutual: rank === 1,
     explanation: `Why person ${rank + 1}`,
@@ -87,11 +102,11 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.setExtraHTTPHeaders({ "x-demo-user": ME });
     await page.goto("/ask");
     await page.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
-    await page.getByRole("button", { name: "Sharpen my question" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await page.getByRole("link", { name: "Find people" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
     await rows(page).first().click();
-    await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption:/)).toBeVisible();
+    await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption./)).toBeVisible(); // as written
 
     const askId = new URL(page.url()).searchParams.get("ask")!;
     const expected = await serverMatches(page, askId);
@@ -120,8 +135,9 @@ test.describe("match list (A2 steps 1-2)", () => {
     expect(received.some((r) => r.askId === askId && r.fromUserId === ME && r.status === "sent")).toBe(true);
   });
 
-  test("Pass saves the pass with the card's rank, and that person drops out of the matches", async ({ page }) => {
+  test("Pass saves the pass with the card's rank, and with hiding on that person drops out of the matches", async ({ page }) => {
     const askId = await newAsk(page);
+    await hidePassed(page, askId);
     const [first] = await serverMatches(page, askId);
     await open(page, askId);
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
@@ -173,6 +189,46 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(c).toContainText("Looking for someone like you too");
     await expect(c).toContainText("Hiring");
     await expect(c).toContainText("United States");
+  });
+
+  test("rows and open profiles show each person's picture, or their initials", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await open(page, "made-up");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveText("P1");
+    await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
+    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
+    await rows(page).nth(1).click();
+    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
+  });
+
+  test("the open profile lists projects and papers, linking out safely", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await open(page, "made-up");
+    const works = card(page).getByRole("list", { name: "Person 1's projects and papers" });
+    await expect(works.getByRole("listitem")).toHaveCount(2);
+    await expect(works.getByRole("listitem").nth(0)).toContainText("Repository");
+    const link = works.getByRole("link", { name: "etcd-io/raft (opens in a new tab)" });
+    await expect(link).toHaveAttribute("href", "https://github.com/etcd-io/raft");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // An item without a link keeps its title, shown as plain text.
+    await expect(works.getByRole("listitem").nth(1)).toContainText("Talk");
+    await expect(works.getByRole("listitem").nth(1).getByRole("link")).toHaveCount(0);
+    // Someone with no evidence has no empty section.
+    await rows(page).nth(1).click();
+    await expect(card(page).getByText("Projects and papers")).toHaveCount(0);
+  });
+
+  test("evidence links come from the server's matches", async ({ page }) => {
+    const askId = await newAsk(page);
+    const top = (await serverMatches(page, askId)).find((m) => m.evidence.some((e) => e.url));
+    expect(top).toBeTruthy();
+    await open(page, askId);
+    const row = rows(page).filter({ hasText: top!.person.name });
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await expect(card(page).getByRole("link", { name: /\(opens in a new tab\)$/ }).filter({ hasNotText: "on GitHub" }).first())
+      .toHaveAttribute("href", /^https:\/\//);
   });
 
   test("after the third pass, people ranked below are hidden as the server says", async ({ page }) => {
@@ -347,6 +403,33 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
     // The Pass button went with the list; the keyboard lands on the end panel, not the page body.
     if (!isMobile) await expect(done).toBeFocused();
+  });
+
+  test("with hiding off (the default), a pass marks the person Passed and they stay; passing everyone ends the list", async ({ page, isMobile }) => {
+    await savedAsk(page, "made-up", false);
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
+    await open(page, "made-up");
+    await expect(page.getByRole("switch", { name: "Keep people I pass on hidden" })).not.toBeChecked();
+    await passButton(page).click();
+    // Person 1 stays, marked, and the next person opens.
+    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page).nth(0)).toContainText("Passed");
+    if (!isMobile) await expect(rows(page).nth(1)).toBeFocused();
+    // Reopening a passed person says so instead of offering Pass and Send again.
+    await rows(page).nth(0).click();
+    await expect(card(page)).toContainText("You passed on Person 1.");
+    await expect(passButton(page)).toHaveCount(0);
+    await rows(page).nth(1).click();
+    await passButton(page).click();
+    // Everyone is passed: the end panel shows below the still-listed people, with no hint to turn the switch off.
+    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page).nth(1)).toContainText("Passed");
+    await expect(list(page).getByRole("heading", { level: 2, name: "That's everyone for now" })).toBeVisible();
+    await expect(list(page)).toContainText("You passed on everyone Lanyard found.");
+    await expect(list(page)).not.toContainText("turn off");
+    await expect(page.getByRole("button", { name: "See them again" })).toBeVisible();
   });
 
   test("a person locked by a failed pass explains why, with Refresh, even after other actions succeed", async ({ page }) => {
@@ -542,6 +625,7 @@ test.describe("match list (A2 steps 1-2)", () => {
 
   test("turning the soft blocker off brings back people passed on, and the server keeps the choice", async ({ page }) => {
     const askId = await newAsk(page);
+    await hidePassed(page, askId);
     const [first] = await serverMatches(page, askId);
     await open(page, askId);
     const blocker = page.getByRole("switch", { name: "Keep people I pass on hidden" });

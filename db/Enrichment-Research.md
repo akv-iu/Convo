@@ -39,7 +39,7 @@ Recorded fixtures cover ORCID/ROR/name matching, changed workplaces, preview/evi
 
 The user chose **provider-only; wire configuration later**. There is no new environment read or `.env.example` entry. A later approved integration will supply OPENALEX_API_KEY privately, reserve the durable discovery rate limit **before** a provider call, bind previews to owner/input/generation, reject stale completions, and connect the authenticated discovery route. Failed attempts must count against the limit. Active research jobs must stay not_ready until the lease-checked collector/synthesis runner can actually execute them.
 
-No live manual test is requested now. At configuration/integration time, provide the complete setup, positive/empty/failure/owner-isolation test and cleanup checklist together, and ask before any real author lookup. This phase does not establish live provider compatibility, a complete import journey or production readiness. Claude's compatibility `8ee0b3a` now incorporates main's avatars; its merge and B2 migration regeneration remain dependencies.
+No live manual test is requested now. At configuration/integration time, provide the complete setup, positive/empty/failure/owner-isolation test and cleanup checklist together, and ask before any real author lookup. This phase does not establish live provider compatibility, a complete import journey or production readiness. Nullable compatibility #51 is now merged on main 576692d. The foundation/auth/state chain is regenerated as 0007-0009 and integrated here; see Enrichment-Integration.md. Those backend PRs still need review and merge before this provider PR targets main cleanly.
 
 ## Verification results
 
@@ -58,3 +58,7 @@ Second full round: **915 tests in 64 files**, lint/typecheck passing, **98.61% l
 - [Authorship limits and singleton responses](https://help.openalex.org/data/authorships/)
 
 Only documentation was browsed. No live provider requests, credentials, CVs or database writes were used.
+
+## Current main integration
+
+The branch now integrates main 576692d through the regenerated foundation/auth/state chain (0007-0009), without provisional migration metadata. Both full rounds pass lint/typecheck and 915 tests in 64 files, 98.61% line coverage; Drizzle check passes. Provider code/tests are unchanged. See Enrichment-Integration.md and Enrichment-Migrations.md. No live execution or PR creation is included.

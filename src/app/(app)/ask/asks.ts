@@ -10,10 +10,11 @@
  * matching and requests use.
  */
 import { z } from "zod";
+import { ASK_TEXT_MAX, ASK_TEXT_MIN } from "@/contracts/routes";
 import { AskType, RefinedAsk } from "@/contracts/types";
 
-export const ASK_MIN = 3; // routes.refine body: text.min(3)
-export const ASK_MAX = 500;
+export const ASK_MIN = ASK_TEXT_MIN;
+export const ASK_MAX = ASK_TEXT_MAX;
 
 export const typeLabel: Record<AskType, string> = {
   knowledge: "Learn something",
@@ -52,6 +53,26 @@ export function refineFailure(status: number, body: unknown): RefineFailure {
   if (status === 400) return { message: "Write a few words about what you want to ask.", action: null };
   if (status === 503) return { message: server ?? "Lanyard couldn't sharpen that just now. Try again in a moment.", action: null };
   return { message: "Lanyard couldn't sharpen that just now. Try again in a moment.", action: null };
+}
+
+function serverMessage(body: unknown): string | null {
+  return typeof body === "object" && body && "error" in body && typeof body.error === "string" ? body.error : null;
+}
+
+/**
+ * What a failed POST /api/asks (send as written) tells the user. The same cases as refineFailure,
+ * but nothing was sharpened: the other failures are about sending or the safety check.
+ */
+export function sendFailure(status: number, body: unknown): RefineFailure {
+  if ([400, 401, 404, 409, 422].includes(status)) return refineFailure(status, body);
+  return { message: (status === 503 && serverMessage(body)) || "Lanyard couldn't send that just now. Try again in a moment.", action: null };
+}
+
+/** A failed "Sharpen with AI": the same as refineFailure, plus the reminder that sending as written still works. */
+export function sharpenFailure(status: number, body: unknown): RefineFailure {
+  const failure = refineFailure(status, body);
+  if (status === 0 || status >= 500) return { ...failure, message: `${failure.message} You can still send it as written.` };
+  return failure;
 }
 
 export const SavedAsk = z.object({ askId: z.string().min(1), rawText: z.string(), refined: RefinedAsk });
