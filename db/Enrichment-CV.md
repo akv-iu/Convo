@@ -2,6 +2,12 @@
 
 Status: parser-only work on `b/enrichment-cv-parser`, based on `b/enrichment-github` `9b143a4`. No route, contract, configuration, environment value, job, storage, synthesis, approval, migration, screen or package file changes. **It needs two dependencies that Codex adds** (below); until then this branch's typecheck and tests fail in CI. The eventual PR targets main after its dependencies merge.
 
+Integration update: `b/enrichment-cv-dependencies` combines parser `3391a02` with approved storage `1380e70` and exact-pins both requested libraries in `package.json`/`package-lock.json`. Use that integrated dependency branch for checks; the original provider-only branch intentionally has no package edits. Upload routing and synthesis remain unwired.
+
+Integration verification: clean `npm ci`, lint/typecheck twice, and two complete `npm test -- --coverage --maxWorkers=2` runs passed on Node 24.21.0: 1,036 tests in 69 files, 98.48% line coverage. Existing locked package versions are unchanged; the additions are the two parsers and their transitive dependencies. Binary-fixture coverage parse warnings remain non-fatal; shared coverage settings were not changed. No Node 22, Vercel upload, browser or live provider test was run here.
+
+To repeat locally: use Node 22.18+ on the supported 22 line or Node 24, check out the integrated branch in an isolated worktree, run `npm ci`, `npm run lint`, `npm run typecheck`, then `npm test -- --coverage --maxWorkers=2`. Expected: all checks pass; fixture warnings may print. No credentials are needed, no server is started, and no data cleanup is required. Do not install into a worktree whose `node_modules` is a junction to another checkout.
+
 Codex keeps authenticated upload, consent and ownership checks, private storage, expiry and cleanup, contact-data scrubbing, synthesis, approval, routes and migrations.
 
 ## Interface
@@ -79,6 +85,8 @@ Libraries:
 ## Dependencies and deployment
 
 **Dependency request to Codex.** Add exact-pinned `"unpdf": "1.9.1"` and `"mammoth": "1.13.0"` to `dependencies` (`npm install --save-exact unpdf@1.9.1 mammoth@1.13.0`). Nothing else changes.
+
+The integrated package also raises the Node minimum to 22.18.0. unpdf requires Node 22+, and the direct `.mts` worker needs default TypeScript stripping (enabled in Node 22.18.0; see [Node's documentation](https://nodejs.org/api/typescript.html)). CI already uses Node 22. Configure Vercel to a supported Node 22 or 24 runtime before live acceptance; no deployment setting was changed here.
 
 - unpdf 2.x requires Node 24, and its latest release is newer than the two-week minimum age. unpdf 1.9.1 documents Node 22+, so the Vercel project must run Node 22 or 24.
 - Mammoth pulls in jszip, @xmldom/xmldom, lop, underscore, xmlbuilder, base64-js, dingbat-to-unicode and argparse.
