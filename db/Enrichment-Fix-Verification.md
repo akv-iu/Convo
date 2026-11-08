@@ -1,0 +1,30 @@
+# Enrichment fix verification
+
+Read-only follow-up; one final review pass, not feature approval. Only this memo was written. No lint, build, suite, live service, secret, migration or deployment was used. User's current one-pass instruction supersedes the older two-round wording inherited in this checkout's AGENTS.md.
+
+## Inspected references
+
+- Backend: `01517904b31d972d86d8c89a7530487756ae67cd`, compared only against audited `3bb5d611de3139e2d7a5c969a3dda40cd6d43b9f`. Changes are fixture `216e9947045144961a34b0f3ec1b78f32dbf82cd`, cleanup `6b9a586e105293c3778b9e280760c5aa7ab14f78`, and config `0151790`.
+- Boundary audit: `704dbd05486c99f85f7f549be26d79db1a09475e`; release audit: `3ec54f37319b8cf90f37f5999adf63928316e98e`.
+- `b/enrichment-flow-integration` is **not published**: fetch/remote-head lookup found no branch. Audited UI remains `5108092b7abe1555ea4f1ecf2d6f1f6bbf391291`; its two affected editor files are byte-identical to published review component `c157619e62780494692d91d752b7f9928d0de88c`. No unpublished worktree changes were inspected.
+
+## Existing findings
+
+All backend lines below are at `01517904b31d972d86d8c89a7530487756ae67cd`. “Fixed” means the inspected code addresses the failure; it does not assert a fresh passing test run.
+
+| Finding | Status and exact location | Regression coverage / required owner action |
+| --- | --- | --- |
+| Boundary 1: late CV upload restores obsolete input | **Still open** — `src/server/profile/enrichment/state.ts:97–107`, unchanged since the audit. Parsing still separates reservation from an unfenced final write. | Existing `cv-staging.test.ts:91,99` covers rate ordering and sequential replacement, not a deferred parser finishing after CV-off confirmation or a newer upload. **Claude 1:** add attempt/generation fencing and both deferred-parser regressions. |
+| Boundary 2: retry/reload loses draft edits and picks | **Awaiting evidence** — no published flow checkpoint. At audited UI `5108092…`, `draft-editor.tsx:110–111` and `review-form.tsx:197–204` still initialize local edits and remount the editor. Paths are under `src/app/(onboarding)/onboarding/profile/`. | No published fix/regression was available to inspect. **Claude 2:** publish the flow head and tests preserving edited bio/expertise, deselections and valid picks through retry/conflict reload, while leaving new CV evidence unselected. |
+| Boundary 3 / Release 1: manual input retention and cleanup starvation | **Still open for previously stored manual jobs; new completions fixed.** `6b9a586…`, `state.ts:303` clears input on future manual completion; `storage.ts:34` repairs mismatched deadlines. But `state.ts:10,29` still exempts an already-stored manual job from expiry. Its retained input makes `storage.ts:9` compute the same past deadline, so line 34 skips the write and starvation persists until history deletion. All paths under `src/server/profile/enrichment/`. | `state.test.ts:236` correctly covers a new all-empty completion. `storage.test.ts:104,115` covers stale-versus-correct scheduling with real storage/recorded driver replies. Cron `route.test.ts:196` covers 30 empty stale rows, with mocked storage. **None seeds an old manual job retaining input. Claude 1:** safely erase that expired legacy input/cache while preserving unrelated newer CVs and history; add a persisted-manual-row cleanup regression proving text is erased and other owners progress. Publish current pass results. |
+| Release 2: unqualified 48-hour deletion promise | **Still open** — `vercel.json:4`, `db/Enrichment-Cleanup.md:72`, cron `route.ts:18` under `src/app/api/cron/enrichment-cleanup/`; unchanged. | Daily scheduling still permits approximately 49 hours on successful runs; failure/budget behavior can extend it. A schedule-shape unit test does not prove deletion timing. **Claude 1 + user:** settle supported schedule/retention wording and monitoring/recovery; actual plan and timing remain unverified. |
+| Release 3: deployment before migration in setup list | **Still open** — `db/Enrichment-Cleanup.md:102,104`, unchanged. | Documentation fix needs no behavior test. **Claude 1:** put migration application/verification before deployment of new-column consumers and preserve the old-writer retirement requirement. |
+| Release 4: obsolete runner discovery fixture | **Fixed statically** by `216e994…` — `src/server/profile/enrichment/runner.test.ts:20–21` now stages identity, reserves discovery and passes its generation. | The original failing real-runner case now uses the required API sequence; it tests actual collection completion rather than bypassing the guard. **Claude 1:** publish the combined typecheck/unit result at the current head. |
+
+## Configuration fix and evidence limits
+
+`0151790` reads the merged `config.openAlexApiKey` directly at `execution.ts:34`; existing `execution.test.ts:49` asserts that configured key reaches the deferred runner context. Empty-to-undefined normalization is compatible with the runner's existing missing-key guard at `runner.ts:30`. No concrete regression was found in the seven changed files. That assertion is a scheduler-boundary test, not live OpenAlex verification.
+
+The latest published execution handoff still reports its earlier 1,149-test result; it was not updated by these three commits. The cleanup commit describes failing-first regressions but supplies no current combined pass result. Therefore the new regressions are **inspected, not independently executed or established passing here**. Final integrated build/worker packaging evidence also remains awaiting Claude 1; the prior release audit's source-branch build evidence is unchanged.
+
+Remaining owners: **Claude 1** — late-upload fencing, previously stored manual-job cleanup, retention/setup decisions and current combined evidence; **Claude 2** — published draft-preservation fix/evidence. No concrete regression introduced by the fixes was identified; the old manual-row case is an incomplete fix to an existing finding. Keep the feature disabled. No PR, merge or formal approval.
