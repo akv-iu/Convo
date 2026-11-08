@@ -24,7 +24,7 @@ import { GET as sent } from "./sent/route";
 
 const saved: SavedRequest = {
   id: "saved-request", askId: "saved-ask", fromUserId: DEMO_USER_A, toPersonId: DEMO_USER_B,
-  question: "How does preemption work?", minutes: 10, status: "sent", reply: null, slot: null,
+  question: "How does preemption work?", message: null, minutes: 10, status: "sent", reply: null, slot: null,
   createdAt: "2026-11-05T12:00:00.000Z",
 };
 const context = (id = saved.id) => ({ params: Promise.resolve({ id }) });
