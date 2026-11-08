@@ -22,6 +22,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { EraserIcon } from "@/components/ui/eraser-icon";
 import { Switch } from "@/components/ui/switch";
 import type { Person, ProfileVisibility } from "@/contracts/types";
 import { Badge, BadgeChip } from "../_components/badge";
@@ -190,7 +191,10 @@ export function BadgeForm() {
    * it back, and do the same for keyboard and screen-reader users, since the
    * badge itself is decorative.
    */
-  const tappable = "cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
+  const tappable = "group/line cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
+  /** The eraser marking a line you can remove; it darkens when you point at the line. */
+  const eraser = <EraserIcon className="opacity-75 group-hover/line:opacity-100" />;
+  const hideHint = "Tap to hide from your badge";
 
   const badge = (
     <Badge
@@ -198,8 +202,14 @@ export function BadgeForm() {
       handle={handle ?? "your-github"}
       label={
         visibility.country ? (
-          <span role="presentation" onClick={() => toggleSection("country")} className={tappable}>
+          <span
+            role="presentation"
+            title={hideHint}
+            onClick={() => toggleSection("country")}
+            className={`inline-flex items-center gap-1 ${tappable}`}
+          >
             {countryName(about.country)}
+            {eraser}
           </span>
         ) : (
           " "
@@ -207,13 +217,26 @@ export function BadgeForm() {
       }
     >
       {visibility.workplace && (
-        <span role="presentation" onClick={() => toggleSection("workplace")} className={`mt-4 block ${tappable}`}>
-          <span className="block text-xs text-muted">Works at</span>
-          <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
+        <span
+          role="presentation"
+          title={hideHint}
+          onClick={() => toggleSection("workplace")}
+          className={`mt-4 flex items-start gap-2 ${tappable}`}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs text-muted">Works at</span>
+            <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
+          </span>
+          <span className="mt-0.5">{eraser}</span>
         </span>
       )}
       {visibility.hiring && (
-        <span role="presentation" onClick={() => toggleSection("hiring")} className={`mt-3 flex w-fit flex-wrap gap-1.5 ${tappable}`}>
+        <span
+          role="presentation"
+          title={hideHint}
+          onClick={() => toggleSection("hiring")}
+          className={`mt-3 flex w-fit flex-wrap items-center gap-1.5 ${tappable}`}
+        >
           {hiring === null ? (
             <BadgeChip className="w-20" />
           ) : (
@@ -221,6 +244,7 @@ export function BadgeForm() {
               {hiring ? "Hiring" : "Not hiring"}
             </BadgeChip>
           )}
+          {eraser}
         </span>
       )}
     </Badge>
@@ -264,12 +288,16 @@ export function BadgeForm() {
         aria-label="Your badge's look"
         className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
-        <div className="w-full">{badge}</div>
-        <div className="flex flex-col gap-6 sm:pt-2 lg:pt-16">
+        <div className="flex w-full flex-col items-center gap-6">
+          <div className="w-full">{badge}</div>
+          <ColourPicker defaultColour={colour} centred />
+        </div>
+        {/* From 1024 px the badge hangs from a strap (lg:mt-16), so start level with its card, not the strap. */}
+        <div className="flex flex-col gap-6 lg:pt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
             <p id="visibility-note" className="mb-2 text-sm text-muted">
-              Tap a line on your badge to hide it, or switch it here. Your name and GitHub are always shown.
+              Tap a line marked with an eraser on your badge to hide it, or switch it here. Your name and GitHub are always shown.
             </p>
             <div className="flex max-w-sm flex-col gap-1.5">
               {sections.map((v) => (
@@ -283,7 +311,6 @@ export function BadgeForm() {
               ))}
             </div>
           </fieldset>
-          <ColourPicker defaultColour={colour} />
         </div>
       </section>
 
