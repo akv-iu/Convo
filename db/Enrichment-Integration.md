@@ -22,10 +22,16 @@ The source branches remain separate and keep their existing commits; integration
 ## Progress
 
 - Foundation: main merged; `0007_provider-identities` regenerated, original DDL/backfill equivalence checked, local Drizzle check passed. Both rounds passed lint/typecheck and 760 tests in 54 files, 98.71% line coverage. Regenerating again reports no schema changes. Existing migration SQL remains unchanged; the regenerated SQL including backfill equals the reviewed proposal.
-- Authentication: pending integration.
-- State: pending integration.
-- Providers: pending updated base.
+- Authentication: foundation integrated; `0008_auth-link-attempts` regenerated. Both rounds passed lint/typecheck and 822 tests in 58 files, 98.57% line coverage. Local Drizzle check and no-drift generation passed; table DDL equals the reviewed proposal.
+- State: authentication integrated; `0009_enrichment_state` regenerated. Both rounds passed lint/typecheck and 884 tests in 63 files, 98.62% line coverage. Local Drizzle check/no-drift generation and all ten linked, ordered journal/snapshot entries passed. DDL equals the reviewed proposal. The complete future live application/verification checklist is in Enrichment-Migrations.md.
+- Research: updated state base integrated without conflicts. Both rounds passed lint/typecheck and 915 tests in 64 files, 98.61% line coverage. Drizzle check passed; provider source/tests are unchanged. GitHub: updated research/state base integrated without conflicts. Both rounds passed lint/typecheck and 944 tests in 65 files, 98.59% line coverage. Drizzle check passed; both providers and the shared GitHub/JSON reader code/tests are unchanged.
 
 ## Acceptance limits
 
 Keep PROFILE_ENRICHMENT_ENABLED disabled in production. This ledger is not final feature sign-off. Live OAuth/imports, PDF/DOCX parsing, approved-evidence persistence/removal, synthesis, operational cleanup and complete two-account acceptance must pass before enablement.
+
+## Other-session handoff
+
+The combined development base is origin/b/enrichment-github, which contains main 576692d, the revised foundation, auth/state and both provider modules. Fetch and merge it into the session''s own feature branch; preserve its own commits and do not modify someone else''s worktree. This is a development base, not permission to merge the whole unfinished feature into main. The eventual PR order is foundation, authentication, state, research provider, GitHub provider. Every PR targets main; synchronize with main again after each dependency merges, particularly if squash merging.
+
+No shared route or source behavior was changed by migration integration. Public-profile/CV modules, approved storage/removal, runner/synthesis and live acceptance remain separate work. No PR was created and nothing was applied to Neon.

@@ -289,6 +289,7 @@ describe("matching a saved ask", () => {
     expect(runMatch).toHaveBeenCalledWith(expect.objectContaining({ excludeIds: ["pending-user"] }));
     expect(query.mock.calls[2][1]).toEqual([true, person.id, "open", true]);
     expect(query.mock.calls[2][0]).toContain('"users"."filters" is not null');
+    expect(query.mock.calls[2][0]).toContain('"users"."profile_evidence_pending"');
   });
 
   it.each([true, false])("honors other attendees' rejections regardless of this ask's blocker=%s", async (softBlocker) => {
@@ -338,6 +339,7 @@ describe("matching a saved ask", () => {
       ] });
     const cards = await matchAsk(person.id, ask.id);
     expect(cards.map(card => card.person.id)).toEqual([ready.id]);
+    expect(query.mock.calls.at(-1)?.[0]).toContain('"profile_evidence_pending"');
   });
   it("uses current database visibility even when search contains an older public profile", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })

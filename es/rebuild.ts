@@ -1,6 +1,8 @@
 /**
  * Drop and recreate the three indices from es/mappings (B1). Deletes all indexed
- * data: run scripts/seed.ts afterwards. The synonym list lives in
+ * data: run scripts/seed.ts afterwards to restore approved evidence from all
+ * four sources, expertise and saved revisions. Failed users are reported by ID;
+ * valid users still recover and the seed exits non-zero. The synonym list lives in
  * es/mappings/evidence.json, so changing it also needs a rebuild.
  *   node --env-file=.env.local node_modules/tsx/dist/cli.mjs es/rebuild.ts
  */

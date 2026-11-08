@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account, NextAuthConfig, Profile } from "next-auth";
-import NextAuth from "next-auth";
+import type { Account, Profile } from "next-auth";
 import { Auth, skipCSRFCheck } from "@auth/core";
 import type { OAuthConfig } from "@auth/core/providers";
 import type { GitHubProfile } from "next-auth/providers/github";
@@ -14,9 +13,9 @@ vi.mock("next/headers", () => ({ cookies }));
 vi.mock("@/server/config", () => ({ config }));
 vi.mock("./persistence", () => ({ initializeGitHubProfile: initialize }));
 vi.mock("next-auth", () => ({ default: vi.fn(() => ({ handlers: {}, auth, signIn: vi.fn(), signOut: vi.fn() })) }));
-import { getUserId } from "@/server/auth";
+import { authOptions, getUserId } from "@/server/auth";
 
-const options = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+const options = authOptions();
 const callbacks = options.callbacks!;
 const account: Account = { provider: "github", type: "oauth", providerAccountId: "101", access_token: "private-token" };
 // GitHub's raw OAuth profile has a numeric ID despite Auth.js's generic Profile type.
