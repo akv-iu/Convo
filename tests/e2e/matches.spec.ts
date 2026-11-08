@@ -15,6 +15,7 @@ type Match = {
   rank: number;
   explanation: string;
   highlights: string[];
+  evidence: { kind: string; title: string; url?: string }[];
 };
 
 const passButton = (page: Page) => page.getByRole("button", { name: /^Pass$/ });
@@ -80,6 +81,13 @@ function fakeMatches(n: number) {
       freeTimes: [],
     },
     highlights: ["Raft <em>leader election</em>"],
+    evidence:
+      rank === 0
+        ? [
+            { kind: "repo", title: "etcd-io/raft", url: "https://github.com/etcd-io/raft" },
+            { kind: "talk", title: "Raft at KubeCon" },
+          ]
+        : [],
     badges: rank === 0 ? [] : ["hiring", "US"],
     mutual: rank === 1,
     explanation: `Why person ${rank + 1}`,
@@ -93,11 +101,11 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.setExtraHTTPHeaders({ "x-demo-user": ME });
     await page.goto("/ask");
     await page.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
-    await page.getByRole("button", { name: "Sharpen my question" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await page.getByRole("link", { name: "Find people" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
     await rows(page).first().click();
-    await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption:/)).toBeVisible();
+    await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption./)).toBeVisible(); // as written
 
     const askId = new URL(page.url()).searchParams.get("ask")!;
     const expected = await serverMatches(page, askId);
@@ -180,6 +188,35 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(c).toContainText("Looking for someone like you too");
     await expect(c).toContainText("Hiring");
     await expect(c).toContainText("United States");
+  });
+
+  test("the open profile lists projects and papers, linking out safely", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await open(page, "made-up");
+    const works = card(page).getByRole("list", { name: "Person 1's projects and papers" });
+    await expect(works.getByRole("listitem")).toHaveCount(2);
+    await expect(works.getByRole("listitem").nth(0)).toContainText("Repository");
+    const link = works.getByRole("link", { name: "etcd-io/raft (opens in a new tab)" });
+    await expect(link).toHaveAttribute("href", "https://github.com/etcd-io/raft");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // An item without a link keeps its title, shown as plain text.
+    await expect(works.getByRole("listitem").nth(1)).toContainText("Talk");
+    await expect(works.getByRole("listitem").nth(1).getByRole("link")).toHaveCount(0);
+    // Someone with no evidence has no empty section.
+    await rows(page).nth(1).click();
+    await expect(card(page).getByText("Projects and papers")).toHaveCount(0);
+  });
+
+  test("evidence links come from the server's matches", async ({ page }) => {
+    const askId = await newAsk(page);
+    const top = (await serverMatches(page, askId)).find((m) => m.evidence.some((e) => e.url));
+    expect(top).toBeTruthy();
+    await open(page, askId);
+    const row = rows(page).filter({ hasText: top!.person.name });
+    if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+    await expect(card(page).getByRole("link", { name: /\(opens in a new tab\)$/ }).filter({ hasNotText: "on GitHub" }).first())
+      .toHaveAttribute("href", /^https:\/\//);
   });
 
   test("after the third pass, people ranked below are hidden as the server says", async ({ page }) => {

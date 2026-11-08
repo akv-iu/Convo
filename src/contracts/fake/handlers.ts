@@ -77,6 +77,29 @@ export const fake: Api = {
     return { askId: id, refined };
   },
 
+  async previewRefine({ userId, body }) {
+    // A suggestion only: no ask is saved or registered.
+    return { refined: await ai.refineAsk(body.text, store.person(userId)) };
+  },
+
+  async saveAsk({ userId, body }) {
+    store.person(userId); // a signed-in person with a profile, as for refine
+    await ai.moderate(body.text);
+    const id = crypto.randomUUID();
+    const ask = {
+      id,
+      userId,
+      rawText: body.text,
+      refined: { text: body.text, type: body.type ?? "knowledge", minutes: body.minutes ?? MEETING_MINUTES },
+      status: "open" as const,
+      softBlocker: false,
+      createdAt: now(),
+    };
+    store.get().asks.set(id, ask);
+    await search.registerAsk(id, userId, body.text);
+    return { askId: id, ask };
+  },
+
   async match({ userId, body }) {
     const ask = store.ask(body.askId, userId);
     const rejected = store.get().rejections.get(ask.id) ?? [];

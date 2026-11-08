@@ -3,8 +3,9 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { after } from "next/server";
 import { db } from "../../../db";
 import { asks, rejections, requests, users } from "../../../db/schema";
-import { Ask, ProfileVisibility, RefinedAsk, type MatchResult } from "@/contracts/types";
-import { routes } from "@/contracts/routes";
+import { Ask, ProfileVisibility, RefinedAsk, type AskType, type MatchResult, type Person } from "@/contracts/types";
+import { ASK_TEXT_MAX, ASK_TEXT_MIN, routes } from "@/contracts/routes";
+import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { getProfile } from "@/server/profile/service";
 import { visibleCard } from "@/server/profile/visibility";
 import { ai, AskBlockedError } from "@/server/ai";
@@ -41,15 +42,7 @@ function warmFirstMatch(userId: string, askId: string): void {
 
 export async function createAsk(userId: string, text: string): Promise<{ askId: string; refined: RefinedAsk }> {
   if (text.trim().length < 3) throw new AskError("Enter a question with at least three characters.", 400);
-  const requester = await getProfile(userId);
-  let refined: RefinedAsk;
-  try {
-    refined = RefinedAsk.parse(await ai.refineAsk(text, requester));
-    if (!refined.text.trim()) throw new Error("Empty refined question");
-  } catch (error) {
-    if (error instanceof AskBlockedError) throw error; // 422 with a message for the screen; nothing is saved
-    throw new AskError("Question refinement is unavailable. Try again.", 503);
-  }
+  const refined = await refineOrFail(text, await getProfile(userId));
 
   const askId = randomUUID();
   try {
@@ -61,6 +54,69 @@ export async function createAsk(userId: string, text: string): Promise<{ askId: 
   await registerSavedAsk(askId, userId, refined.text);
   warmFirstMatch(userId, askId);
   return { askId, refined };
+}
+
+/** The AI's sharper question, checked; a flagged ask stays a 422 and any other failure is a sanitized 503. */
+async function refineOrFail(text: string, requester: Person): Promise<RefinedAsk> {
+  try {
+    const refined = RefinedAsk.parse(await ai.refineAsk(text, requester));
+    if (!refined.text.trim()) throw new Error("Empty refined question");
+    return refined;
+  } catch (error) {
+    if (error instanceof AskBlockedError) throw error; // 422 with a message for the screen; nothing is saved
+    throw new AskError("Question refinement is unavailable. Try again.", 503);
+  }
+}
+
+/** The routes' own bounds, checked again here for callers that skip the contract. */
+function askText(text: string): string {
+  const question = text.trim();
+  if (question.length < ASK_TEXT_MIN || question.length > ASK_TEXT_MAX) {
+    throw new AskError(`Enter a question of ${ASK_TEXT_MIN} to ${ASK_TEXT_MAX} characters.`, 400);
+  }
+  return question;
+}
+
+/**
+ * "Sharpen with AI": a suggestion only. Nothing is saved or registered for matching,
+ * and no background match starts; the asker may edit it, drop it, or save it with saveAskAsWritten.
+ */
+export async function previewAsk(userId: string, text: string): Promise<{ refined: RefinedAsk }> {
+  const question = askText(text);
+  return { refined: await refineOrFail(question, await getProfile(userId)) };
+}
+
+/**
+ * Save the question exactly as the asker gives it: no AI rewrite. `refined` is set to that same
+ * text, so matching never refines it behind the asker's back (runMatch refines only a null `refined`).
+ * Moderation still runs; if it can't, the ask is refused rather than saved unchecked.
+ */
+export async function saveAskAsWritten(
+  userId: string,
+  body: { text: string; type?: AskType; minutes?: number },
+): Promise<{ askId: string; ask: Ask }> {
+  const question = askText(body.text);
+  await getProfile(userId); // a completed profile, as for refine
+  try {
+    await ai.moderate(question);
+  } catch (error) {
+    if (error instanceof AskBlockedError) throw error;
+    throw new AskError("The safety check is unavailable, so the question wasn't saved. Try again.", 503);
+  }
+  const refined: RefinedAsk = { text: question, type: body.type ?? "knowledge", minutes: body.minutes ?? MEETING_MINUTES };
+  const askId = randomUUID();
+  const createdAt = new Date(); // set here, so the saved row and the response agree without reading it back
+  try {
+    await db().insert(asks).values({ id: askId, userId, rawText: question, refined, softBlocker: false, createdAt });
+  } catch {
+    throw new AskError("Ask storage is unavailable. The save could not be confirmed.", 503);
+  }
+  await registerSavedAsk(askId, userId, question);
+  warmFirstMatch(userId, askId);
+  return {
+    askId,
+    ask: { id: askId, userId, rawText: question, refined, status: "open", softBlocker: false, createdAt: createdAt.toISOString() },
+  };
 }
 
 /** One of the caller's asks; someone else's ask is reported as missing (404). */
