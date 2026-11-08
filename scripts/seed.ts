@@ -1,8 +1,11 @@
 /**
  * Load everything searchable into Elasticsearch through the same ingestion path
  * real sign-ups use (B1): the fixture people, the 500 synthetic attendees, every
- * signed-up user who finished onboarding (with the GitHub evidence saved in
- * Postgres), and every open ask. Safe to re-run: newer saves win.
+ * signed-up user who finished onboarding, and every open ask. Each user comes back
+ * from their saved Postgres row: approved evidence from every source (GitHub,
+ * research, public profile, CV excerpts), expertise and revision. Safe to re-run:
+ * newer saves win. A user who can't be indexed doesn't stop the others; the run
+ * lists them and exits non-zero, and their saved profile is untouched.
  * Run from the repo root, after `es/rebuild.ts` when the indices are new:
  *   npm run seed
  */
@@ -45,13 +48,24 @@ export async function seedSynthetic(): Promise<number> {
   return file.people.length;
 }
 
-export async function seedUsers(): Promise<number> {
-  // syncProfile replays the GitHub evidence saved in Postgres, so a rebuilt index gets it back. It writes
-  // straight to Elasticsearch, like the rest of this script: the app's search switch (FAKE_API=1 in
-  // .env.local) would send users to throwaway memory and still clear their pending flag.
+/**
+ * Replays every onboarded user's saved row through syncProfile, the same path as a profile save: their
+ * approved evidence snapshot (or, before their first approval, legacy GitHub evidence), expertise and
+ * revision. Only the public users row is read, never private enrichment input. It writes straight to
+ * Elasticsearch, like the rest of this script: the app's search switch (FAKE_API=1 in .env.local) would
+ * send users to throwaway memory and still clear their pending flag.
+ *
+ * One failure (an invalid stored snapshot, an index error) must not leave everyone after it missing from
+ * a rebuilt index, so the others still run. Failures are returned as "<user id>: <message>"; the messages
+ * are fixed sanitized texts, never profile content. A failed user's row and pending flag stay as they were.
+ */
+export async function seedUsers(): Promise<{ indexed: number; failed: string[] }> {
   const onboarded = await db().select().from(users).where(isNotNull(users.filters));
-  await eachInParallel(onboarded, (user) => syncProfile(user, elasticSearch));
-  return onboarded.length;
+  const failed: string[] = [];
+  await eachInParallel(onboarded, (user) => syncProfile(user, elasticSearch).catch((error: unknown) => {
+    failed.push(`${user.id}: ${error instanceof Error ? error.message : "unknown error"}`);
+  }));
+  return { indexed: onboarded.length - failed.length, failed };
 }
 
 async function seedAsks(): Promise<number> {
@@ -73,7 +87,14 @@ async function main() {
   console.log(`ingested ${people.length} fixture people`);
   console.log(`ingested ${await seedSynthetic()} synthetic attendees`);
   if (process.env.DATABASE_URL) {
-    console.log(`ingested ${await seedUsers()} signed-up users`);
+    const { indexed, failed } = await seedUsers();
+    console.log(`ingested ${indexed} signed-up users`);
+    if (failed.length) {
+      // Listed now, so a later failure can't hide them; open asks still load, then the run exits non-zero.
+      console.error(`${failed.length} signed-up users could not be indexed; their saved profiles are unchanged. Fix and re-run:`);
+      for (const line of failed) console.error(`  ${line}`);
+      process.exitCode = 1;
+    }
     console.log(`registered ${await seedAsks()} open asks`);
   } else {
     console.log("DATABASE_URL not set: skipped signed-up users and open asks");

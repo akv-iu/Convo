@@ -57,7 +57,7 @@ describe("seeding signed-up users", () => {
     ];
     users.push(...rows);
 
-    await expect(seedUsers()).resolves.toBe(2);
+    await expect(seedUsers()).resolves.toEqual({ indexed: 2, failed: [] });
 
     expect(syncProfile).toHaveBeenCalledTimes(2);
     for (const [i, [user, target]] of syncProfile.mock.calls.entries()) {
@@ -66,10 +66,13 @@ describe("seeding signed-up users", () => {
     }
   });
 
-  it("fails when a user can't be synced", async () => {
-    users.push({ id: "u_1" });
-    syncProfile.mockRejectedValueOnce(Object.assign(new Error("Saved repository evidence is invalid."), { status: 503 }));
+  it("reports a user who can't be synced and still syncs everyone else", async () => {
+    users.push({ id: "u_1" }, { id: "u_2" }, { id: "u_3" });
+    syncProfile.mockImplementation(async (user: { id: string }) => {
+      if (user.id === "u_1") throw Object.assign(new Error("Stored profile evidence is invalid."), { status: 503 });
+    });
 
-    await expect(seedUsers()).rejects.toThrow("Saved repository evidence is invalid.");
+    await expect(seedUsers()).resolves.toEqual({ indexed: 2, failed: ["u_1: Stored profile evidence is invalid."] });
+    expect(syncProfile).toHaveBeenCalledTimes(3);
   });
 });

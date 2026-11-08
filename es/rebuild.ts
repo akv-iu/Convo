@@ -1,7 +1,11 @@
 /**
  * Drop and recreate the three indices from es/mappings (B1). Deletes all indexed
- * data: run scripts/seed.ts afterwards. The synonym list lives in
- * es/mappings/evidence.json, so changing it also needs a rebuild.
+ * data: run `npm run seed` afterwards. It restores the fixtures, the synthetic
+ * attendees, open asks and every onboarded user from Postgres: their approved
+ * evidence from all four sources (or legacy GitHub evidence before a first
+ * approval), expertise and saved revision. Until it finishes, those people are
+ * missing from matches on every deployment sharing the cluster. The synonym list
+ * lives in es/mappings/evidence.json, so changing it also needs a rebuild.
  *   node --env-file=.env.local node_modules/tsx/dist/cli.mjs es/rebuild.ts
  */
 import { readFile } from "node:fs/promises";
