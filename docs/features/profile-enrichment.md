@@ -22,6 +22,7 @@ This tracks the whole feature across the foundation, backend and screens. A chec
 - [ ] Data: reviewed additive migrations applied/verified in the intended Neon environment without resetting shared data.
 - [ ] Settings: Google/OpenAlex/Brave/cleanup environment values configured privately by Person B; feature remains off until acceptance.
 - [ ] Tests: two review rounds, fake flag-off/on browser coverage with axe, then authorized live two-account/source/removal acceptance.
+- [x] Flag-off/on browser coverage: the click-through gate runs ordinary specs on a flag-off fake server and tests/e2e/enrichment on a separate flag-on one (397 passed, 13 existing skips). Live acceptance remains open; see [the browser configuration handoff](../../db/Enrichment-Browser-Config.md).
 - [ ] Docs: final account setup, complete manual checklist, retention limits and remaining pilot limitations reviewed.
 
 ## How to try it
