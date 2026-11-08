@@ -4,11 +4,20 @@
  * hidden hiring answer is never shown as "not hiring" (badgeFacts).
  */
 import type { CSSProperties } from "react";
-import type { MatchResult } from "@/contracts/types";
+import type { EvidenceDoc, MatchResult } from "@/contracts/types";
 import { personColour } from "@/components/ui/badge-colours";
 import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
+
+/** What each kind of evidence is called on the open profile. */
+export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = {
+  repo: "Repository",
+  commit_area: "Code area",
+  paper: "Paper",
+  talk: "Talk",
+  abstract: "Abstract",
+};
 
 /** The full profile a row opens into: their badge, why them, the evidence, and what they work with. */
 export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: string }) {
@@ -74,6 +83,34 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
                   ) : (
                     <span key={j}>{part.text}</span>
                   ),
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {match.evidence.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted">Projects and papers</h3>
+          <ul className="mt-1 flex flex-col gap-1.5" aria-label={`${p.name}'s projects and papers`}>
+            {match.evidence.map((e, i) => (
+              <li key={`${e.kind}-${e.title}-${i}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm leading-snug">
+                <span className="shrink-0 rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-semibold">
+                  {evidenceKindLabel[e.kind]}
+                </span>
+                {e.url ? (
+                  <a
+                    href={e.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 font-medium break-words underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    {e.title}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                ) : (
+                  <span className="min-w-0 font-medium break-words">{e.title}</span>
                 )}
               </li>
             ))}

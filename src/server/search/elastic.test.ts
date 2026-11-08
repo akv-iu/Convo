@@ -178,6 +178,35 @@ describe("searchCandidates", () => {
       [DEMO_USER_B, 5, ["Maintains pkg/scheduler: Preemption picks <em>victims</em>", "KubeCon talk"]],
       ["p_002", 2.5, ["Bio text"]],
     ]);
+    // The evidence list comes from the same hits; the generated profile document isn't evidence.
+    expect(results.map((r) => r.evidence)).toEqual([
+      [{ kind: "repo", title: "Maintains pkg/scheduler" }, { kind: "talk", title: "KubeCon talk" }],
+      [],
+    ]);
+  });
+
+  it("reads each hit's link, keeps https only, and lists at most five distinct items in hit order", async () => {
+    const doc = (i: number, url?: string, kind = "repo") =>
+      ({ _score: 10 - i, _source: { person_id: DEMO_USER_B, kind, title: `Item ${i}`, text: "x", ...(url ? { url } : {}) } });
+    es.search.mockResolvedValueOnce({ hits: { hits: [
+      doc(1, "https://github.com/etcd-io/raft"),
+      doc(2, "http://insecure.example/raft"), // kept, without its link
+      doc(3, "javascript:alert(1)", "paper"), // kept, without its link
+      doc(1, "https://github.com/etcd-io/raft"), // a duplicate of the first
+      doc(4, "not a url"),
+      doc(5, "https://example.org/talk", "talk"),
+      doc(6, "https://example.org/sixth"), // past the limit of five
+    ] } });
+    es.mget.mockResolvedValueOnce({ docs: [{ _id: DEMO_USER_B, found: true, _source: { person: lookup(DEMO_USER_B) } }] });
+    const [result] = await elasticSearch.searchCandidates("raft", { excludeIds: [] });
+    expect(call(es.search)._source).toEqual(["person_id", "kind", "title", "text", "url"]);
+    expect(result.evidence).toEqual([
+      { kind: "repo", title: "Item 1", url: "https://github.com/etcd-io/raft" },
+      { kind: "repo", title: "Item 2" },
+      { kind: "paper", title: "Item 3" },
+      { kind: "repo", title: "Item 4" },
+      { kind: "talk", title: "Item 5", url: "https://example.org/talk" },
+    ]);
   });
 
   it("serves the hybrid ranking when the hosted reranker fails", async () => {

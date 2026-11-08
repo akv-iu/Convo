@@ -102,12 +102,25 @@ describe("people already passed on or sent a request", () => {
 
 describe("evidence highlights", () => {
   it("keeps <em> marks on the card but gives the model plain text", async () => {
-    search.searchCandidates.mockResolvedValueOnce([{ person: onlyWanted, highlights: ["Maintains <em>preemption</em> code"], score: 1 }]);
+    search.searchCandidates.mockResolvedValueOnce([{ person: onlyWanted, highlights: ["Maintains <em>preemption</em> code"], evidence: [], score: 1 }]);
     search.whoIsLookingFor.mockResolvedValueOnce([]);
 
     const [result] = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null });
 
     expect(result.highlights).toEqual(["Maintains <em>preemption</em> code"]);
     expect(ai.explain).toHaveBeenLastCalledWith(ask.refined, [expect.objectContaining({ highlights: ["Maintains preemption code"] })]);
+  });
+
+  it("passes each candidate's evidence links to the card, but not to the model", async () => {
+    const evidence = [{ kind: "repo" as const, title: "etcd-io/raft", url: "https://github.com/etcd-io/raft" }];
+    search.searchCandidates.mockResolvedValueOnce([{ person: onlyWanted, highlights: ["etcd-io/raft"], evidence, score: 1 }]);
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+
+    const [result] = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null });
+
+    expect(result.evidence).toEqual(evidence);
+    // The explain step sees no links, so its cache keys (built from highlights) are unchanged.
+    const sent = ai.explain.mock.calls.at(-1)![1] as { evidence: unknown[] }[];
+    expect(sent[0].evidence).toEqual([]);
   });
 });
