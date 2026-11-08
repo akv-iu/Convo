@@ -56,7 +56,7 @@ export async function seedUsers(): Promise<{ indexed: number; failed: string[] }
     try { await syncProfile(user, elasticSearch); }
     catch { failed.push(user.id); }
   });
-  return { indexed: onboarded.length - failed.length, failed: failed.sort() };
+  return { indexed: onboarded.length - failed.length, failed: failed.sort((a, b) => a.localeCompare(b)) };
 }
 
 async function seedAsks(): Promise<number> {
