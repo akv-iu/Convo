@@ -50,7 +50,8 @@ describe("durable ask creation", () => {
     expect(routes.refine.response.parse(response)).toEqual({ askId: expect.any(String), refined });
     const [sql, params] = query.mock.calls[0];
     expect(sql).toContain('insert into "asks"');
-    expect(params).toEqual([response.askId, person.id, "scheduler preemption", JSON.stringify(refined)]);
+    expect(sql).toContain('"soft_blocker"'); // set explicitly: off for new asks, whatever the column default
+    expect(params).toEqual([response.askId, person.id, "scheduler preemption", JSON.stringify(refined), false]);
     expect(refineAsk).toHaveBeenCalledWith("scheduler preemption", person);
     expect(registerAsk).toHaveBeenCalledWith(response.askId, person.id, refined.text);
   });

@@ -17,11 +17,10 @@ import { AskType } from "@/contracts/types";
 import type { AiService } from "./index";
 import { AskBlockedError } from "./blocked";
 import { cannedAi } from "./canned";
+import { MEETING_MINUTES } from "./minutes";
 
 const MODEL = "gpt-5.4-mini";
 const MODERATION_MODEL = "omni-moderation-latest";
-/** Suggested meeting length per kind of ask; the asker can change it on the refine screen. */
-const MINUTES: Record<AskType, number> = { knowledge: 10, career: 15, collaboration: 20, hiring: 20 };
 /** A match waits this long for explanations, then shows evidence lines instead. */
 const EXPLAIN_TIMEOUT_MS = 4000;
 
@@ -179,7 +178,7 @@ export const openAi: AiService = {
       refined = Refined.parse(reply.value);
       await writeCache("refine", new Map([[key, refined]]));
     }
-    return { ...refined, minutes: MINUTES[refined.type] };
+    return { ...refined, minutes: MEETING_MINUTES };
   },
 
   async moderate(text) {

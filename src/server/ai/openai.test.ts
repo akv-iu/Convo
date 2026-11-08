@@ -13,7 +13,7 @@ import { AskBlockedError } from "./blocked";
 import { openAi } from "./openai";
 
 const requester = people[0];
-const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 10 };
+const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 5 };
 const reply = (value: unknown, extra: object = {}) => ({
   id: "resp_1", model: "gpt-5.4-mini-2026-03-17", status: "completed", output_text: JSON.stringify(value),
   usage: { input_tokens: 120, output_tokens: 30 }, ...extra,
@@ -88,12 +88,12 @@ describe("refineAsk", () => {
     expect(moderate).not.toHaveBeenCalled();
   });
 
-  it("sets the meeting length from the kind of ask", async () => {
+  it("suggests a 5-minute chat whatever the kind of ask", async () => {
     create.mockResolvedValueOnce(reply({ text: "Would you be open to an SRE role working with Argo?", type: "hiring" }));
     create.mockResolvedValueOnce(reply({ text: "What does Grafana Labs look for in candidates?", type: "career" }));
 
-    await expect(openAi.refineAsk("hiring SREs who know argo", requester)).resolves.toMatchObject({ type: "hiring", minutes: 20 });
-    await expect(openAi.refineAsk("I want a job at Grafana Labs", requester)).resolves.toMatchObject({ type: "career", minutes: 15 });
+    await expect(openAi.refineAsk("hiring SREs who know argo", requester)).resolves.toMatchObject({ type: "hiring", minutes: 5 });
+    await expect(openAi.refineAsk("I want a job at Grafana Labs", requester)).resolves.toMatchObject({ type: "career", minutes: 5 });
   });
 
   it("rejects a reply that is blank or cut off, and caches neither", async () => {

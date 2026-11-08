@@ -9,7 +9,7 @@ reset, new dependency or credential change. Test with `FAKE_API=0` and
 
 - Send `{ askId, toPersonId }`. The sender comes from the authenticated session.
   The ask must belong to that sender (404 otherwise). The question and minutes
-  are copied from its stored refinement, or raw text and 10 minutes if unrefined.
+  are copied from its stored refinement, or raw text and 5 minutes if unrefined.
   Client-supplied sender, question, minutes, status and reply fields are ignored.
 - Recipients are checked in Postgres first, then through B1's approved
   `search.getPerson(id)` addition. Search-only and synthetic profiles are valid
