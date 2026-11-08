@@ -9,7 +9,7 @@
  */
 import type { CSSProperties } from "react";
 import { HeroFace, heroPeople, HeroWearer, type HeroPerson } from "./hero-faces";
-import { useHeroSequence } from "./hero-sequence";
+import { HERO_PACE, useHeroSequence } from "./hero-sequence";
 
 function Strap({ className = "" }: { className?: string }) {
   return (
@@ -69,7 +69,7 @@ export function HeroStack({ run = 0 }: { run?: number }) {
           };
           return (
             <div key={card.step} className="absolute inset-x-0 top-0 transition-transform duration-300" style={style}>
-              <div className="motion-safe:animate-[hero-drop_220ms_ease-out]">
+              <div className="motion-safe:animate-[hero-drop_var(--drop)_ease-out]" style={{ "--drop": `${220 * HERO_PACE}ms` } as CSSProperties}>
                 <Strap className="h-[60px] w-28" />
                 <div className="-mt-1">
                   <Card person={heroPeople[card.index]} matched={settled && depth === 0} />
@@ -94,7 +94,7 @@ export function HeroTwist({ run = 0 }: { run?: number }) {
         <div
           key={step}
           className="motion-safe:animate-[hero-twist_var(--twist)_ease-out_1] [transform-style:preserve-3d]"
-          style={{ "--twist": `${Math.max(gap, 90)}ms` } as CSSProperties}
+          style={{ "--twist": `${Math.max(gap, 90 * HERO_PACE)}ms` } as CSSProperties}
         >
           <Card person={heroPeople[index]} matched={settled} />
         </div>
@@ -111,7 +111,7 @@ export function HeroSwap({ run = 0 }: { run?: number }) {
   return (
     <div aria-hidden="true" className="mx-auto w-64 select-none">
       <div className={`relative overflow-hidden rounded-[2rem] transition-shadow duration-500 ${settled ? "ring-4 ring-accent" : ""}`} style={{ backgroundColor: person.badge }}>
-        <div key={step} className="motion-safe:animate-[hero-swap_var(--swap)_ease-out_1]" style={{ "--swap": `${Math.min(Math.max(gap, 90), 320)}ms` } as CSSProperties}>
+        <div key={step} className="motion-safe:animate-[hero-swap_var(--swap)_ease-out_1]" style={{ "--swap": `${Math.min(Math.max(gap, 90 * HERO_PACE), 320 * HERO_PACE)}ms` } as CSSProperties}>
           <HeroWearer person={person} className="mx-auto block h-[300px] w-[200px]" />
         </div>
       </div>

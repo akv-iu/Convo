@@ -6,11 +6,9 @@
  * It plays once per visit. With reduced motion it shows the chosen person straight away, without
  * swaying. Decorative: the page's text says what Lanyard does.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { HeroFace, heroPeople } from "./hero-faces";
-
-/** Gaps between faces, in ms: quick at first, then slowing down onto the match. */
-const STEPS = [80, 80, 80, 80, 80, 80, 80, 90, 105, 125, 150, 185, 230, 290, 370, 480, 640];
+import { HERO_PACE, HERO_STEPS as STEPS } from "./hero-sequence";
 /** A beat before it starts, so the page has painted. */
 const START_DELAY = 450;
 
@@ -68,7 +66,7 @@ export function HeroBadge() {
             <span className="font-normal">Salt Lake City</span>
           </div>
           <div className="flex flex-col items-center px-5 pb-5 pt-4 text-center">
-            <span key={index} className="block motion-safe:animate-[hero-tick_160ms_ease-out]">
+            <span key={index} className="block motion-safe:animate-[hero-tick_var(--tick)_ease-out]" style={{ "--tick": `${160 * HERO_PACE}ms` } as CSSProperties}>
               <HeroFace person={person} className="size-28" />
             </span>
             <p className="mt-3 text-xl font-extrabold leading-tight tracking-tight [font-stretch:85%]">{person.name}</p>
