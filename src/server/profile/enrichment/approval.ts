@@ -9,7 +9,8 @@ import { clearCv, discard, expire, fingerprint } from "./state";
 async function synchronize(user: Awaited<ReturnType<typeof readUser>>): Promise<RouteResponse<"acceptEnrichment">> {
   const savedRevision = user.revision;
   indexedEvidence(user); sourceRecords(user);
-  if (user.filters === null) return { person: null, sync: { status: "not_onboarded", retryable: true, savedRevision } };
+  // Not retryable: a repeated approval can't index a profile until onboarding saves it (as the fake says).
+  if (user.filters === null) return { person: null, sync: { status: "not_onboarded", retryable: false, savedRevision } };
   // Validate before treating a failure as an indexing outage.
   const person = toPerson(user);
   try { await syncProfile(user); return { person, sync: { status: "confirmed", retryable: false, savedRevision } }; }
