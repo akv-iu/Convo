@@ -1,8 +1,9 @@
 /**
  * Load everything searchable into Elasticsearch through the same ingestion path
  * real sign-ups use (B1): the fixture people, the 500 synthetic attendees, every
- * signed-up user who finished onboarding (with the GitHub evidence saved in
- * Postgres), and every open ask. Safe to re-run: newer saves win.
+ * signed-up user who finished onboarding (with all approved evidence saved in
+ * Postgres), and every open ask. Safe to re-run: newer saves win. Failed users
+ * are reported by ID; other users, open asks and the final refresh still run.
  * Run from the repo root, after `es/rebuild.ts` when the indices are new:
  *   npm run seed
  */
@@ -45,13 +46,17 @@ export async function seedSynthetic(): Promise<number> {
   return file.people.length;
 }
 
-export async function seedUsers(): Promise<number> {
-  // syncProfile replays the GitHub evidence saved in Postgres, so a rebuilt index gets it back. It writes
+export async function seedUsers(): Promise<{ indexed: number; failed: string[] }> {
+  // syncProfile replays all approved evidence and expertise at the saved revision. It writes
   // straight to Elasticsearch, like the rest of this script: the app's search switch (FAKE_API=1 in
   // .env.local) would send users to throwaway memory and still clear their pending flag.
   const onboarded = await db().select().from(users).where(isNotNull(users.filters));
-  await eachInParallel(onboarded, (user) => syncProfile(user, elasticSearch));
-  return onboarded.length;
+  const failed: string[] = [];
+  await eachInParallel(onboarded, async (user) => {
+    try { await syncProfile(user, elasticSearch); }
+    catch { failed.push(user.id); }
+  });
+  return { indexed: onboarded.length - failed.length, failed: failed.sort() };
 }
 
 async function seedAsks(): Promise<number> {
@@ -68,23 +73,29 @@ async function seedAsks(): Promise<number> {
   return open.filter((ask) => ask.refined).length;
 }
 
-async function main() {
+export async function seed() {
+  let failed: string[] = [];
   await eachInParallel(people, (person) => elasticSearch.ingestPerson(person, evidence.filter((e) => e.personId === person.id)));
   console.log(`ingested ${people.length} fixture people`);
   console.log(`ingested ${await seedSynthetic()} synthetic attendees`);
   if (process.env.DATABASE_URL) {
-    console.log(`ingested ${await seedUsers()} signed-up users`);
+    const result = await seedUsers();
+    failed = result.failed;
+    console.log(`ingested ${result.indexed} signed-up users`);
+    if (failed.length) console.error("Signed-up users could not be indexed", { count: failed.length, ids: failed });
     console.log(`registered ${await seedAsks()} open asks`);
   } else {
     console.log("DATABASE_URL not set: skipped signed-up users and open asks");
   }
   await client().indices.refresh({ index: [INDEX.people, INDEX.evidence, INDEX.asks] });
+  if (failed.length) throw new Error("User seeding incomplete.");
 }
 
 // Only when run as a script (`npm run seed`), so the tests can import the loaders without seeding anything.
 if (process.argv[1]?.endsWith("seed.ts")) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
+  seed().catch(() => {
+    // Provider errors can contain profile text or credentials.
+    console.error("Seeding failed. Check the failure summary and service configuration.");
+    process.exitCode = 1;
   });
 }
