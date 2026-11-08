@@ -82,3 +82,17 @@ Then:
 Cleanup: remove any remaining temporary upload through its API, cancel the created unaccepted job and restore the original staged answers if appropriate. Stop the local server and close/reset its task terminal. Do not delete shared users/requests or reset Neon. Keep the production feature off. Automated tests cover expiry, leases, retry races and bounded cleanup; this checklist does not ask you to wait 24 hours or pretend a worker exists.
 
 ORCID checksum validation follows [ORCID's identifier specification](https://support.orcid.org/hc/en-us/articles/360006897674-Structure-of-the-ORCID-Identifier).
+## Verification and current integration blockers (7 November)
+
+Two critical review/test rounds pass **824 tests in 59 files, 98.56% line coverage**, with lint/typecheck passing for the feature stack plus Claude's `6924256` nullable compatibility patch in a validation-only checkout. No screen changes are bundled into this backend branch. Tests cover state races, owner boundaries, idempotency, private-input deletion, stalled/cancelled leases, partial collection, retry phase/evidence preservation, storage failures and the actual HTTP adapters with a versioned recorded Neon driver. Drizzle's local migration check passes. No live SQL/provider calls or production deployment were performed.
+
+Review fixes included returning the contracted job from cancellation, keeping upload-removal tombstones for idempotency, correcting cleanup deadlines, preventing old leases from writing, distinguishing fatal job failure from per-source reasons, and avoiding full document rewrites for unchanged status polls. The collector/AI runner, approval/version enforcement and operational cleanup schedule remain unimplemented; active imports return not_ready.
+
+A separate functional integration with current main `ccdffa7` (#47/#48/#49 merged) found **864/865 tests passing and two frontend type errors**. Backend tests pass; merging is blocked by these Claude-owned compatibility updates:
+
+1. `src/app/(app)/matches/match-card.tsx`: its EvidenceKind label map needs `profile_page` and `cv` entries for the foundation's new evidence kinds.
+2. `src/components/ui/person-badge.test.ts`: the nullable fixture passed to MatchDetails needs the `evidence` array added by #49 (an empty array fits this existing null-handle test). The missing field is also the one failing runtime test.
+
+No frontend/B1 code was changed to hide those findings. Once Claude updates the compatibility patch, repeat the combined checks. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005; #50 is still pending, and the foundation/auth/state migration chain must be regenerated against the final merged schema before PR/Neon application. The temporary integration kept unresolved migration metadata isolated for code testing; it is not a deployable or published merge.
+
+This branch is ready for backend code review, not merge. It does not open a PR or imply Claude's contract ACK/user merge approval.
