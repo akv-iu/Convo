@@ -330,7 +330,7 @@ describe("matching a saved ask", () => {
     const ready = { ...person, id: "ready-evidence", synthetic: false };
     const visible = { country: true, workplace: true, hiring: true };
     runMatch.mockResolvedValueOnce([pending, ready].map((candidate, rank) => ({ person: candidate,
-      badges: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
+      badges: [], evidence: [], highlights: ["Old repository"], mutual: false, explanation: "Old repository explanation", score: 1, rank })));
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [
         [pending.id, JSON.stringify(visible), true], [ready.id, JSON.stringify(visible), false],
@@ -342,7 +342,7 @@ describe("matching a saved ask", () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [["candidate", JSON.stringify({ country: false, workplace: false, hiring: false })]] });
     const candidate = { ...person, id: "candidate", synthetic: false, workplaceName: "Acme" };
-    runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person: candidate, badges: [candidate.filters.country, "hiring"], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const [card] = await matchAsk(person.id, ask.id);
     expect(card.person.filters).toEqual({ country: null, rorId: null, hiring: null });
     expect(card.person.workplaceName).toBeNull();
@@ -353,7 +353,7 @@ describe("matching a saved ask", () => {
 
   it("fails closed when a real candidate's current privacy cannot be loaded", async () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] });
-    runMatch.mockResolvedValueOnce([{ person: { ...person, synthetic: false }, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person: { ...person, synthetic: false }, badges: [], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     expect((await matchAsk(person.id, ask.id))[0].person.filters).toEqual({ country: null, rorId: null, hiring: null });
   });
 
@@ -361,7 +361,7 @@ describe("matching a saved ask", () => {
     query.mockResolvedValueOnce(askRows()).mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [] })
       .mockRejectedValueOnce(new Error("private-database-token"));
-    runMatch.mockResolvedValueOnce([{ person, badges: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
+    runMatch.mockResolvedValueOnce([{ person, badges: [], evidence: [], highlights: [], mutual: false, explanation: "Match", score: 1, rank: 0 }]);
     const error = await matchAsk(person.id, ask.id).catch((e: unknown) => e);
     expect(error).toMatchObject({ status: 503 });
     expect(String(error)).not.toContain("private-database-token");
