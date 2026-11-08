@@ -5,7 +5,7 @@
 import type { Api } from "@/contracts/routes";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 import { searchWorkplaces } from "@/server/profile/ror";
-import { createAsk, getAsk, matchAsk } from "@/server/requests/asks";
+import { createAsk, getAsk, matchAsk, previewAsk, saveAskAsWritten } from "@/server/requests/asks";
 import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
@@ -36,6 +36,8 @@ export const real: Api = {
   getAvailability: ({ userId }) => getAvailability(userId),
   putAvailability: ({ userId, body }) => saveAvailability(userId, body),
   refine: ({ userId, body }) => createAsk(userId, body.text),
+  previewRefine: ({ userId, body }) => previewAsk(userId, body.text),
+  saveAsk: ({ userId, body }) => saveAskAsWritten(userId, body),
   match: ({ userId, body }) => matchAsk(userId, body.askId, body.query),
   reject: ({ userId, body }) => rejectPerson(userId, body),
   setSoftBlocker: ({ userId, body }) => setSoftBlocker(userId, body),

@@ -1,0 +1,1 @@
+ALTER TABLE "asks" ALTER COLUMN "soft_blocker" SET DEFAULT false;

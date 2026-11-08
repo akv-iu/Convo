@@ -72,7 +72,9 @@ describe.each(["fake", "real"] as const)("%s request HTTP contract", (mode) => {
     expect(response.status).toBe(200);
     const sent = routes.sendRequest.response.parse(await response.json());
     expect(sent).toMatchObject({ askId: saved.askId, toPersonId: DEMO_USER_B, fromUserId: DEMO_USER_A,
-      question: saved.question, minutes: 10, status: "sent", reply: null, slot: null });
+      // The fake returns the request it already holds for this person; the real route saves a new one,
+      // and an unrefined ask gets the 5-minute default.
+      question: saved.question, minutes: mode === "fake" ? saved.minutes : 5, status: "sent", reply: null, slot: null });
     identity.userId = DEMO_USER_B;
     if (mode === "real") query.mockResolvedValueOnce({ rows: [Object.values(sent)] });
     const received = await inbox(get(), context());

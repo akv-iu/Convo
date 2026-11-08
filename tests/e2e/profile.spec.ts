@@ -17,7 +17,7 @@ const no = (page: Page) => page.getByRole("button", { name: "No, let me fix it" 
 const saveButton = (page: Page) => page.getByRole("button", { name: "Save and finish" });
 const nameField = (page: Page) => page.getByRole("textbox", { name: "Name" });
 const visibleBadge = (page: Page) =>
-  page.locator("[data-badge-stripe]:visible").locator("xpath=ancestor::div[@aria-hidden='true'][1]");
+  page.locator("[data-badge]:visible");
 /** Next.js also renders an empty role="alert" route announcer. */
 const alertWithText = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
 

@@ -3,13 +3,15 @@
  * in-memory version is used by the fake API and when FAKES includes "search".
  */
 import { config } from "@/server/config";
-import type { EvidenceDoc, HardFilters, Person, TimeBlock } from "@/contracts/types";
+import type { EvidenceDoc, HardFilters, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
 import { elasticSearch } from "./elastic";
 import { memorySearch } from "./memory";
 
 export interface Candidate {
   person: Person;
   highlights: string[];
+  /** Their distinct evidence in search order, at most five, https links only (see ./evidence). */
+  evidence: MatchEvidence[];
   /** Higher is better. Elasticsearch scales it to 0 to 5; the pipeline adds 1 for mutual interest. */
   score: number;
 }

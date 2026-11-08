@@ -14,7 +14,7 @@ const continueButton = (page: Page) => page.getByRole("button", { name: "Continu
 const alertWithText = (page: Page) => page.getByRole("alert").filter({ hasText: /\S/ });
 const isSave = (req: Request) => req.url().endsWith("/api/me") && req.method() === "PUT";
 const visibleBadge = (page: Page) =>
-  page.locator("[data-badge-stripe]:visible").locator("xpath=ancestor::div[@aria-hidden='true'][1]");
+  page.locator("[data-badge]:visible");
 const stripeColour = (page: Page) =>
   page
     .locator("[data-badge-stripe]")
@@ -77,6 +77,7 @@ test.describe("your badge (step 2)", () => {
       workplaceName: "University of Oxford",
       badgeColour: "lilac",
       visibility: SHOW_ALL,
+      avatar: null, // no picture chosen: initials
     });
     await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
 
@@ -229,6 +230,47 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
+  test("the + on the badge picks a picture: it shows on the badge and is saved with Continue", async ({ page, isMobile }) => {
+    await openWithDraft(page, "p_003");
+    const badge = visibleBadge(page);
+    // No picture yet: initials on the badge colour.
+    await expect(badge.locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
+    await expect(badge.locator("[data-avatar]")).toHaveText("AL");
+    const plus = page.getByRole("button", { name: "Choose a picture" });
+    await expect(plus).toHaveAttribute("aria-expanded", "false");
+    await plus.click();
+    await expect(plus).toHaveAttribute("aria-expanded", "true");
+    const picker = page.getByRole("group", { name: "Your picture" });
+    await expect(picker.getByRole("radio")).toHaveCount(13); // initials and twelve pictures
+    await expect(picker.getByRole("radio", { name: "Initials" })).toBeChecked();
+    if (!isMobile) await expect(picker.getByRole("radio", { name: "Initials" })).toBeFocused();
+    // Tap the visible picture, as a person would.
+    await picker.locator("label").filter({ has: page.getByRole("radio", { name: "Moon" }) }).click();
+    await expect(picker.getByRole("radio", { name: "Moon" })).toBeChecked();
+    await expect(badge.locator("[data-avatar]")).toHaveAttribute("data-avatar", "moon");
+    if (!isMobile) {
+      // Escape closes it and puts focus back on the +.
+      await picker.getByRole("radio", { name: "Moon" }).focus();
+      await page.keyboard.press("Escape");
+      await expect(picker).toHaveCount(0);
+      await expect(plus).toBeFocused();
+    } else {
+      await picker.getByRole("button", { name: "Done" }).click();
+      await expect(picker).toHaveCount(0);
+    }
+    // Saved with Continue, like the colour. The save is answered here, so no shared fake person changes.
+    await page.getByText("Yes, I'm hiring", { exact: true }).click();
+    await page.route("**/api/me", async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      const me = await (await page.request.get("/api/me", { headers: { "x-demo-user": "p_003" } })).json();
+      return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
+    });
+    const saving = page.waitForRequest(isSave);
+    await continueButton(page).click();
+    expect((await saving).postDataJSON()).toMatchObject({ avatar: "moon" });
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
+  });
+
   test("tapping a line on the badge hides it, and the switch beside the badge follows", async ({ page }) => {
     await openWithDraft(page, "p_003");
     const badge = visibleBadge(page);
@@ -289,6 +331,9 @@ test.describe("your badge (step 2)", () => {
       const scan = async (label: string) =>
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, label).toEqual([]);
       await scan("loaded");
+      await page.getByRole("button", { name: "Choose a picture" }).click();
+      await expect(page.getByRole("group", { name: "Your picture" })).toBeVisible();
+      await scan("picture picker open");
     });
   }
 });

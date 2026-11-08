@@ -13,12 +13,12 @@ import { AskBlockedError } from "./blocked";
 import { openAi } from "./openai";
 
 const requester = people[0];
-const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 10 };
+const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 5 };
 const reply = (value: unknown, extra: object = {}) => ({
   id: "resp_1", model: "gpt-5.4-mini-2026-03-17", status: "completed", output_text: JSON.stringify(value),
   usage: { input_tokens: 120, output_tokens: 30 }, ...extra,
 });
-const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, score: 1 });
+const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, evidence: [], score: 1 });
 const statements = (verb: "select" | "insert") =>
   query.mock.calls.filter(([text]) => String(text).toLowerCase().startsWith(verb));
 /** The cache holds these values for the first keys a lookup asks for, in order. */
@@ -88,12 +88,12 @@ describe("refineAsk", () => {
     expect(moderate).not.toHaveBeenCalled();
   });
 
-  it("sets the meeting length from the kind of ask", async () => {
+  it("suggests a 5-minute chat whatever the kind of ask", async () => {
     create.mockResolvedValueOnce(reply({ text: "Would you be open to an SRE role working with Argo?", type: "hiring" }));
     create.mockResolvedValueOnce(reply({ text: "What does Grafana Labs look for in candidates?", type: "career" }));
 
-    await expect(openAi.refineAsk("hiring SREs who know argo", requester)).resolves.toMatchObject({ type: "hiring", minutes: 20 });
-    await expect(openAi.refineAsk("I want a job at Grafana Labs", requester)).resolves.toMatchObject({ type: "career", minutes: 15 });
+    await expect(openAi.refineAsk("hiring SREs who know argo", requester)).resolves.toMatchObject({ type: "hiring", minutes: 5 });
+    await expect(openAi.refineAsk("I want a job at Grafana Labs", requester)).resolves.toMatchObject({ type: "career", minutes: 5 });
   });
 
   it("rejects a reply that is blank or cut off, and caches neither", async () => {
@@ -123,6 +123,43 @@ describe("refineAsk", () => {
     await expect(openAi.refineAsk("k8s?", requester)).resolves.toEqual(ask);
     expect(moderate).toHaveBeenCalledTimes(2);
     expect(statements("insert")).toHaveLength(1);
+  });
+});
+
+describe("moderate", () => {
+  it("lets a clean ask through after one moderation call, without the model, and caches the verdict", async () => {
+    await expect(openAi.moderate("  how does Raft leader election work?  ")).resolves.toBeUndefined();
+    expect(moderate).toHaveBeenCalledWith({ model: "omni-moderation-latest", input: "how does Raft leader election work?" }, { timeout: 3000, maxRetries: 1 });
+    expect(create).not.toHaveBeenCalled();
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["moderate", JSON.stringify({ blocked: false })]));
+  });
+
+  it("blocks a flagged ask with a 422 and caches that verdict", async () => {
+    moderate.mockResolvedValueOnce({ results: [{ flagged: true }] });
+    const error = await openAi.moderate("something hateful").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AskBlockedError);
+    expect(error).toMatchObject({ status: 422 });
+    expect(statements("insert")[0][1]).toEqual(expect.arrayContaining(["moderate", JSON.stringify({ blocked: true })]));
+  });
+
+  it("answers a repeat from the cache without calling OpenAI", async () => {
+    cacheHolds({ blocked: false });
+    await expect(openAi.moderate("k8s preemption?")).resolves.toBeUndefined();
+    cacheHolds({ blocked: true });
+    await expect(openAi.moderate("something hateful")).rejects.toBeInstanceOf(AskBlockedError);
+    expect(moderate).not.toHaveBeenCalled();
+  });
+
+  it("rethrows when moderation is down, and caches nothing", async () => {
+    moderate.mockRejectedValueOnce(new Error("Moderation timed out"));
+    await expect(openAi.moderate("k8s?")).rejects.toThrow("Moderation timed out");
+    expect(statements("insert")).toHaveLength(0);
+  });
+
+  it("still checks the ask when the cache is down", async () => {
+    query.mockRejectedValue(new Error("Neon is down"));
+    await expect(openAi.moderate("k8s?")).resolves.toBeUndefined();
+    expect(moderate).toHaveBeenCalledOnce();
   });
 });
 
