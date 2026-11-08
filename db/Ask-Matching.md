@@ -19,6 +19,13 @@ Production stays in fake mode until the integration checkpoint.
   containing the word "idiot" gets the same 422, for building that screen.
 - Each refinement submission creates a new ask. Keep its ID for subsequent
   matching requests. Disable duplicate submissions while a save is pending.
+- **New-ask defaults.** Every new ask suggests a 5-minute chat, whatever its
+  type (`MEETING_MINUTES` in `src/server/ai/minutes.ts`, used by the OpenAI and
+  canned refinement). New asks start with the soft blocker ("Keep people I pass
+  on hidden") **off**: the insert sets `soft_blocker = false` explicitly, and
+  migration `0005_new_ask_defaults` makes `false` the column default as well. Asks saved before
+  this keep their length and their switch. With the switch off, a person passed
+  on stays in the matches; the batch cutoff after three passes still applies.
 
 ### Asking as written; sharpening optional
 
@@ -164,7 +171,7 @@ result differs. Keep the browser tab open until cleanup.
    ```
 
    Expect 200, a nonempty `askId`, and a refined question with type `knowledge`
-   and `minutes: 10`. The text is deterministic canned AI, not an OpenAI reply.
+   and `minutes: 5`. The text is deterministic canned AI, not an OpenAI reply.
 
 4. Find matches for that saved ask:
 
@@ -238,7 +245,7 @@ result differs. Keep the browser tab open until cleanup.
    WHERE id = 'PASTE_TEST_ASK_ID' AND user_id = 'PASTE_YOUR_GITHUB_ID';
    ```
 
-   Expect one row with the test question, `status = open`, `soft_blocker = true`,
+   Expect one row with the test question, `status = open`, `soft_blocker = false`,
    and the refined JSON. Then remove that row:
 
    ```sql

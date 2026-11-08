@@ -14,6 +14,10 @@ search and AI remain fake. Production remains in fake mode until integration.
   returned rank. The response is `{ rejections, hiddenBelowRank }`.
 - Send `{ askId, enabled }` to PUT `/api/soft-blocker`. The response echoes the
   saved `{ askId, enabled }`. The update changes only this flag, not rejections.
+- New asks start with the switch **off**, so a rejected person stays in that
+  ask's matches until the asker turns it on (the batch cutoff applies either
+  way). The match screen marks people passed in the current visit as "Passed"
+  and treats them as done; after a reload they are listed again, unmarked.
 - Both writes enforce the authenticated owner inside their SQL statement.
   Missing and foreign-owned asks both return 404. Signed-out requests return
   401; malformed bodies return 400; storage failures return sanitized 503.

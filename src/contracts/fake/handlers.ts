@@ -70,7 +70,7 @@ export const fake: Api = {
       rawText: body.text,
       refined,
       status: "open",
-      softBlocker: true,
+      softBlocker: false, // new asks start with "Keep people I pass on hidden" off
       createdAt: now(),
     });
     await search.registerAsk(id, userId, refined.text);
@@ -147,7 +147,7 @@ export const fake: Api = {
       fromUserId: userId,
       toPersonId: body.toPersonId,
       question: ask.refined?.text ?? ask.rawText,
-      minutes: ask.refined?.minutes ?? 10,
+      minutes: ask.refined?.minutes ?? MEETING_MINUTES,
       status: "sent" as const,
       reply: null,
       slot: null,

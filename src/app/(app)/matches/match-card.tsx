@@ -6,6 +6,7 @@
 import type { CSSProperties } from "react";
 import type { EvidenceDoc, MatchResult } from "@/contracts/types";
 import { personColour } from "@/components/ui/badge-colours";
+import { Avatar } from "@/components/ui/avatars";
 import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
@@ -31,7 +32,7 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
   return (
     <div style={{ "--badge": personColour(p) } as CSSProperties} className="flex flex-col gap-4">
       <div className="flex gap-3 rounded-xl border-l-8 border-[var(--badge)] bg-background px-3 py-2.5">
-        <span aria-hidden="true" className="mt-1 size-12 shrink-0 rounded-full bg-[var(--badge)]" />
+        <Avatar avatar={p.avatar} name={p.name} className="mt-1 size-12 text-base" />
         <div className="min-w-0 flex-1">
           <h2 id={nameId} className="text-2xl font-bold leading-snug tracking-tight break-words">
             {p.name}

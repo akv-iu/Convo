@@ -8,6 +8,14 @@ const match = {
   badges: ["US", "hiring", "synthetic"], highlights: ["Repository evidence"], evidence: [],
   mutual: true, explanation: "Relevant experience", score: 1, rank: 0,
 };
+describe("the badge picture", () => {
+  it("is always shown, whatever sections the person hid", () => {
+    const hidden = { country: false, workplace: false, hiring: false };
+    expect(visiblePerson({ ...match.person, avatar: "moon", visibility: hidden }).avatar).toBe("moon");
+    expect(visibleCard({ ...match, person: { ...match.person, avatar: "gem" } }, hidden).person.avatar).toBe("gem");
+  });
+});
+
 describe("card visibility", () => {
   it("removes hidden fields and their badges without mutating matching data", () => {
     const before = structuredClone(match);
