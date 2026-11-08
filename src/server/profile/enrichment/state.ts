@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { RouteBody, RouteResponse } from "@/contracts/routes";
 import { DiscoverEnrichment, EnrichmentDiscovery, EnrichmentDraft, EnrichmentEvidence, EnrichmentIdentity, SourceProgress, StartEnrichment, UploadCv, type EnrichmentJob } from "@/contracts/enrichment";
 import { INPUT_TTL_MS, JOB_HISTORY_MS, LEASE_MS, enrichmentError, type OwnerData, type PrivateJob } from "./model";
-import { deferCleanup, mutateOwner, ownersDueForCleanup } from "./storage";
+import { deferCleanup, mutateOwner, ownersDueForCleanup, readOwner } from "./storage";
 
 export const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input, (_key, value) =>
   value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)).digest("hex");
@@ -123,14 +123,29 @@ function selected(data: OwnerData, input: RouteBody<"startEnrichment">, source: 
   if (!candidate) enrichmentError("selection_stale");
   return { label: "name" in candidate ? candidate.name : candidate.title, url: candidate.url };
 }
-export function createJob(owner: string, body: RouteBody<"startEnrichment">, githubLogin: string | null, baseTextVersion = 0) {
+const prepared = (job: PrivateJob) => {
+  if (job.value.state === "queued") job.dispatchToken ??= randomUUID();
+  return { job: job.value, attempt: job.dispatchToken };
+};
+export async function findStartJob(owner: string, body: RouteBody<"startEnrichment">) {
+  const data = await readOwner(owner);
+  if (!data) return null;
+  expire(data);
+  const previous = data.jobs.find(j => j.key === body.idempotencyKey);
+  if (previous && previous.fingerprint !== fingerprint(body)) enrichmentError("idempotency_conflict");
+  return previous?.value ?? null;
+}
+export async function createJob(owner: string, body: RouteBody<"startEnrichment">, githubLogin: string | null, baseTextVersion = 0) {
+  return (await prepareJob(owner, body, githubLogin, baseTextVersion)).job;
+}
+export function prepareJob(owner: string, body: RouteBody<"startEnrichment">, githubLogin: string | null, baseTextVersion = 0) {
   const input = StartEnrichment.parse(body); validateIdentity(input.identity);
   const jobId = randomUUID(); const keyHash = fingerprint(input);
   return mutate(owner, data => {
     const previous = data.jobs.find(j => j.key === input.idempotencyKey);
     if (previous) {
       if (previous.fingerprint !== keyHash) enrichmentError("idempotency_conflict");
-      return previous.value;
+      return prepared(previous);
     }
     rate(data, "start", 6);
     if (data.jobs.length >= 50) enrichmentError("rate_limited", 429, 3600);
@@ -152,7 +167,7 @@ export function createJob(owner: string, body: RouteBody<"startEnrichment">, git
       phase: active ? "collecting" : "done", draft: null, expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };
     data.identity = input.identity; data.jobs.push({ key: input.idempotencyKey, fingerprint: keyHash, input: active ? input : null,
       collected: [], value, lease: null, queuedAt: active ? Date.now() : undefined, baseTextVersion });
-    return value;
+    return prepared(data.jobs.at(-1)!);
   });
 }
 export const getJob = (owner: string, id: string, textVersion?: number) => mutate(owner, data => {
@@ -167,7 +182,10 @@ export function cancelJob(owner: string, id: string) {
     discard(data, job, "cancelled"); return job.value;
   });
 }
-export function retryJob(owner: string, id: string, textVersion?: number) {
+export async function retryJob(owner: string, id: string, textVersion?: number) {
+  return (await prepareRetry(owner, id, textVersion)).job;
+}
+export function prepareRetry(owner: string, id: string, textVersion?: number) {
   return mutate(owner, data => {
     const job = find(data, id);
     if (["queued", "running"].includes(job.value.state)) {
@@ -179,15 +197,16 @@ export function retryJob(owner: string, id: string, textVersion?: number) {
     job.value.sources = job.value.sources.map(s => ["not_selected", "done", "empty"].includes(s.status) ? s : { ...s, status: "waiting", items: 0, reason: undefined, retryAfterSeconds: undefined });
     job.value.state = "queued"; job.value.draft = null;
     job.value.phase = job.value.sources.some(s => s.status === "waiting") ? "collecting" : "writing";
-    job.lease = null; job.queuedAt = Date.now();
+    job.lease = null; job.queuedAt = Date.now(); job.dispatchToken = randomUUID();
     if (textVersion !== undefined) job.baseTextVersion = textVersion;
-    return job.value;
+    return prepared(job);
   });
 }
-export function claimJob(owner: string, id: string) {
+export function claimJob(owner: string, id: string, dispatchToken?: string) {
   const token = randomUUID();
   return mutate(owner, data => {
     const job = find(data, id);
+    if (dispatchToken !== undefined && job.dispatchToken !== dispatchToken) enrichmentError("draft_superseded");
     if (job.value.state === "running") enrichmentError("running", 409, 30);
     if (job.value.state !== "queued" || !job.input || job.value.selectionGeneration !== data.generation) enrichmentError("draft_superseded");
     job.lease = { token, expiresAt: Date.now()+LEASE_MS }; job.value.state = "running";

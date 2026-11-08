@@ -172,11 +172,15 @@ describe("profile enrichment HTTP foundation", () => {
     expect((await start(request, context())).status).toBe(413);
   });
 
-  it("reports real handlers as not ready, instead of simulating a successful import", async () => {
+  it("dispatches to the real implementation when the fake API is disabled", async () => {
+    const body = enrichmentStart();
+    const result = await fake.startEnrichment({ userId: DEMO_USER_A, body, params: {}, query: new URLSearchParams() });
+    const handler = vi.spyOn(real, "startEnrichment").mockResolvedValueOnce(result);
     runtime.fakeApi = false;
-    const response = await start(json(enrichmentStart()), context());
-    expect(response.status).toBe(501);
-    expect(await response.json()).toMatchObject({ code: "not_ready" });
+    const response = await start(json(body), context());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(result);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ userId: DEMO_USER_A, body }));
     expect(fetch).not.toHaveBeenCalled();
   });
 

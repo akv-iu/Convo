@@ -5,7 +5,8 @@ const mocks = vi.hoisted(()=>({query:vi.fn(),identity:{userId:"google:101" as st
 vi.mock("@neondatabase/serverless",async original=>({...await original<typeof import("@neondatabase/serverless")>(),neon:()=>({query:mocks.query})}));
 vi.mock("@/server/config",()=>({config:{fakeApi:false,fakeSearch:true,fakeAi:true,profileEnrichmentEnabled:true}}));
 vi.mock("@/server/auth",()=>({getUserId:async()=>mocks.identity.userId}));
-vi.mock("@/server/profile/connection",()=>({accountState:async()=>"google",beginGitHubConnection:vi.fn()}));
+vi.mock("@/server/profile/connection",()=>({accountState:async()=>"google",beginGitHubConnection:vi.fn(),currentToken:async()=>({sub:mocks.identity.userId})}));
+vi.mock("@/server/profile/service",async original=>({...await original<typeof import("@/server/profile/service")>(),readUser:async()=>({textVersion:0,githubLogin:null})}));
 vi.mock("@/server/profile/identities",()=>({readAccountState:async()=>({signIn:{provider:"google"},github:{connected:false,login:null},onboarded:false})}));
 vi.mock("next/server",async original=>({...await original<typeof import("next/server")>(),connection:async()=>undefined}));
 import { GET as state, PUT as save, POST as start } from "./route";
@@ -57,9 +58,9 @@ it("persists a real manual job, hides it from another owner, and cancels it idem
   expect((await cancel(request({}),ctx(job.jobId))).status).toBe(200);
   expect((await cancel(request({}),ctx(job.jobId))).status).toBe(200);
 });
-it("does not create a phantom queued job when collection is unavailable",async()=>{
-  const response=await start(request(enrichmentStart()),ctx());expect(response.status).toBe(501);
-  expect(await response.json()).toMatchObject({code:"not_ready"});expect(mocks.rows.size).toBe(0);
+it("does not create a queued GitHub job without an owner-bound connection",async()=>{
+  const response=await start(request(enrichmentStart()),ctx());expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({code:"github_not_connected"});expect(mocks.rows.size).toBe(0);
 });
 it("returns a sanitized retryable error on a database outage",async()=>{
   mocks.query.mockRejectedValueOnce(new Error("Private CV database credential"));

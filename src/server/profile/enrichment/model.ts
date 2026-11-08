@@ -8,7 +8,7 @@ export const JOB_HISTORY_MS = 2 * INPUT_TTL_MS;
 const lease = z.object({ token: z.uuid(), expiresAt: z.number() });
 export const PrivateJob = z.strictObject({
   fingerprint: z.string(), key: z.uuid(), input: StartEnrichment.nullable(), value: EnrichmentJob,
-  lease: lease.nullable(), queuedAt: z.number().int().nonnegative().optional(), collected: z.array(EnrichmentEvidence).max(36),
+  lease: lease.nullable(), queuedAt: z.number().int().nonnegative().optional(), dispatchToken: z.uuid().optional(), collected: z.array(EnrichmentEvidence).max(36),
   baseTextVersion: z.number().int().nonnegative().optional(), draftVersion: z.number().int().nonnegative().optional(),
   accepted: z.object({ fingerprint: z.string(), savedRevision: z.number().int().nonnegative() }).optional(),
   synthesisCacheKeys: z.array(z.string().max(200)).max(8).optional(),

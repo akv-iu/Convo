@@ -8,12 +8,12 @@ import { claimJob, failJob, finishDraft, recordCollection } from "./state";
 import { enrichmentError, StateError } from "./model";
 import { synthesize } from "./synthesis";
 
-export type RunContext = { github?: { accountId: string; accessToken: string }; openAlexApiKey?: string; fakeAi?: boolean };
+export type RunContext = { github?: { accountId: string; accessToken: string }; openAlexApiKey?: string; fakeAi?: boolean; dispatchToken?: string };
 
 /** Internal only: context is server-owned and must never be stored in the job or returned to the client. */
 export async function runEnrichment(owner: string, id: string, context: RunContext): Promise<void> {
   let lease: Awaited<ReturnType<typeof claimJob>>;
-  try { lease = await claimJob(owner, id); }
+  try { lease = await claimJob(owner, id, context.dispatchToken); }
   catch (error) {
     if (error instanceof StateError && ["running", "draft_superseded"].includes(error.code)) return;
     throw error;

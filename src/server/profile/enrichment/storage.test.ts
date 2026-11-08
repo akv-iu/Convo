@@ -2,13 +2,26 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { emptyOwnerData, INPUT_TTL_MS, JOB_HISTORY_MS } from "./model";
 const mocks = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("@neondatabase/serverless", async original => ({ ...await original<typeof import("@neondatabase/serverless")>(), neon: () => ({ query: mocks.query }) }));
-import { mutateOwner, ownersDueForCleanup } from "./storage";
+import { mutateOwner, ownersDueForCleanup, readOwner } from "./storage";
 const owner = "google:101";
 function row(version = 1, generation = 0) {
   return { rows: [[owner, version, JSON.stringify({ ...emptyOwnerData(), generation }), null]] };
 }
 beforeEach(() => { mocks.query.mockReset(); vi.stubEnv("DATABASE_URL", "postgresql://unused:unused@example.invalid/unused"); });
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); });
+it("reads an owner's state for idempotency without initializing or modifying it", async () => {
+  mocks.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce(row());
+  expect(await readOwner(owner)).toBeUndefined(); expect(await readOwner(owner)).toMatchObject({ generation: 0 });
+  expect(mocks.query.mock.calls).toHaveLength(2);
+  for (const [statement, parameters] of mocks.query.mock.calls) {
+    expect(statement).toMatch(/^select/); expect(parameters).toEqual([owner, 1]);
+  }
+});
+it("sanitizes unreadable idempotency state and does not initialize it", async () => {
+  mocks.query.mockRejectedValueOnce(new Error("private text and credentials"));
+  await expect(readOwner(owner)).rejects.toMatchObject({ status: 503, code: "provider_down" });
+  expect(mocks.query).toHaveBeenCalledTimes(1);
+});
 it("creates owner-private Postgres state rather than retaining it in an instance", async () => {
   mocks.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [[owner]] });
   expect(await mutateOwner(owner, data => ++data.generation)).toBe(1);

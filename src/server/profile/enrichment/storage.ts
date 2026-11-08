@@ -10,6 +10,14 @@ export function nextSweepAt(data: OwnerData): Date | null {
   return deadlines.length ? new Date(Math.min(...deadlines)) : null;
 }
 
+/** Idempotent-start lookup must not initialize state or expose another owner's document. */
+export async function readOwner(userId: string): Promise<OwnerData | undefined> {
+  try {
+    const [row] = await db().select().from(profileEnrichmentStates).where(eq(profileEnrichmentStates.userId, userId)).limit(1);
+    return row ? OwnerData.parse(row.document) : undefined;
+  } catch { enrichmentError("provider_down", 503); }
+}
+
 /** Pure mutations can retry after a competing tab wins; never call a provider inside them. */
 export async function mutateOwner<T>(userId: string, change: (data: OwnerData) => T): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt++) {
