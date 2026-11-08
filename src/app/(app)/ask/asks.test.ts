@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
-import { ASK_MAX, askProblem, lengthLabel, lookingLabel, recallAsk, refineFailure, rememberAsk, typeLabel } from "./asks";
+import { ASK_MAX, askProblem, lengthLabel, lookingLabel, recallAsk, refineFailure, rememberAsk, sendFailure, sharpenFailure, typeLabel } from "./asks";
 
 class MemoryStorage {
   private items = new Map<string, string>();
@@ -98,5 +98,36 @@ describe("lookingLabel (A1 step 6)", () => {
     expect(lookingLabel(0)).toEqual({ number: "No one", text: "is asking for someone like you yet. Check back later." });
     expect(lookingLabel(1)).toEqual({ number: "1", text: "person here is looking for someone like you" });
     expect(lookingLabel(1234)).toEqual({ number: "1,234", text: "people here are looking for someone like you" });
+  });
+});
+
+describe("sendFailure", () => {
+  it("keeps refine's messages for the shared cases", () => {
+    const msg = "This question can't be sent because it looks offensive or unsafe. Please rephrase it.";
+    expect(sendFailure(422, { error: msg })).toEqual({ message: msg, action: null });
+    expect(sendFailure(409, null).action).toEqual({ label: "Set up your badge", href: "/signin" });
+    expect(sendFailure(401, null).action?.label).toBe("Sign in again");
+    expect(sendFailure(400, null).message).toMatch(/few words/);
+  });
+
+  it("talks about sending, not sharpening, for other failures", () => {
+    expect(sendFailure(503, { error: "The safety check is unavailable, so the question wasn't saved. Try again." }).message)
+      .toBe("The safety check is unavailable, so the question wasn't saved. Try again.");
+    expect(sendFailure(503, null).message).toBe("Lanyard couldn't send that just now. Try again in a moment.");
+    expect(sendFailure(0, null).message).toMatch(/couldn't send/);
+    expect(sendFailure(500, { error: "private detail" }).message).not.toContain("private detail");
+  });
+});
+
+describe("sharpenFailure", () => {
+  it("reminds the asker that sending as written still works when the AI is down", () => {
+    expect(sharpenFailure(503, { error: "Question refinement is unavailable. Try again." }).message)
+      .toBe("Question refinement is unavailable. Try again. You can still send it as written.");
+    expect(sharpenFailure(0, null).message).toMatch(/You can still send it as written\.$/);
+  });
+
+  it("leaves blocked and sign-in failures as they are", () => {
+    expect(sharpenFailure(422, { error: "Blocked." }).message).toBe("Blocked.");
+    expect(sharpenFailure(401, null).action?.label).toBe("Sign in again");
   });
 });

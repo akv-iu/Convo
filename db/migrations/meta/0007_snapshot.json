@@ -1,6 +1,6 @@
 {
-  "id": "f75fff3c-488e-4c04-8ce1-b55c1f75f2ce",
-  "prevId": "9ee1aff7-670d-46d1-a710-53a305dd2c7f",
+  "id": "37f7d3db-de85-464b-a651-4a6206407458",
+  "prevId": "6dd42ccf-88c5-4df9-ae75-14e6ffa1e405",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -98,7 +98,7 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": true
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -216,153 +216,6 @@
           ]
         }
       },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.auth_link_attempts": {
-      "name": "auth_link_attempts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session_hash": {
-          "name": "session_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state_hash": {
-          "name": "state_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consumed_at": {
-          "name": "consumed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "auth_link_attempts_state_idx": {
-          "name": "auth_link_attempts_state_idx",
-          "columns": [
-            {
-              "expression": "state_hash",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "auth_link_attempts_user_id_users_id_fk": {
-          "name": "auth_link_attempts_user_id_users_id_fk",
-          "tableFrom": "auth_link_attempts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.profile_enrichment_states": {
-      "name": "profile_enrichment_states",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "document": {
-          "name": "document",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "next_sweep_at": {
-          "name": "next_sweep_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "profile_enrichment_states_sweep_idx": {
-          "name": "profile_enrichment_states_sweep_idx",
-          "columns": [
-            {
-              "expression": "next_sweep_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "profile_enrichment_states_user_id_users_id_fk": {
-          "name": "profile_enrichment_states_user_id_users_id_fk",
-          "tableFrom": "profile_enrichment_states",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -705,6 +558,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "avatar": {
+          "name": "avatar",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

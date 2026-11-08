@@ -222,6 +222,7 @@ export function ProfileForm() {
     <Badge
       name={d.name.trim() || "Your name"}
       handle={person.githubLogin}
+      avatar={person.avatar}
       label={countryName(person.filters.country)}
       onName={() => startEditing(FIELD.name)}
     >

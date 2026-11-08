@@ -26,9 +26,9 @@ Discovery previews are owner/input-bound and capped at 16; pending jobs at 50. D
 
 Before enabling real imports, settle stored-document upgrades/rollback handling, the runner's time budget or lease renewal, a lease-checked CV accessor and GitHub connection revalidation. Also reconcile the job-history-limit retry hint and shared ORCID checksum validation. These next-phase findings are not implemented by the state-layer review fixes.
 
-## Migration hold
+## Regenerated migration chain
 
-The generated, additive proposal is currently `0007_enrichment_state`: one table and indexes, no public-profile rewrites/drops. It is based on the foundation/auth snapshots. Main now contains #47's `0005_new_ask_defaults` and #50's regenerated `0006_default_avatars` at `d139e82`. Regenerate foundation, auth and this migration against that merged schema/snapshot chain, preserving provider backfills and avatar/default changes. Do not fix collisions by renaming numbers, and do not apply this provisional chain to Neon now. Apply/review the final regenerated migrations only with user authorization.
+Main `576692d` includes #47/#50/#51. Foundation and authentication are now integrated here with regenerated `0007_provider-identities` and `0008_auth-link-attempts`. This layer regenerates `0009_enrichment_state`: one table and indexes, no public-profile rewrites/drops. Main's existing migration SQL/snapshots, avatar/default changes and numeric GitHub backfill are preserved. The old competing 0005-0007 proposals were never applied and are removed from the active chain. See [the integration ledger](Enrichment-Integration.md) for verification. Apply/review the final migrations only with user authorization; no live application was performed.
 
 ## Complete manual checklist (future authorized live staging check)
 
@@ -86,7 +86,7 @@ Then:
 Cleanup: remove any remaining temporary upload through its API, cancel the created unaccepted job and restore the original staged answers if appropriate. Stop the local server and close/reset its task terminal. Do not delete shared users/requests or reset Neon. Keep the production feature off. Automated tests cover expiry, leases, retry races and bounded cleanup; this checklist does not ask you to wait 24 hours or pretend a worker exists.
 
 ORCID checksum validation follows [ORCID's identifier specification](https://support.orcid.org/hc/en-us/articles/360006897674-Structure-of-the-ORCID-Identifier).
-## Verification and current integration blockers (7 November)
+## Earlier verification and resolved integration findings (7 November)
 
 Two critical review/test rounds pass **824 tests in 59 files, 98.56% line coverage**, with lint/typecheck passing for the feature stack plus Claude's `6924256` nullable compatibility patch in a validation-only checkout. No screen changes are bundled into this backend branch. Tests cover state races, owner boundaries, idempotency, private-input deletion, stalled/cancelled leases, partial collection, retry phase/evidence preservation, storage failures and the actual HTTP adapters with a versioned recorded Neon driver. Drizzle's local migration check passes. No live SQL/provider calls or production deployment were performed.
 
@@ -97,7 +97,7 @@ An earlier functional integration with main `ccdffa7` (#47/#48/#49 merged) found
 1. `src/app/(app)/matches/match-card.tsx`: its EvidenceKind label map needs `profile_page` and `cv` entries for the foundation's new evidence kinds. Keep the map compatible with both type versions (for example, infer the seven-key object rather than annotating it with the old five-key union).
 2. `src/components/ui/person-badge.test.ts`: the nullable fixture passed to MatchDetails needs the `evidence` array added by #49 (an empty array fits this existing null-handle test). The missing field is also the one failing runtime test.
 
-No frontend/B1 code was changed by Codex to hide those findings. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005 and #50 now owns 0006; the foundation/auth/state migration chain must be regenerated against that merged schema before PR/Neon application. The temporary integration kept unresolved migration metadata isolated for code testing; it is not a deployable or published merge.
+No frontend/B1 code was changed by Codex to hide those findings. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005 and #50 now owns 0006; the earlier temporary integration kept unresolved migration metadata isolated for code testing and was not published. The migration chain is now regenerated as 0007-0009 against main 576692d; current results are in the integration ledger. Live application and full feature acceptance remain pending.
 
 Updated integration: main `ccdffa7` + Claude's pushed compatibility `500352a` + foundation/auth/state through `f8836f1` pass **865/865 unit tests in 61 files, 98.61% line coverage**. A second focused pass passes **522 tests in 34 files**, with lint and typecheck clean. Both previously reported frontend failures are resolved. Migration metadata was isolated for functional testing only; this is not a deployable migration chain. No live providers, browser journey or SQL execution was tested.
 

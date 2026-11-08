@@ -6,6 +6,7 @@
 import * as fixtures from "@/contracts/fixtures";
 import { routes, type Api } from "@/contracts/routes";
 import { ai } from "@/server/ai";
+import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { config } from "@/server/config";
 import { runMatch } from "@/server/pipeline";
 import { findSlots } from "@/server/schedule/slots";
@@ -76,11 +77,34 @@ export const fake: Api = {
       rawText: body.text,
       refined,
       status: "open",
-      softBlocker: true,
+      softBlocker: false, // new asks start with "Keep people I pass on hidden" off
       createdAt: now(),
     });
     await search.registerAsk(id, userId, refined.text);
     return { askId: id, refined };
+  },
+
+  async previewRefine({ userId, body }) {
+    // A suggestion only: no ask is saved or registered.
+    return { refined: await ai.refineAsk(body.text, store.person(userId)) };
+  },
+
+  async saveAsk({ userId, body }) {
+    store.person(userId); // a signed-in person with a profile, as for refine
+    await ai.moderate(body.text);
+    const id = crypto.randomUUID();
+    const ask = {
+      id,
+      userId,
+      rawText: body.text,
+      refined: { text: body.text, type: body.type ?? "knowledge", minutes: body.minutes ?? MEETING_MINUTES },
+      status: "open" as const,
+      softBlocker: false,
+      createdAt: now(),
+    };
+    store.get().asks.set(id, ask);
+    await search.registerAsk(id, userId, body.text);
+    return { askId: id, ask };
   },
 
   async match({ userId, body }) {
@@ -130,7 +154,7 @@ export const fake: Api = {
       fromUserId: userId,
       toPersonId: body.toPersonId,
       question: ask.refined?.text ?? ask.rawText,
-      minutes: ask.refined?.minutes ?? 10,
+      minutes: ask.refined?.minutes ?? MEETING_MINUTES,
       status: "sent" as const,
       reply: null,
       slot: null,

@@ -12,7 +12,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { Person, TimeBlock } from "@/contracts/types";
+import type { AvatarId, Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { countryName } from "@/components/ui/countries";
@@ -70,7 +70,7 @@ export function FreeTimeForm() {
   const [mustResend, setMustResend] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [who, setWho] = useState<{ name: string; handle: string; country: string } | null>(null);
+  const [who, setWho] = useState<{ name: string; handle: Person["githubLogin"]; country: string; avatar: AvatarId | null } | null>(null);
 
   // The badge shows the real name when the profile loads; it's not needed for this step, so failures are ignored.
   useEffect(() => {
@@ -80,7 +80,7 @@ export function FreeTimeForm() {
       .then((p) => {
         if (!live || !p) return;
         showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
-        setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country });
+        setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country, avatar: p.avatar ?? null });
       })
       .catch(() => {});
     return () => {
@@ -190,7 +190,7 @@ export function FreeTimeForm() {
 
   const labels = runLabels(blocks, picked);
   const badge = (
-    <Badge name={who?.name} handle={who?.handle} label={who ? countryName(who.country) : undefined}>
+    <Badge name={who?.name} handle={who?.handle} avatar={who?.avatar} label={who ? countryName(who.country) : undefined}>
       <span className="mt-4 block">
         <span className="block text-xs text-muted">Free to meet</span>
         <span className="flex flex-wrap gap-1.5 pt-1.5">
