@@ -36,12 +36,14 @@ export function draftFrom(person: Person): Draft {
  */
 export const DUPLICATE_CHIP = "That's already on your badge.";
 
-export function addChip(list: string[], raw: string): { list: string[]; problem: string | null } {
+export type ChipLimits = { chip: number; chips: number };
+
+export function addChip(list: string[], raw: string, limits: ChipLimits = LIMITS): { list: string[]; problem: string | null } {
   const value = raw.trim().replace(/\s+/g, " ");
   if (!value) return { list, problem: null };
-  if (value.length > LIMITS.chip) return { list, problem: `Keep it under ${LIMITS.chip} characters.` };
+  if (value.length > limits.chip) return { list, problem: `Keep it under ${limits.chip} characters.` };
   if (list.some((v) => v.toLowerCase() === value.toLowerCase())) return { list, problem: DUPLICATE_CHIP };
-  if (list.length >= LIMITS.chips) return { list, problem: `You can add up to ${LIMITS.chips}.` };
+  if (list.length >= limits.chips) return { list, problem: `You can add up to ${limits.chips}.` };
   return { list: [...list, value], problem: null };
 }
 
@@ -50,8 +52,8 @@ export function addChip(list: string[], raw: string): { list: string[]; problem:
  * isn't silently lost. A duplicate is already on the badge, so it's simply
  * dropped; any other problem stops the save with that message.
  */
-export function addPending(list: string[], raw: string): { list: string[]; problem: string | null } {
-  const result = addChip(list, raw);
+export function addPending(list: string[], raw: string, limits: ChipLimits = LIMITS): { list: string[]; problem: string | null } {
+  const result = addChip(list, raw, limits);
   return result.problem === DUPLICATE_CHIP ? { list, problem: null } : result;
 }
 
