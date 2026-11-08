@@ -11,14 +11,20 @@ import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
 
-/** What each kind of evidence is called on the open profile. */
-export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = {
+// Includes profile enrichment's kinds. Assigned through a variable so it compiles before and after
+// the contract adds them, while a kind without a label still fails typecheck.
+const labels = {
   repo: "Repository",
   commit_area: "Code area",
   paper: "Paper",
   talk: "Talk",
   abstract: "Abstract",
+  profile_page: "Profile page",
+  cv: "CV",
 };
+
+/** What each kind of evidence is called on the open profile. */
+export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = labels;
 
 /** The full profile a row opens into: their badge, why them, the evidence, and what they work with. */
 export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: string }) {
@@ -31,14 +37,16 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
           <h2 id={nameId} className="text-2xl font-bold leading-snug tracking-tight break-words">
             {p.name}
           </h2>
-          <a
-            href={githubProfile(p.githubLogin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
-          </a>
+          {p.githubLogin && (
+            <a
+              href={githubProfile(p.githubLogin)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
           {badgeFacts(p).length > 0 && <p className="text-sm text-muted">{badgeFacts(p).join(" · ")}</p>}
         </div>
       </div>

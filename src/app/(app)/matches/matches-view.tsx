@@ -397,6 +397,10 @@ function AskMatches({ askId }: { askId: string }) {
   }
 
   if (resolved) {
+    // Only people with a GitHub can be followed from here.
+    const contacts = sent.flatMap(({ person }) =>
+      person?.githubLogin ? [{ id: person.id, name: person.name, login: person.githubLogin }] : [],
+    );
     return (
       <div className="mx-auto flex max-w-xl flex-col">
         <h1 className={headingClass}>Marked as answered</h1>
@@ -405,24 +409,24 @@ function AskMatches({ askId }: { askId: string }) {
         </p>
         {question && <p className="mt-2 text-muted">&ldquo;{question}&rdquo;</p>}
         {sentNotice}
-        {sent.some(request => request.person) && (
+        {contacts.length > 0 && (
           <section aria-labelledby="connect-heading" className="mt-8 rounded-2xl border-2 border-border bg-surface p-5">
             <h2 id="connect-heading" className="text-xl font-extrabold tracking-tight">
               Stay in touch
             </h2>
             <p className="mt-1 text-sm text-muted">Say thanks, or follow the people you reached out to.</p>
             <ul className="mt-3 flex flex-col gap-2">
-              {sent.flatMap(request => request.person ? [request.person] : []).map((p) => (
+              {contacts.map((p) => (
                 <li key={p.id}>
                   <a
-                    href={githubProfile(p.githubLogin)}
+                    href={githubProfile(p.login)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex min-h-11 items-center justify-between gap-3 rounded-lg border-2 border-border px-3 font-semibold hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   >
                     <span>{p.name}</span>
                     <span className="text-sm text-accent">
-                      @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
+                      @{p.login} on GitHub<span className="sr-only"> (opens in a new tab)</span>
                     </span>
                   </a>
                 </li>

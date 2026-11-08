@@ -70,7 +70,7 @@ export function FreeTimeForm() {
   const [mustResend, setMustResend] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [who, setWho] = useState<{ name: string; handle: string; country: string; avatar: AvatarId | null } | null>(null);
+  const [who, setWho] = useState<{ name: string; handle: Person["githubLogin"]; country: string; avatar: AvatarId | null } | null>(null);
 
   // The badge shows the real name when the profile loads; it's not needed for this step, so failures are ignored.
   useEffect(() => {

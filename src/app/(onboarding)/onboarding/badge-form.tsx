@@ -52,7 +52,8 @@ const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Load =
   | { state: "loading" }
-  | { state: "ready"; about: AboutYou; handle: string | null; hiring: boolean | null }
+  // handle: undefined until a profile says (the badge shows a placeholder), null when they have no GitHub.
+  | { state: "ready"; about: AboutYou; handle: string | null | undefined; hiring: boolean | null }
   | { state: "start" } // no step 1 answers anywhere: begin at step 1
   | { state: "failed"; status: number };
 
@@ -98,7 +99,7 @@ export function BadgeForm() {
       if (draft) {
         // Step 1 just ran in this tab; the profile only adds the GitHub handle and any saved hiring answer.
         setHiring(profile?.filters.hiring ?? null);
-        setLoad({ state: "ready", about: draft, handle: profile?.githubLogin ?? null, hiring: profile?.filters.hiring ?? null });
+        setLoad({ state: "ready", about: draft, handle: profile?.githubLogin, hiring: profile?.filters.hiring ?? null });
       } else if (profile) {
         setHiring(profile.filters.hiring);
         setLoad({ state: "ready", about: aboutFromProfile(profile), handle: profile.githubLogin, hiring: profile.filters.hiring });
@@ -211,7 +212,7 @@ export function BadgeForm() {
   const badge = (
     <Badge
       name={about.name}
-      handle={handle ?? "your-github"}
+      handle={handle}
       avatar={avatar}
       avatarControl={
         <button
