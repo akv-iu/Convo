@@ -23,6 +23,7 @@ import { colourHex } from "@/components/ui/badge-colours";
 import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
 import { SeenByOthers, useVisibilitySave } from "./seen-by-others";
+import { ContactSection, useContactDetails } from "./contact-details";
 import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
 export const NEXT_STEP = "/ask";
@@ -72,6 +73,7 @@ function BadgeRow({
 
 export function ProfileForm() {
   const router = useRouter();
+  const contact = useContactDetails();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   /** Show/hide choices save at once, from the badge's erasers or the switches below it. */
   const visibilitySaver = useVisibilitySave((saved) => setLoad({ state: "ready", person: saved }));
@@ -269,28 +271,31 @@ export function ProfileForm() {
 
   if (!editing) {
     return (
-      <>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
-        <div className="flex flex-col">
-          <h1 className={headingClass}>{HEADING}</h1>
-          <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
-          <div className="mt-8 lg:hidden">{badge}</div>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button onClick={() => router.push(NEXT_STEP)} className="text-lg sm:px-8">
-              Yes, that&apos;s me
-            </Button>
-            <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">
-              No, let me fix it
-            </Button>
-          </div>
+      <div className="flex flex-col">
+        <h1 className={headingClass}>{HEADING}</h1>
+        <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
+        {/*
+          Your badge on the left; on the right, the row other people see (your public profile) with
+          what to hide right under it. One column on phones: badge, then the public row.
+        */}
+        <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
+          <div>{badge}</div>
+          <SeenByOthers person={person} saver={visibilitySaver} />
         </div>
-        <div className="hidden lg:block">
-          <div className="lg:sticky lg:top-6">{badge}</div>
+        <ContactSection contact={contact} />
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button
+            onClick={() => void contact.save().then((ok) => ok && router.push(NEXT_STEP))}
+            disabled={contact.saving}
+            className="text-lg sm:px-8"
+          >
+            {contact.saving ? "Saving…" : "Yes, that's me"}
+          </Button>
+          <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">
+            No, let me fix it
+          </Button>
         </div>
       </div>
-      {/* Before sending any requests: the row other people see, and what it shows. */}
-      <SeenByOthers person={person} saver={visibilitySaver} />
-      </>
     );
   }
 

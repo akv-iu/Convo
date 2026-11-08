@@ -65,7 +65,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     const previewing = page.waitForRequest(isPreview);
     await sharpen(page).click();
     expect((await previewing).postDataJSON()).toEqual({ text: "I want a job at Stripe" });
-    await expect(box(page)).toHaveValue(/^I want a job at Stripe: /);
+    await expect(box(page)).toHaveValue(/^I want a job at Stripe\. .+\?$/);
     await expect(page.getByText("Sharpened with AI.")).toBeVisible();
     await expect(page.getByRole("radio", { name: "Career move" })).toBeChecked(); // the suggestion's type
     expect(seen.filter(isSave)).toHaveLength(0); // a preview saves nothing

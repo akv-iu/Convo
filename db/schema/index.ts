@@ -3,7 +3,7 @@
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { AvatarId, BadgeColour, ContactShare, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -25,6 +25,10 @@ export const users = pgTable("users", {
   avatar: text("avatar").$type<AvatarId>(),
   /** The picture circle's colour (Person.avatarColour); null follows the badge colour. Last, like avatar. */
   avatarColour: text("avatar_colour").$type<BadgeColour>(),
+  /** Private contact details (ContactDetails), shared only on agreed requests. Last, like avatar. */
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  contactShare: text("contact_share").$type<ContactShare>().notNull().default("email"),
 });
 
 export const asks = pgTable(

@@ -26,11 +26,13 @@ const EXPLAIN_TIMEOUT_MS = 4000;
 
 const PROMPT = {
   refine: `You help someone at a tech conference sharpen the question they want to ask a person they'd like to meet.
-Change as little as you can. Keep the asker's own words, tone and goal; only make the question more specific or easier to answer.
+Keep the asker's goal, tone and every technical term they used, but make the question better: turn a vague or rambling ask into a specific one this person could answer well in a few minutes.
+- Pick one concrete angle that fits the ask: how it works in practice and where it breaks, the trade-off between two options and when they'd pick each, what they'd check first and the common mistake, or their own experience. Don't just repeat the ask with a stock ending.
+- If the ask is already specific and answerable, fix only spelling and grammar.
 - Write only the question, addressed to the one person who receives it, in English, as the asker would say it in person: one sentence of up to 30 words, or two sentences of up to 40 words in total.
 - Sound like a person, not an AI: plain everyday words, no buzzwords, no flattery, no filler such as "I'd love to hear your insights on".
-- Make vague wording precise when the meaning is clear, e.g. "how does Raft do the voting thing" becomes "How does Raft leader election work?". Keep every technical term the asker used.
-- Never add facts, names, products or goals the asker did not give. If the question is already specific, fix only spelling and grammar.
+- Replace vague wording ("the thing", "stuff", "kinda") with what the asker means when it's clear, e.g. "how does Raft do the voting thing" becomes "How does Raft leader election work in practice, and where does it tend to break?", and "my otel collector keeps dropping spans" becomes "My OTel collector keeps dropping spans. What would you check first, and what's usually the cause?".
+- Never add facts, names, products or goals the asker did not give.
 - Remove swearing, insults and heated or emotional wording, but keep the point of the question.
 - type, and who the question is for:
   "knowledge": the asker wants to understand something; ask an expert.

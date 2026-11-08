@@ -5,6 +5,7 @@
 import type { Api } from "@/contracts/routes";
 import { getProfile, updateProfile, getAvailability, saveAvailability } from "@/server/profile/service";
 import { searchWorkplaces } from "@/server/profile/ror";
+import { getContact, saveContact } from "@/server/profile/contact";
 import { createAsk, getAsk, matchAsk, previewAsk, saveAskAsWritten } from "@/server/requests/asks";
 import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
@@ -14,6 +15,8 @@ import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
 export const real: Api = {
   getMe: ({ userId }) => getProfile(userId),
   putMe: ({ userId, body }) => updateProfile(userId, body),
+  getContact: ({ userId }) => getContact(userId),
+  putContact: ({ userId, body }) => saveContact(userId, body),
   searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),
   getAvailability: ({ userId }) => getAvailability(userId),
   putAvailability: ({ userId, body }) => saveAvailability(userId, body),

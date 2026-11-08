@@ -167,6 +167,18 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(after.find((x) => x.person.id === first[1].person.id)?.rank).toBe(first[1].rank);
   });
 
+  it("keeps contact details private until a request is agreed, then shares only the chosen ones", async () => {
+    await api.putContact(ctx(DEMO_USER_B, { email: "expert@example.com", phone: "+44 7700 900456", share: "email" }));
+    expect(await api.getContact(ctx(DEMO_USER_B))).toMatchObject({ email: "expert@example.com", share: "email" });
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const sent = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: DEMO_USER_B }));
+    const mine = async () => (await api.sentRequests(ctx(DEMO_USER_A))).find((r) => r.id === sent.id);
+    expect((await mine())?.contact ?? null).toBeNull();
+    expect(JSON.stringify(await api.getMe(ctx(DEMO_USER_B)))).not.toContain("expert@example.com");
+    await api.respond(ctx(DEMO_USER_B, { action: "accept" }, { id: sent.id }));
+    expect((await mine())?.contact).toEqual({ email: "expert@example.com", phone: null });
+  });
+
   it("carries the sender's note with the request, and leaves it out when there is none", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
     const [first, second] = await api.match(ctx(DEMO_USER_A, { askId }));
@@ -206,7 +218,7 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
   it("previews a sharper question without saving or registering an ask", async () => {
     const before = store.get().asks.size;
     const preview = routes.previewRefine.response.parse(await api.previewRefine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw })));
-    expect(preview.refined.text).toContain(sampleAsks[0].raw.replace(/[.?!]+$/, ""));
+    expect(preview.refined.text).toMatch(/^How does preemption work in the Kubernetes scheduler\b.*\?$/);
     expect(store.get().asks.size).toBe(before);
     await expect(api.previewRefine(ctx(DEMO_USER_A, { text: "you idiot" }))).rejects.toMatchObject({ status: 422 });
   });

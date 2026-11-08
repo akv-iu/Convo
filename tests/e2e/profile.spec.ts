@@ -107,6 +107,7 @@ test.describe("your details (step 4)", () => {
     page.on("request", (req) => {
       if (isSave(req)) saved = true;
     });
+    await page.getByRole("textbox", { name: "Email" }).fill("demo@example.com");
     await yes(page).click();
     await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
     expect(saved).toBe(false);

@@ -13,6 +13,8 @@ import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
 import type { Request, RequestView } from "@/contracts/types";
+import { NO_CONTACT, sharedContact } from "@/server/requests/contact-share";
+import { playDemo } from "./demo";
 import { visibleCard, visiblePerson } from "@/server/profile/visibility";
 
 const now = () => new Date().toISOString();
@@ -24,6 +26,7 @@ function withBadge(request: Request, otherId: string): RequestView {
     ...request,
     type: store.get().asks.get(request.askId)?.refined?.type ?? null,
     person: other ? visiblePerson(other) : null,
+    contact: sharedContact(store.get().contacts.get(otherId), request.status),
   };
 }
 
@@ -158,12 +161,25 @@ export const fake: Api = {
     return request;
   },
 
+  async getContact({ userId }) {
+    store.person(userId);
+    return store.get().contacts.get(userId) ?? NO_CONTACT;
+  },
+
+  async putContact({ userId, body }) {
+    store.person(userId);
+    store.get().contacts.set(userId, body);
+    return body;
+  },
+
   async inbox({ userId }) {
+    if (config.fakeDemo) playDemo(userId);
     return [...store.get().requests.values()].filter((r) => r.toPersonId === userId).reverse()
       .map((r) => withBadge(r, r.fromUserId));
   },
 
   async sentRequests({ userId }) {
+    if (config.fakeDemo) playDemo(userId);
     return [...store.get().requests.values()].filter((r) => r.fromUserId === userId).reverse()
       .map((r) => withBadge(r, r.toPersonId));
   },

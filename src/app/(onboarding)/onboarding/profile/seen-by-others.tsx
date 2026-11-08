@@ -51,13 +51,14 @@ export function SeenByOthers({ person, saver }: { person: Person; saver: ReturnT
   const { save, saving, failure } = saver;
 
   return (
-    <section aria-labelledby="seen-heading" className="mt-10 border-t-2 border-border pt-8">
+    <section aria-labelledby="seen-heading">
       <h2 id="seen-heading" className="text-2xl font-extrabold tracking-tight">
         How people see you
       </h2>
       <p className="mt-1 text-muted">This is your row in other people&apos;s matches. Choose what it shows.</p>
 
-      <div className="mt-5 grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
+      {/* The public row, with what to hide straight under it. */}
+      <div className="mt-4 flex flex-col gap-5">
         <div className="rounded-2xl border-2 border-border bg-surface px-4 py-3" data-testid="seen-preview">
           <MatchSummary
             match={{

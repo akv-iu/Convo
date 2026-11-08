@@ -76,7 +76,7 @@ describe.each(["fake", "real"] as const)("%s ask-as-written HTTP contract", (mod
     const response = await preview(request("refine/preview", { text: "how does Raft do the voting thing" }), context());
     expect(response.status).toBe(200);
     const { refined } = routes.previewRefine.response.parse(await response.json());
-    expect(refined.text).toContain("how does Raft do the voting thing");
+    expect(refined.text).toMatch(/^How does Raft handle voting\b.*\?$/);
     expect(inserts()).toHaveLength(0);
     expect(store.get().asks.size).toBe(before);
   });

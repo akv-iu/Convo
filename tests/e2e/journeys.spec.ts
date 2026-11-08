@@ -82,6 +82,7 @@ test.describe("done when (A1 and A2)", () => {
       await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
       await expect(page.getByRole("button", { name: "Yes, that's me" })).toBeVisible();
       await scan(page, `step 4 (${size.name})`);
+      await page.getByRole("textbox", { name: "Email" }).fill("demo@example.com");
       await page.getByRole("button", { name: "Yes, that's me" }).focus();
       await page.keyboard.press("Enter");
 

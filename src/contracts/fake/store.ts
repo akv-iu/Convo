@@ -3,7 +3,7 @@
  * so two browser windows (demo user A and B) can play both sides.
  */
 import * as fixtures from "@/contracts/fixtures";
-import type { Ask, Person, Request, TimeBlock } from "@/contracts/types";
+import type { Ask, ContactDetails, Person, Request, TimeBlock } from "@/contracts/types";
 
 export interface FakeState {
   people: Map<string, Person>;
@@ -11,7 +11,18 @@ export interface FakeState {
   requests: Map<string, Request>;
   /** askId -> rejected person ids, in order */
   rejections: Map<string, { personId: string; rank: number }[]>;
+  /** Private contact details by person; demo attendees come with made-up ones. */
+  contacts: Map<string, ContactDetails>;
+  /** People whose demo inbox has been filled (FAKE_DEMO). */
+  seeded: Set<string>;
   counter: number;
+}
+
+/** Made-up contact details for the demo attendees (example.com and the UK's drama number range). */
+function demoContact(person: Person, i: number): ContactDetails {
+  const login = person.githubLogin ?? person.id;
+  const share = (["email", "both", "phone"] as const)[i % 3];
+  return { email: `${login}@example.com`, phone: `+44 7700 900${String(100 + i).slice(-3)}`, share };
 }
 
 export function freshState(): FakeState {
@@ -20,6 +31,8 @@ export function freshState(): FakeState {
     asks: new Map(),
     requests: new Map(),
     rejections: new Map(),
+    contacts: new Map(fixtures.people.filter((p) => p.synthetic).map((p, i) => [p.id, demoContact(p, i)])),
+    seeded: new Set(),
     counter: 0,
   };
 }

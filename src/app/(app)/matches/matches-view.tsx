@@ -122,6 +122,9 @@ function AskMatches({ askId }: { askId: string }) {
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
   /** No one matched and the user chose to leave the request open. */
   const [keptOpen, setKeptOpen] = useState(false);
+  /** Ask something else was pressed before Yes or No: say the question needs an answer first. */
+  const [needsAnswer, setNeedsAnswer] = useState(false);
+  const yesRef = useRef<HTMLButtonElement>(null);
   /** Closed from the empty screen, so the closing page doesn't say it was answered. */
   const [closedEmpty, setClosedEmpty] = useState(false);
   const [cutoffNote, setCutoffNote] = useState(false);
@@ -653,21 +656,28 @@ function AskMatches({ askId }: { askId: string }) {
                   Yes keeps looking for people as they join. No closes the request.
                 </p>
                 <div className="mt-3 flex gap-3">
-                  <Button onClick={() => setKeptOpen(true)} disabled={resolving}>
+                  <Button
+                    ref={yesRef}
+                    onClick={() => {
+                      setNeedsAnswer(false);
+                      setKeptOpen(true);
+                    }}
+                    disabled={resolving}
+                  >
                     Yes
                   </Button>
                   <Button variant="secondary" onClick={() => void resolve(true)} disabled={resolving}>
                     {resolving ? "Saving…" : "No"}
                   </Button>
                 </div>
+                {needsAnswer && (
+                  <p role="alert" className={`mt-3 ${errorClass}`}>
+                    Choose Yes or No first, so Lanyard knows whether to keep looking.
+                  </p>
+                )}
                 {resolveError}
               </>
             )}
-            <div className="mt-5">
-              <Button href="/ask" variant="alternate">
-                Ask something else
-              </Button>
-            </div>
           </div>
         ) : (
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -791,6 +801,29 @@ function AskMatches({ askId }: { askId: string }) {
       </p>
 
       {!noMatches && matchesSection}
+
+      {noMatches && (
+        <section aria-labelledby="ask-else-heading" className="mt-10 border-t-2 border-border pt-6">
+          <h2 id="ask-else-heading" className="text-lg font-bold">
+            Ask a different question
+          </h2>
+          <p className="mt-1 text-sm text-muted">Start a new question. Answer whether to keep this one active first.</p>
+          <div className="mt-3">
+            <Button
+              href="/ask"
+              variant="alternate"
+              onClick={(e) => {
+                if (keptOpen) return;
+                e.preventDefault();
+                setNeedsAnswer(true);
+                yesRef.current?.focus();
+              }}
+            >
+              Ask something else
+            </Button>
+          </div>
+        </section>
+      )}
 
       {load.state === "ready" && !noMatches && (
         <div className="mt-10 border-t-2 border-border pt-6">

@@ -10,6 +10,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { SharedContactCard } from "@/components/ui/shared-contact";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel } from "../ask/asks";
 import { groupByQuestion, groupSummary, inboxFailure, sentStatusLabel, venueRange, venueTime, type AskGroup, type Failure } from "./inbox";
@@ -213,6 +214,12 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
 
       {request.status === "sent" && <p className="mt-2 text-sm text-muted">Waiting for {name ?? "them"} to answer.</p>}
       {request.status === "declined" && <p className="mt-2 text-muted">{who} declined this one.</p>}
+      {(request.status === "accepted" || request.status === "scheduled") &&
+        (request.contact ? (
+          <SharedContactCard contact={request.contact} name={name ?? "them"} />
+        ) : (
+          <p className="mt-2 text-sm text-muted">{who} accepted. They haven&apos;t added contact details yet.</p>
+        ))}
       {request.status === "answered" && request.reply && (
         <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3">
           <span className="block text-xs font-semibold text-muted">{who} replied</span>

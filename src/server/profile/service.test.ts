@@ -36,6 +36,7 @@ describe("real profile and availability services", () => {
       ...person, createdAt: new Date("2026-11-05T00:00:00Z"), revision: 4, workplaceName: null,
       badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
       githubEvidence: evidence, githubEvidencePending: true, avatar: null, avatarColour: null,
+      contactEmail: null, contactPhone: null, contactShare: "email" as const,
     };
     const synced = { ...person, avatar: null, avatarColour: null }; // no picture chosen: initials on the badge colour
 

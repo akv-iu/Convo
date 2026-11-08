@@ -126,7 +126,7 @@ afterEach(() => {
 describe("saved inbox", () => {
   it("reads only the receiver's requests in descending time order with a stable tie-breaker", async () => {
     query.mockResolvedValueOnce({ rows: [row()] });
-    expect(await getInbox("receiver")).toEqual([{ ...request, type: null, person: null }]);
+    expect(await getInbox("receiver")).toEqual([{ ...request, type: null, person: null, contact: null }]);
     expect(query).toHaveBeenCalledTimes(3); // requests, then accounts and ask types together
     const [statement, params] = query.mock.calls[0];
     expect(statement).toContain('where "requests"."to_person_id" = $1');
