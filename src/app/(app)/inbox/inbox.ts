@@ -5,7 +5,7 @@
  * be changed later; a failed write may still have committed, so nothing is
  * retried automatically and the screen reloads the inbox to check.
  */
-import type { AskType, Request, RequestStatus, RequestView } from "@/contracts/types";
+import type { Request, RequestStatus, RequestView } from "@/contracts/types";
 
 export const REPLY_MAX = 500;
 
@@ -102,7 +102,6 @@ export function bookFailure(status: number, body: unknown): Failure {
 export type AskGroup = {
   askId: string;
   question: string;
-  type: AskType | null;
   minutes: number;
   /** When the newest request for it was sent. */
   latest: string;
@@ -121,7 +120,7 @@ export function groupByQuestion(requests: RequestView[]): AskGroup[] {
       group.requests.push(r);
       if (r.createdAt > group.latest) group.latest = r.createdAt;
     } else {
-      groups.set(r.askId, { askId: r.askId, question: r.question, type: r.type, minutes: r.minutes, latest: r.createdAt, requests: [r] });
+      groups.set(r.askId, { askId: r.askId, question: r.question, minutes: r.minutes, latest: r.createdAt, requests: [r] });
     }
   }
   return [...groups.values()].sort((a, b) => (a.latest < b.latest ? 1 : a.latest > b.latest ? -1 : 0));
