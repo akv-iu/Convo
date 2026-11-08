@@ -10,20 +10,35 @@ import { githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
 
-/** What each kind of evidence is called on the open profile. */
-export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = {
+// Includes profile enrichment's kinds. Assigned through a variable so it compiles before and after
+// the contract adds them, while a kind without a label still fails typecheck.
+const labels = {
   repo: "Repository",
   commit_area: "Code area",
   paper: "Paper",
   talk: "Talk",
   abstract: "Abstract",
+  profile_page: "Profile page",
+  cv: "CV",
 };
 
+/** What each kind of evidence is called on the open profile. */
+export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = labels;
+
 /** The full profile a row opens into: their badge, why them, the evidence, and what they work with. */
-export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: string }) {
+export function MatchDetails({
+  match,
+  nameId,
+}: {
+  match: MatchResult;
+  nameId: string;
+}) {
   const p = match.person;
   return (
-    <div style={{ "--badge": personColour(p) } as CSSProperties} className="flex flex-col gap-4">
+    <div
+      style={{ "--badge": personColour(p) } as CSSProperties}
+      className="flex flex-col gap-4"
+    >
       {/*
         The row above already shows their picture, name, handle, facts and labels; the open part
         adds the rest. The name stays as a hidden heading, so the panel is still named for screen
@@ -32,14 +47,20 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
       <h2 id={nameId} className="sr-only">
         {p.name}
       </h2>
-      <a
-        href={githubProfile(p.githubLogin)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="w-fit text-sm font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        Their GitHub profile<span className="sr-only"> (@{p.githubLogin}, opens in a new tab)</span>
-      </a>
+      {p.githubLogin && (
+        <a
+          href={githubProfile(p.githubLogin)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-fit text-sm font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          Their GitHub profile
+          <span className="sr-only">
+            {" "}
+            (@{p.githubLogin}, opens in a new tab)
+          </span>
+        </a>
+      )}
 
       {p.bio && (
         <div>
@@ -58,10 +79,16 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
           <h3 className="text-xs font-semibold text-muted">Evidence</h3>
           <ul className="mt-1 flex flex-col gap-1.5">
             {match.highlights.map((h, i) => (
-              <li key={i} className="border-l-4 border-[var(--badge)] pl-3 text-sm leading-snug break-words">
+              <li
+                key={i}
+                className="border-l-4 border-[var(--badge)] pl-3 text-sm leading-snug break-words"
+              >
                 {highlightParts(h).map((part, j) =>
                   part.hit ? (
-                    <mark key={j} className="rounded bg-[var(--badge)] px-0.5 text-[var(--badge-ink)]">
+                    <mark
+                      key={j}
+                      className="rounded bg-[var(--badge)] px-0.5 text-[var(--badge-ink)]"
+                    >
                       {part.text}
                     </mark>
                   ) : (
@@ -81,7 +108,10 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
               <h3 className="text-xs font-semibold text-muted">Works with</h3>
               <ul className="mt-1 flex flex-wrap gap-1.5">
                 {p.languages.map((l) => (
-                  <li key={l} className="rounded-md bg-accent/15 px-2 py-0.5 text-xs font-medium">
+                  <li
+                    key={l}
+                    className="rounded-md bg-accent/15 px-2 py-0.5 text-xs font-medium"
+                  >
                     {l}
                   </li>
                 ))}
@@ -93,7 +123,10 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
               <h3 className="text-xs font-semibold text-muted">Part of</h3>
               <ul className="mt-1 flex flex-wrap gap-1.5">
                 {p.organisations.map((o) => (
-                  <li key={o} className="rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-medium">
+                  <li
+                    key={o}
+                    className="rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-medium"
+                  >
                     {o}
                   </li>
                 ))}
@@ -105,10 +138,18 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
       {/* Last, so links to their work sit just above Pass and Send. */}
       {match.evidence.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted">Articles, projects and papers</h3>
-          <ul className="mt-1 flex flex-col gap-1.5" aria-label={`${p.name}'s articles, projects and papers`}>
+          <h3 className="text-xs font-semibold text-muted">
+            Articles, projects and papers
+          </h3>
+          <ul
+            className="mt-1 flex flex-col gap-1.5"
+            aria-label={`${p.name}'s articles, projects and papers`}
+          >
             {match.evidence.map((e, i) => (
-              <li key={`${e.kind}-${e.title}-${i}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm leading-snug">
+              <li
+                key={`${e.kind}-${e.title}-${i}`}
+                className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm leading-snug"
+              >
                 <span className="shrink-0 rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-semibold">
                   {evidenceKindLabel[e.kind]}
                 </span>
@@ -123,7 +164,9 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
                     <span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : (
-                  <span className="min-w-0 font-medium break-words">{e.title}</span>
+                  <span className="min-w-0 font-medium break-words">
+                    {e.title}
+                  </span>
                 )}
               </li>
             ))}
