@@ -42,14 +42,14 @@ export function HeroBadge() {
 
   const person = heroPeople[index];
   return (
-    <div aria-hidden="true" data-hero-badge={settled ? "settled" : "spinning"} className="mx-auto w-60 select-none">
+    <div aria-hidden="true" data-hero-badge={settled ? "settled" : "spinning"} className="mx-auto w-52 select-none lg:w-60">
       <div
         className={`origin-top ${
           settled ? "motion-safe:animate-[hero-settle_1s_ease-out_1]" : "motion-safe:animate-[hero-sway_1.4s_ease-in-out_infinite]"
         }`}
       >
         {/* The strap and clip, as in the logo. */}
-        <svg viewBox="0 0 160 84" className="mx-auto block h-[84px] w-40 text-foreground">
+        <svg viewBox="0 0 160 84" className="mx-auto block h-16 w-32 text-foreground lg:h-[84px] lg:w-40">
           <path d="M16 2 80 70 144 2" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
           <rect x="66" y="64" width="28" height="18" rx="4" fill="currentColor" />
         </svg>
@@ -67,7 +67,7 @@ export function HeroBadge() {
           </div>
           <div className="flex flex-col items-center px-5 pb-5 pt-4 text-center">
             <span key={index} className="block motion-safe:animate-[hero-tick_var(--tick)_ease-out]" style={{ "--tick": `${160 * HERO_PACE}ms` } as CSSProperties}>
-              <HeroFace person={person} className="size-28" />
+              <HeroFace person={person} className="size-24 lg:size-28" />
             </span>
             <p className="mt-3 text-xl font-extrabold leading-tight tracking-tight [font-stretch:85%]">{person.name}</p>
             <p className="text-sm text-muted">{person.role}</p>
