@@ -3,7 +3,7 @@
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -21,6 +21,8 @@ export const users = pgTable("users", {
   visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
   githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
+  /** A built-in picture (Person.avatar); null shows initials. Last, so existing row reads keep their column order. */
+  avatar: text("avatar").$type<AvatarId>(),
 });
 
 /** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */
@@ -51,7 +53,7 @@ export const asks = pgTable(
     rawText: text("raw_text").notNull(),
     refined: jsonb("refined").$type<RefinedAsk>(),
     status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
-    softBlocker: boolean("soft_blocker").notNull().default(true),
+    softBlocker: boolean("soft_blocker").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("asks_user_idx").on(t.userId)],
@@ -97,7 +99,7 @@ export const aiCache = pgTable(
   "ai_cache",
   {
     key: text("key").primaryKey(),
-    kind: text("kind", { enum: ["refine", "explain"] }).notNull(),
+    kind: text("kind", { enum: ["refine", "explain", "moderate"] }).notNull(),
     value: jsonb("value").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

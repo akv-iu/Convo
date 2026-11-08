@@ -3,7 +3,8 @@
  * search; good enough for the screens and the contract tests.
  */
 import * as fixtures from "@/contracts/fixtures";
-import type { EvidenceDoc, Person, TimeBlock } from "@/contracts/types";
+import type { EvidenceDoc, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
+import { addEvidence } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
 const people = new Map<string, Person>(fixtures.people.map((p) => [p.id, p]));
@@ -58,19 +59,21 @@ export const memorySearch: SearchService = {
     for (const person of people.values()) {
       if (exclude.has(person.id) || !meetsHardFilters(person, filters.hard)) continue;
       const highlights: string[] = [];
+      const found: MatchEvidence[] = [];
       let score = 0;
       for (const doc of evidence.get(person.id) ?? []) {
         const hit = tokens(`${doc.title} ${doc.text}`).filter((t) => q.has(t));
         if (hit.length) {
           score += new Set(hit).size;
           highlights.push(doc.title);
+          addEvidence(found, doc);
         }
       }
       const bioHits = tokens(`${person.bio} ${person.organisations.join(" ")}`).filter((t) => q.has(t));
       score += new Set(bioHits).size * 0.5;
       if (score === 0) continue;
       if (filters.freeTimes && overlaps(filters.freeTimes, person.freeTimes)) score += 0.5;
-      out.push({ person, highlights, score });
+      out.push({ person, highlights, evidence: found, score });
     }
     return out.sort((a, b) => b.score - a.score).slice(0, limit);
   },
