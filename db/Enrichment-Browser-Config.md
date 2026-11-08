@@ -35,3 +35,14 @@ Result: **397 passed, 13 skipped, 0 failed**, 410 cases in 5.1 minutes:
 - `enrichment-phone` and `enrichment-laptop`: 35 each, flag on.
 
 The 13 skips are the existing ones, the same count as the testing session's local harness. `sources.spec.ts:275` passed on both devices. Both servers stopped afterwards, and 3100/3101 were left free. No provider credentials, `.env.local` or live services were used. Backend unit suites weren't rerun: this change touches only the browser config and one spec.
+
+## Review (Claude 1)
+
+Reviewed `77f65b5` and `a16798f` read-only, then ran one targeted check. Nothing needed changing.
+
+- **Routing:** `npx playwright test --list` gives 410 cases. `enrichment-phone` and `enrichment-laptop` get only the three `tests/e2e/enrichment/` specs. `phone` and `laptop` get every other spec, including `enrichment-off.spec.ts`.
+- **One build for both flags is safe:** every page reads `config.profileEnrichmentEnabled` after `await connection()`, so at request time. Nothing reads the flag during prerendering, and there's no `NEXT_PUBLIC` copy of it.
+- **Server order:** Playwright 1.64.1 starts the servers one at a time, waiting for each URL (`createPluginSetupTasks` → `TaskRunner`). So 3101 always starts after 3100's build, including on a fresh CI checkout.
+- **Targeted check:** `CI=1 npx playwright test tests/e2e/enrichment/sources.spec.ts:275 tests/e2e/enrichment-off.spec.ts --workers=2 --retries=0 --repeat-each=3` with the committed config. Result: **12 passed, 0 failed**. That's `sources.spec.ts:275` three times on each enrichment device and `enrichment-off.spec.ts` three times on each ordinary device. Ports 3100/3101 were free afterwards.
+
+**Approval needed before merge:** `playwright.config.ts` changes a quality gate (AGENTS.md rule 6), so the other person must approve it. No PR or merge has been made.
