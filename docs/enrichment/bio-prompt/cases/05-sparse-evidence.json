@@ -1,0 +1,45 @@
+{
+  "id": "05-sparse-evidence",
+  "title": "Sparse evidence: nothing professional to say",
+  "input": {
+    "name": "Lio Hartmann",
+    "evidence": [
+      {
+        "id": "u_case05:profile_page:github-bio",
+        "source": "github",
+        "kind": "profile_page",
+        "title": "GitHub bio",
+        "excerpt": "hi"
+      },
+      {
+        "id": "u_case05:repo:dotfiles",
+        "source": "github",
+        "kind": "repo",
+        "title": "dotfiles",
+        "excerpt": "My personal configuration files."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [],
+    "bioMustNotSay": [
+      "any invented field, interest or skill ('a developer passionate about...')",
+      "a bio built from the dotfiles repository alone"
+    ],
+    "expertiseGuidance": "No labels.",
+    "needsReview": true,
+    "reviewReasons": [
+      "sparse_evidence"
+    ],
+    "illustrativeOutput": {
+      "bio": "",
+      "bioEvidenceIds": [],
+      "expertise": [],
+      "needsReview": true,
+      "reviewReasons": [
+        "sparse_evidence"
+      ]
+    },
+    "notes": "An empty bio is the right answer; the review screen offers writing one by hand. A single cautious sentence would be acceptable only if it states something the evidence actually shows."
+  }
+}

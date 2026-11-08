@@ -1,0 +1,98 @@
+{
+  "id": "03-cv-and-public-profile",
+  "title": "CV and public profile only, with an employer and stated roles",
+  "input": {
+    "name": "Ravi Quill",
+    "evidence": [
+      {
+        "id": "u_case03:cv:experience-1",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Experience",
+        "excerpt": "2019-2023, Harbourline Bank: led the migration of the payments ledger from batch updates to event sourcing; designed replay tooling for audits."
+      },
+      {
+        "id": "u_case03:cv:skills",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Skills",
+        "excerpt": "Event sourcing, CQRS, PostgreSQL, Kafka, Go."
+      },
+      {
+        "id": "u_case03:profile_page:page-1",
+        "source": "public_profile",
+        "kind": "profile_page",
+        "title": "Profile text",
+        "excerpt": "Ravi writes about event sourcing in finance and runs a half-day workshop, Ledgers in Practice, on modelling money movements as events."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "led a migration of a payments ledger to event sourcing (the CV states 'led')",
+        "evidenceIds": [
+          "u_case03:cv:experience-1"
+        ]
+      },
+      {
+        "claim": "built replay tooling for audits",
+        "evidenceIds": [
+          "u_case03:cv:experience-1"
+        ]
+      },
+      {
+        "claim": "writes about event sourcing in finance and runs the Ledgers in Practice workshop",
+        "evidenceIds": [
+          "u_case03:profile_page:page-1"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "Harbourline Bank or any employer",
+      "the years 2019-2023 as a tenure ('four years at...')",
+      "Kafka or Go as expertise labels on the skills list alone"
+    ],
+    "expertiseGuidance": "'Event sourcing' (three items), 'Payments ledgers', 'Audit replay tooling', 'CQRS' (skills list only: acceptable as a lower-ranked label, since it's the person's own CV, but not required).",
+    "needsReview": false,
+    "reviewReasons": [],
+    "illustrativeOutput": {
+      "bio": "I work on event-sourced systems for money movements: I led the migration of a payments ledger from batch updates to event sourcing and designed replay tooling for audits. I also write about event sourcing in finance and run a half-day workshop, Ledgers in Practice, on modelling money movements as events.",
+      "bioEvidenceIds": [
+        "u_case03:cv:experience-1",
+        "u_case03:profile_page:page-1"
+      ],
+      "expertise": [
+        {
+          "label": "Event sourcing",
+          "evidenceIds": [
+            "u_case03:cv:experience-1",
+            "u_case03:cv:skills",
+            "u_case03:profile_page:page-1"
+          ]
+        },
+        {
+          "label": "Payments ledgers",
+          "evidenceIds": [
+            "u_case03:cv:experience-1"
+          ]
+        },
+        {
+          "label": "Audit replay tooling",
+          "evidenceIds": [
+            "u_case03:cv:experience-1"
+          ]
+        },
+        {
+          "label": "CQRS",
+          "evidenceIds": [
+            "u_case03:cv:skills"
+          ]
+        }
+      ],
+      "needsReview": false,
+      "reviewReasons": []
+    },
+    "notes": "A role the person's own CV states ('led') may be repeated without the employer. The backend's CV excerpts start unselected on page five; this case assumes the person's consent covers sending them to the model."
+  }
+}

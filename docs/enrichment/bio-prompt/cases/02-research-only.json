@@ -1,0 +1,103 @@
+{
+  "id": "02-research-only",
+  "title": "Research only: three papers and an abstract, with affiliations in the excerpts",
+  "input": {
+    "name": "Ines Marlow",
+    "evidence": [
+      {
+        "id": "u_case02:paper:w101",
+        "source": "research",
+        "kind": "paper",
+        "title": "Hierarchical Bayesian models for small-area poverty estimates",
+        "excerpt": "Department of Statistics, University of Westmere. We propose a hierarchical Bayesian model that borrows strength across neighbouring areas to estimate poverty rates where survey samples are small."
+      },
+      {
+        "id": "u_case02:paper:w102",
+        "source": "research",
+        "kind": "paper",
+        "title": "Adjusting for nonresponse in household surveys with auxiliary data",
+        "excerpt": "We compare weighting and model-based adjustments for unit nonresponse using administrative auxiliary data."
+      },
+      {
+        "id": "u_case02:paper:w103",
+        "source": "research",
+        "kind": "paper",
+        "title": "Small-area estimation under informative sampling",
+        "excerpt": "University of Westmere and Ostrow Institute. We extend small-area estimators to designs where selection depends on the outcome."
+      },
+      {
+        "id": "u_case02:abstract:w104",
+        "source": "research",
+        "kind": "abstract",
+        "title": "Nonresponse bias in panel surveys (talk abstract)",
+        "excerpt": "A short talk on how attrition in panel surveys biases change estimates, and simple diagnostics."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "publishes on small-area estimation, including hierarchical Bayesian models",
+        "evidenceIds": [
+          "u_case02:paper:w101",
+          "u_case02:paper:w103"
+        ]
+      },
+      {
+        "claim": "works on nonresponse in household and panel surveys",
+        "evidenceIds": [
+          "u_case02:paper:w102",
+          "u_case02:abstract:w104"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "University of Westmere, Ostrow Institute or any affiliation",
+      "'Dr.', 'PhD' or 'professor' (no degree or title is stated)",
+      "'first author' or 'led' (no role is stated)"
+    ],
+    "expertiseGuidance": "'Small-area estimation', 'Hierarchical Bayesian models', 'Survey nonresponse', 'Informative sampling'. Several labels have two supporting items and should come first.",
+    "needsReview": false,
+    "reviewReasons": [],
+    "illustrativeOutput": {
+      "bio": "My research is on small-area estimation, including hierarchical Bayesian models for poverty rates where survey samples are small and estimators for informative sampling designs. I have also published on adjusting household surveys for nonresponse and on how attrition biases estimates in panel surveys.",
+      "bioEvidenceIds": [
+        "u_case02:paper:w101",
+        "u_case02:paper:w103",
+        "u_case02:paper:w102",
+        "u_case02:abstract:w104"
+      ],
+      "expertise": [
+        {
+          "label": "Small-area estimation",
+          "evidenceIds": [
+            "u_case02:paper:w101",
+            "u_case02:paper:w103"
+          ]
+        },
+        {
+          "label": "Survey nonresponse",
+          "evidenceIds": [
+            "u_case02:paper:w102",
+            "u_case02:abstract:w104"
+          ]
+        },
+        {
+          "label": "Hierarchical Bayesian models",
+          "evidenceIds": [
+            "u_case02:paper:w101"
+          ]
+        },
+        {
+          "label": "Informative sampling",
+          "evidenceIds": [
+            "u_case02:paper:w103"
+          ]
+        }
+      ],
+      "needsReview": false,
+      "reviewReasons": []
+    },
+    "notes": "Affiliations appear inside excerpts; they are workplace facts and are left out without a reason code."
+  }
+}

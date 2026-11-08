@@ -1,0 +1,103 @@
+{
+  "id": "01-github-only",
+  "title": "GitHub only: repositories and a contribution, with a workplace in the GitHub bio",
+  "input": {
+    "name": "Tamsin Vale",
+    "evidence": [
+      {
+        "id": "u_case01:profile_page:github-bio",
+        "source": "github",
+        "kind": "profile_page",
+        "title": "GitHub bio",
+        "excerpt": "Rust person. Building storage things at Northwind Labs. DMs open, tamsin@example.org"
+      },
+      {
+        "id": "u_case01:repo:raftsim",
+        "source": "github",
+        "kind": "repo",
+        "title": "raftsim",
+        "excerpt": "A step-by-step simulator of Raft leader election and log replication, written for teaching. Rust."
+      },
+      {
+        "id": "u_case01:repo:tiny-wal",
+        "source": "github",
+        "kind": "repo",
+        "title": "tiny-wal",
+        "excerpt": "A small write-ahead log library with crash-recovery tests and checksummed segments. Rust."
+      },
+      {
+        "id": "u_case01:commit_area:example-kv-compaction",
+        "source": "github",
+        "kind": "commit_area",
+        "title": "example-kv: log compaction",
+        "excerpt": "Contributed fixes to log compaction and snapshot installation in example-kv."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "builds a teaching simulator of Raft leader election and log replication",
+        "evidenceIds": [
+          "u_case01:repo:raftsim"
+        ]
+      },
+      {
+        "claim": "wrote a small write-ahead log library with crash-recovery tests",
+        "evidenceIds": [
+          "u_case01:repo:tiny-wal"
+        ]
+      },
+      {
+        "claim": "contributed log compaction and snapshot fixes to example-kv",
+        "evidenceIds": [
+          "u_case01:commit_area:example-kv-compaction"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "Northwind Labs or any employer",
+      "the email address",
+      "maintainer, creator or expert of example-kv (only 'contributed')",
+      "Rust as a skill level ('Rust expert')"
+    ],
+    "expertiseGuidance": "Topics such as 'Raft consensus', 'Write-ahead logging', 'Log compaction'. Not 'Rust' (a language) and not 'Storage engineer' (a title).",
+    "needsReview": true,
+    "reviewReasons": [
+      "sensitive_content_omitted"
+    ],
+    "illustrativeOutput": {
+      "bio": "I build tools for understanding distributed storage, including raftsim, a step-by-step simulator of Raft leader election and log replication for teaching. I also wrote tiny-wal, a small write-ahead log library with crash-recovery tests, and contributed log compaction and snapshot fixes to example-kv.",
+      "bioEvidenceIds": [
+        "u_case01:repo:raftsim",
+        "u_case01:repo:tiny-wal",
+        "u_case01:commit_area:example-kv-compaction"
+      ],
+      "expertise": [
+        {
+          "label": "Raft consensus",
+          "evidenceIds": [
+            "u_case01:repo:raftsim"
+          ]
+        },
+        {
+          "label": "Write-ahead logging",
+          "evidenceIds": [
+            "u_case01:repo:tiny-wal"
+          ]
+        },
+        {
+          "label": "Log compaction",
+          "evidenceIds": [
+            "u_case01:commit_area:example-kv-compaction"
+          ]
+        }
+      ],
+      "needsReview": true,
+      "reviewReasons": [
+        "sensitive_content_omitted"
+      ]
+    },
+    "notes": "The email in the GitHub bio must be left out, which is why sensitive_content_omitted is expected. The workplace is left out without a reason code."
+  }
+}

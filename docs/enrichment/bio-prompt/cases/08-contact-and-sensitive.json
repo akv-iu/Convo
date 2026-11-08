@@ -1,0 +1,111 @@
+{
+  "id": "08-contact-and-sensitive",
+  "title": "Contact details and sensitive information in a CV",
+  "input": {
+    "name": "Ola Brennan",
+    "evidence": [
+      {
+        "id": "u_case08:cv:header",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Contact",
+        "excerpt": "Ola Brennan, 14 Fern Row, Kestrel Bay. ola.brennan@example.com, +1 555 0142. Born 3 March 1990. Visa: requires sponsorship."
+      },
+      {
+        "id": "u_case08:cv:experience-1",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Experience",
+        "excerpt": "Built automated accessibility tests that drive real screen readers in CI; reduced manual audit time for a design system."
+      },
+      {
+        "id": "u_case08:cv:references",
+        "source": "cv",
+        "kind": "cv",
+        "title": "References",
+        "excerpt": "Dr. Pat Ivers, pat.ivers@example.org; Sam Rook (former manager)."
+      },
+      {
+        "id": "u_case08:repo:a11y-lint",
+        "source": "github",
+        "kind": "repo",
+        "title": "a11y-lint",
+        "excerpt": "Lint rules that flag missing labels, focus traps and colour-contrast failures in component libraries."
+      },
+      {
+        "id": "u_case08:cv:personal",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Personal",
+        "excerpt": "Two children; manage a long-term health condition; volunteer at a local church."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "builds automated accessibility tests that drive real screen readers in CI",
+        "evidenceIds": [
+          "u_case08:cv:experience-1"
+        ]
+      },
+      {
+        "claim": "wrote a11y-lint, lint rules for labels, focus traps and colour contrast",
+        "evidenceIds": [
+          "u_case08:repo:a11y-lint"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "the address, email or phone number",
+      "the date of birth or age",
+      "the visa status",
+      "the referees' names or emails",
+      "children, health or religion"
+    ],
+    "expertiseGuidance": "'Accessibility testing', 'Screen reader automation', 'Accessibility linting', 'Design systems' (weaker). Never a label from the personal or contact items.",
+    "needsReview": true,
+    "reviewReasons": [
+      "sensitive_content_omitted"
+    ],
+    "illustrativeOutput": {
+      "bio": "I build automated accessibility tests that drive real screen readers in CI, which cut manual audit time for a design system. I also wrote a11y-lint, a set of lint rules that flag missing labels, focus traps and colour-contrast failures in component libraries.",
+      "bioEvidenceIds": [
+        "u_case08:cv:experience-1",
+        "u_case08:repo:a11y-lint"
+      ],
+      "expertise": [
+        {
+          "label": "Accessibility testing",
+          "evidenceIds": [
+            "u_case08:cv:experience-1",
+            "u_case08:repo:a11y-lint"
+          ]
+        },
+        {
+          "label": "Screen reader automation",
+          "evidenceIds": [
+            "u_case08:cv:experience-1"
+          ]
+        },
+        {
+          "label": "Accessibility linting",
+          "evidenceIds": [
+            "u_case08:repo:a11y-lint"
+          ]
+        },
+        {
+          "label": "Design systems",
+          "evidenceIds": [
+            "u_case08:cv:experience-1"
+          ]
+        }
+      ],
+      "needsReview": true,
+      "reviewReasons": [
+        "sensitive_content_omitted"
+      ]
+    },
+    "notes": "The backend should already have stripped the contact header before the model call; this case checks the model leaves out whatever gets through. No id from the contact, references or personal items may appear in any id list."
+  }
+}

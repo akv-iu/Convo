@@ -1,0 +1,99 @@
+{
+  "id": "07-conflicting-claims",
+  "title": "Conflicting claims: the CV and the public profile disagree about a degree",
+  "input": {
+    "name": "Juno Pereira",
+    "evidence": [
+      {
+        "id": "u_case07:cv:education",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Education",
+        "excerpt": "PhD in Atmospheric Physics, 2018."
+      },
+      {
+        "id": "u_case07:profile_page:page-1",
+        "source": "public_profile",
+        "kind": "profile_page",
+        "title": "Juno Pereira",
+        "excerpt": "Juno holds an MSc in Atmospheric Physics and is completing a PhD on ice nucleation in mixed-phase clouds."
+      },
+      {
+        "id": "u_case07:paper:w301",
+        "source": "research",
+        "kind": "paper",
+        "title": "Ice nucleation rates in mixed-phase clouds from chamber experiments",
+        "excerpt": "Chamber measurements of ice nucleation rates under mixed-phase conditions, compared with parameterisations used in climate models."
+      },
+      {
+        "id": "u_case07:paper:w302",
+        "source": "research",
+        "kind": "paper",
+        "title": "Evaluating cloud microphysics schemes against aircraft observations",
+        "excerpt": "We compare four microphysics schemes with in-situ aircraft data from mixed-phase clouds."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "researches ice nucleation in mixed-phase clouds",
+        "evidenceIds": [
+          "u_case07:paper:w301",
+          "u_case07:profile_page:page-1"
+        ]
+      },
+      {
+        "claim": "evaluates cloud microphysics schemes against aircraft observations",
+        "evidenceIds": [
+          "u_case07:paper:w302"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "'PhD', 'doctorate', 'Dr.', 'MSc' or 'completing a PhD' (the sources disagree)",
+      "a graduation year"
+    ],
+    "expertiseGuidance": "'Ice nucleation', 'Mixed-phase clouds', 'Cloud microphysics'. No degree as a label.",
+    "needsReview": true,
+    "reviewReasons": [
+      "conflicting_claims"
+    ],
+    "illustrativeOutput": {
+      "bio": "My research is on ice nucleation in mixed-phase clouds, including chamber measurements of nucleation rates compared with the parameterisations used in climate models. I have also evaluated cloud microphysics schemes against in-situ aircraft observations.",
+      "bioEvidenceIds": [
+        "u_case07:paper:w301",
+        "u_case07:profile_page:page-1",
+        "u_case07:paper:w302"
+      ],
+      "expertise": [
+        {
+          "label": "Ice nucleation",
+          "evidenceIds": [
+            "u_case07:paper:w301",
+            "u_case07:profile_page:page-1"
+          ]
+        },
+        {
+          "label": "Mixed-phase clouds",
+          "evidenceIds": [
+            "u_case07:paper:w301",
+            "u_case07:paper:w302",
+            "u_case07:profile_page:page-1"
+          ]
+        },
+        {
+          "label": "Cloud microphysics",
+          "evidenceIds": [
+            "u_case07:paper:w302"
+          ]
+        }
+      ],
+      "needsReview": true,
+      "reviewReasons": [
+        "conflicting_claims"
+      ]
+    },
+    "notes": "The model must not pick a side; the person resolves the degree on page five if they want it in their bio."
+  }
+}

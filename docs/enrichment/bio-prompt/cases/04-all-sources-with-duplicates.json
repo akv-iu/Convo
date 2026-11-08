@@ -1,0 +1,132 @@
+{
+  "id": "04-all-sources-with-duplicates",
+  "title": "All four sources, with the same paper and repository appearing more than once",
+  "input": {
+    "name": "Noor Ashby",
+    "evidence": [
+      {
+        "id": "u_case04:repo:tidegauge",
+        "source": "github",
+        "kind": "repo",
+        "title": "tidegauge",
+        "excerpt": "Streaming anomaly detection for tide-gauge sensor networks, with a replay harness for historical storms. Python."
+      },
+      {
+        "id": "u_case04:paper:w201",
+        "source": "research",
+        "kind": "paper",
+        "title": "Streaming anomaly detection for tide-gauge networks",
+        "excerpt": "We detect sensor faults and surge events in real time across a network of coastal tide gauges."
+      },
+      {
+        "id": "u_case04:paper:w202",
+        "source": "research",
+        "kind": "paper",
+        "title": "Benchmarking change-point detectors on sea-level records",
+        "excerpt": "A benchmark of eight change-point detectors on long sea-level records with labelled sensor faults."
+      },
+      {
+        "id": "u_case04:cv:publications",
+        "source": "cv",
+        "kind": "cv",
+        "title": "Publications",
+        "excerpt": "Streaming anomaly detection for tide-gauge networks (2024). Benchmarking change-point detectors on sea-level records (2023)."
+      },
+      {
+        "id": "u_case04:profile_page:page-1",
+        "source": "public_profile",
+        "kind": "profile_page",
+        "title": "Noor Ashby",
+        "excerpt": "Noor gave a talk at TideConf on streaming anomaly detection and maintains the open-source tidegauge project."
+      }
+    ]
+  },
+  "expected": {
+    "bioShouldSay": [
+      {
+        "claim": "works on streaming anomaly detection for tide-gauge sensor networks (paper, CV and repository: mention once)",
+        "evidenceIds": [
+          "u_case04:paper:w201",
+          "u_case04:cv:publications",
+          "u_case04:repo:tidegauge"
+        ]
+      },
+      {
+        "claim": "benchmarked change-point detectors on sea-level records",
+        "evidenceIds": [
+          "u_case04:paper:w202",
+          "u_case04:cv:publications"
+        ]
+      },
+      {
+        "claim": "maintains tidegauge, the open-source project (the public profile states 'maintains')",
+        "evidenceIds": [
+          "u_case04:profile_page:page-1",
+          "u_case04:repo:tidegauge"
+        ]
+      },
+      {
+        "claim": "gave a talk on streaming anomaly detection",
+        "evidenceIds": [
+          "u_case04:profile_page:page-1"
+        ]
+      }
+    ],
+    "bioMustNotSay": [
+      "'two papers on streaming anomaly detection' or any double count",
+      "'several', 'many' or other counts the evidence doesn't give"
+    ],
+    "expertiseGuidance": "'Streaming anomaly detection' first (four items), then 'Change-point detection', 'Sensor fault detection', 'Sea-level data'. Each label cites every matching id, including duplicates.",
+    "needsReview": true,
+    "reviewReasons": [
+      "duplicates_merged"
+    ],
+    "illustrativeOutput": {
+      "bio": "I work on streaming anomaly detection for tide-gauge sensor networks, catching sensor faults and surge events in real time, and I maintain the open-source tidegauge project. I have also benchmarked change-point detectors on long sea-level records and given a talk on streaming anomaly detection.",
+      "bioEvidenceIds": [
+        "u_case04:paper:w201",
+        "u_case04:cv:publications",
+        "u_case04:repo:tidegauge",
+        "u_case04:profile_page:page-1",
+        "u_case04:paper:w202"
+      ],
+      "expertise": [
+        {
+          "label": "Streaming anomaly detection",
+          "evidenceIds": [
+            "u_case04:paper:w201",
+            "u_case04:repo:tidegauge",
+            "u_case04:cv:publications",
+            "u_case04:profile_page:page-1"
+          ]
+        },
+        {
+          "label": "Change-point detection",
+          "evidenceIds": [
+            "u_case04:paper:w202",
+            "u_case04:cv:publications"
+          ]
+        },
+        {
+          "label": "Sensor fault detection",
+          "evidenceIds": [
+            "u_case04:paper:w201",
+            "u_case04:paper:w202"
+          ]
+        },
+        {
+          "label": "Sea-level data",
+          "evidenceIds": [
+            "u_case04:paper:w202",
+            "u_case04:repo:tidegauge"
+          ]
+        }
+      ],
+      "needsReview": true,
+      "reviewReasons": [
+        "duplicates_merged"
+      ]
+    },
+    "notes": "duplicates_merged only flags that one piece of work came from several sources; reviewers should check it isn't double counted."
+  }
+}

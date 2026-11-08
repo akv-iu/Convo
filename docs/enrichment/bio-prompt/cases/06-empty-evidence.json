@@ -1,0 +1,29 @@
+{
+  "id": "06-empty-evidence",
+  "title": "Empty evidence: every selected source came back empty",
+  "input": {
+    "name": "Ama Osei",
+    "evidence": []
+  },
+  "expected": {
+    "bioShouldSay": [],
+    "bioMustNotSay": [
+      "anything at all, including guesses from the name"
+    ],
+    "expertiseGuidance": "No labels.",
+    "needsReview": true,
+    "reviewReasons": [
+      "sparse_evidence"
+    ],
+    "illustrativeOutput": {
+      "bio": "",
+      "bioEvidenceIds": [],
+      "expertise": [],
+      "needsReview": true,
+      "reviewReasons": [
+        "sparse_evidence"
+      ]
+    },
+    "notes": "The backend should normally skip the model call for an empty snapshot (as it does for all sources off); this case checks the prompt is safe if it doesn't."
+  }
+}
