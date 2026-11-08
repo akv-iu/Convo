@@ -69,7 +69,7 @@ it("returns a saved revision after indexing fails, then repairs an identical ret
 });
 it("stores an incomplete profile without pretending it was indexed", async () => {
   mocks.user!.filters = null;
-  expect(await acceptEnrichment(owner, "job", body())).toMatchObject({ person: null, sync: { status: "not_onboarded", savedRevision: 9 } });
+  expect(await acceptEnrichment(owner, "job", body())).toEqual({ person: null, sync: { status: "not_onboarded", retryable: false, savedRevision: 9 } });
   expect(mocks.sync).not.toHaveBeenCalled();
 });
 it.each(["text", "consent", "draft", "duplicate", "foreign", "expired"])("rejects %s changes without saving anything", async scenario => {
