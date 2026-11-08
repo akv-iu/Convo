@@ -1,6 +1,6 @@
 # Scheduled cleanup of expired private enrichment input
 
-Status: `b/enrichment-cleanup`, based on `b/enrichment-runner` `acd8cb9`.
+Status: written on `b/enrichment-cleanup` (`2cd44af`, based on `b/enrichment-runner` `acd8cb9`), now integrated on `b/enrichment-backend-integration`, where the kernel defect below is fixed. See [the backend integration handoff](Enrichment-Backend-Integration.md).
 
 **Changed:**
 - the new route `src/app/api/cron/enrichment-cleanup/route.ts` and its tests;
@@ -9,7 +9,7 @@ Status: `b/enrichment-cleanup`, based on `b/enrichment-runner` `acd8cb9`.
 - a new `vercel.json` with one cron entry;
 - this doc.
 
-**Not changed:** the state and storage kernel, the contract, migrations and any Vercel setting. A kernel defect found while testing is reported to Codex below; this branch doesn't fix it.
+**Not changed:** the state and storage kernel, the contract, migrations and any Vercel setting. A kernel defect found while testing was reported below and is fixed in the integration branch.
 
 ## What it does
 
@@ -73,25 +73,33 @@ Facts from Vercel's documentation, checked 2026-11-07:
 - **Pro:** change the schedule to hourly (`"17 * * * *"`) for about 25 hours.
 - **Failed owners:** an owner that fails in a run waits for the next one; on a daily schedule, that's another day.
 
-Say "within about 49 hours on a daily schedule" in user-facing copy unless the project is on Pro with the hourly schedule.
+**Unresolved: the 48-hour physical-deletion target is not met on a daily schedule.** This needs your decision; nothing here changes a plan or adds a paid service:
 
-**Capacity:** each run covers up to 1,000 owner attempts in 30 seconds of batching. That is far beyond the expected daily volume. If `stoppedEarly` shows up repeatedly, investigate (see the defect below) before raising the limits.
+1. **Accept about 49 hours.** Keep the daily schedule and describe deletion as "within about two days", not "within 48 hours".
+2. **Pro plan, hourly schedule.** Change the expression to `"17 * * * *"` for about 25 hours. Deployment fails on Hobby with this expression, so change it only once the project is on Pro.
+3. **A second free trigger.** For example, a scheduled GitHub Actions workflow calling the endpoint with the secret. `.github/` is a gated folder that needs both people's approval, GitHub's own schedule is also best effort, and the workflow would need the secret as a repository secret.
+
+Until then, expired input is still unreadable after 24 hours, because every read applies `expire()` first. Only physical removal from Postgres can take up to about 49 hours.
+
+**Capacity:** each run covers up to 1,000 owner attempts in 30 seconds of batching. That is far beyond the expected daily volume. If `stoppedEarly` shows up repeatedly, investigate before raising the limits.
 
 Sources:
 - [Cron Jobs usage and pricing](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 - [Managing Cron Jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
 - [Migrating from Cron Jobs to Schedules](https://vercel.com/docs/schedules/migrate-from-cron-jobs)
 
-## Kernel defect reported to Codex (not fixed here)
+## Kernel defect (found here, fixed in the integration branch)
 
-When every selected source comes back empty, `finishDraft()` sets the job to `manual` but keeps `job.input`. `createJob` clears input only for jobs that start as `manual`. Two problems follow:
+When every selected source came back empty, `finishDraft()` set the job to `manual` but kept `job.input`. Two problems followed:
 
-1. **Private input outlives its 24-hour lifetime.** `expire()` treats `manual` as finished and never discards it. The input, which can include pasted public-profile text, stays until the job's 48-hour history ends.
-2. **The row is never rescheduled.** `nextSweepAt()` still counts that job's 24-hour deadline, because its input is non-null, but `expire()` changes nothing. `mutateOwner` therefore returns without writing, and `next_sweep_at` stays in the past. The row is picked first in every batch, and 25 such rows would starve every other owner's cleanup. This route stays bounded, but such a run would end `partial` with `stoppedEarly: true` every time.
+1. **Private input outlived its 24-hour lifetime.** The input, which could include pasted public-profile text, stayed until the job's 48-hour history ended.
+2. **The row was never rescheduled.** `mutateOwner` skipped every write for an unchanged document, so the stale `next_sweep_at` stayed in the past. The row was picked first by every batch and could starve other owners.
 
-A repro test, written to the correct behaviour and failing today, was handed over separately. It runs `createJob`, `claimJob`, `recordCollection` with every source empty, and `finishDraft`, then moves time past 24 hours and runs `cleanupExpired()`. It expects the job's input to be null and the row to be no longer due.
+The fixes, on `b/enrichment-backend-integration`, each with a failing-first regression:
+- `finishDraft` now clears `input` and `collected` when a job ends `manual`. Manual jobs are never retried.
+- `mutateOwner` now rewrites the deadline, version-guarded, whenever the stored value differs from the computed one, even when the document is unchanged.
 
-Suggested fix: clear `job.input` (and `collected`) when `finishDraft` ends in `manual`. Separately, make `mutateOwner` write a new `next_sweep_at` even when the document is unchanged, so a stale deadline can never stick.
+The regressions are in `state.test.ts`, `storage.test.ts` and this route's starvation test.
 
 ## Setup (deployment, needs the user's approval)
 
@@ -108,7 +116,7 @@ Person B sets Vercel variables (AGENTS.md).
 
 **Local, no credentials or services:**
 
-1. From this worktree: `npx vitest run src/app/api/cron --maxWorkers=2`. Expected: 15 passed. They cover:
+1. From this worktree: `npx vitest run src/app/api/cron --maxWorkers=2`. Expected: 16 passed. They cover:
    - a missing or empty secret (503) and six bad headers (401), none of which touch storage;
    - expired CV, job input and cache removed, while unexpired input is kept;
    - counts only in the response, and no console output;
