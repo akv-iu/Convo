@@ -167,6 +167,15 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(after.find((x) => x.person.id === first[1].person.id)?.rank).toBe(first[1].rank);
   });
 
+  it("carries the sender's note with the request, and leaves it out when there is none", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const [first, second] = await api.match(ctx(DEMO_USER_A, { askId }));
+    const withNote = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: first.person.id, message: "  Loved your talk on etcd.  " }));
+    expect(withNote.message).toBe("Loved your talk on etcd.");
+    const without = await api.sendRequest(ctx(DEMO_USER_A, { askId, toPersonId: second.person.id }));
+    expect(without.message).toBeNull();
+  });
+
   it("shows each side the other person's badge, and lets the asker follow the reply and booking", async () => {
     const { askId, refined } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const asker = await api.putMe(ctx(DEMO_USER_A, { visibility: { country: false, workplace: true, hiring: true } }));

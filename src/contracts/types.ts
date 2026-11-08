@@ -150,6 +150,8 @@ export const Request = z.object({
   toPersonId: z.string(),
   /** The refined question, carried with the request. */
   question: z.string(),
+  /** The sender's own note to this person, when they wrote one (people found by searching). */
+  message: z.string().nullish(),
   minutes: z.number().int().positive(),
   status: RequestStatus,
   reply: z.string().nullable(),

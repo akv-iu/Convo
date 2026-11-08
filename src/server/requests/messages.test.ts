@@ -10,7 +10,7 @@ import { people } from "@/contracts/fixtures";
 
 const request = {
   id: "request-id", askId: "ask-id", fromUserId: "sender", toPersonId: "receiver",
-  question: "How does preemption work?", minutes: 10, status: "sent", reply: null, slot: null,
+  question: "How does preemption work?", message: null, minutes: 10, status: "sent", reply: null, slot: null,
   createdAt: "2026-11-05T12:00:00.000Z",
 };
 const row = (changes: Partial<typeof request> = {}) => Object.values({ ...request, ...changes });

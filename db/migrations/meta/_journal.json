@@ -57,6 +57,13 @@
       "when": 1794113159246,
       "tag": "0007_avatar_colour",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794129928021,
+      "tag": "0008_request_message",
+      "breakpoints": true
     }
   ]
 }

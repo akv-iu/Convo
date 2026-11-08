@@ -210,6 +210,12 @@ function RequestCard({
       <h2 id={qId} className="mt-3 text-xl font-semibold leading-snug tracking-tight break-words">
         {request.question}
       </h2>
+      {request.message && (
+        <p className="mt-3 rounded-xl border-2 border-border px-4 py-3 break-words">
+          <span className="block text-xs font-semibold text-muted">Their message</span>
+          {request.message}
+        </p>
+      )}
 
       {request.status === "answered" && request.reply && (
         <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3">
