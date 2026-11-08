@@ -43,6 +43,14 @@ export const authLinkAttempts = pgTable("auth_link_attempts", {
   consumedAt: timestamp("consumed_at", { withTimezone: true }),
 }, table => [uniqueIndex("auth_link_attempts_state_idx").on(table.stateHash)]);
 
+/** Owner-only temporary inputs and resumable job state, separate from searchable profiles. */
+export const profileEnrichmentStates = pgTable("profile_enrichment_states", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  version: integer("version").notNull().default(0),
+  document: jsonb("document").notNull(),
+  nextSweepAt: timestamp("next_sweep_at", { withTimezone: true }),
+}, table => [index("profile_enrichment_states_sweep_idx").on(table.nextSweepAt)]);
+
 export const asks = pgTable(
   "asks",
   {

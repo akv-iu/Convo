@@ -50,6 +50,13 @@
       "when": 1794095453798,
       "tag": "0006_auth-link-attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794098156191,
+      "tag": "0007_enrichment_state",
+      "breakpoints": true
     }
   ]
 }

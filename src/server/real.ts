@@ -10,8 +10,9 @@ import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
-import { readAccountState } from "@/server/profile/identities";
-import { accountState, beginGitHubConnection } from "@/server/profile/connection";
+import { beginGitHubConnection } from "@/server/profile/connection";
+import { enrichmentState, saveEnrichmentIdentity, startEnrichment } from "@/server/profile/enrichment/service";
+import { cancelJob, getJob, removeCv, retryJob, stageCvText } from "@/server/profile/enrichment/state";
 
 // Foundation only: do not advertise real imports before the backend release.
 const enrichmentUnavailable = async (): Promise<never> => {
@@ -19,17 +20,17 @@ const enrichmentUnavailable = async (): Promise<never> => {
 };
 
 export const real: Api = {
-  enrichmentState: async ({ userId }) => readAccountState(userId, await accountState(userId)),
-  saveEnrichmentIdentity: enrichmentUnavailable,
+  enrichmentState: ({ userId }) => enrichmentState(userId),
+  saveEnrichmentIdentity: ({ userId, body }) => saveEnrichmentIdentity(userId, body),
   connectGitHub: ({ userId }) => beginGitHubConnection(userId),
   discoverEnrichment: enrichmentUnavailable,
-  uploadCv: enrichmentUnavailable,
-  removeCv: enrichmentUnavailable,
-  startEnrichment: enrichmentUnavailable,
-  getEnrichment: enrichmentUnavailable,
-  retryEnrichment: enrichmentUnavailable,
+  uploadCv: ({ userId, body }) => stageCvText(userId, body),
+  removeCv: ({ userId, params }) => removeCv(userId, params.id),
+  startEnrichment: ({ userId, body }) => startEnrichment(userId, body),
+  getEnrichment: ({ userId, params }) => getJob(userId, params.id),
+  retryEnrichment: ({ userId, params }) => retryJob(userId, params.id),
   acceptEnrichment: enrichmentUnavailable,
-  cancelEnrichment: enrichmentUnavailable,
+  cancelEnrichment: ({ userId, params }) => cancelJob(userId, params.id),
   enrichmentSources: enrichmentUnavailable,
   removeEnrichmentSource: enrichmentUnavailable,
   getMe: ({ userId }) => getProfile(userId),
