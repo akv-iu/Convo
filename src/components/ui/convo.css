@@ -82,8 +82,8 @@
 /* The homepage variants (hero-variants.tsx): a badge dropping onto a pile, a badge twisting on its
    lanyard, a person sliding in, and a worn lanyard dangling. */
 @keyframes hero-drop {
-  from { transform: translateY(-46px) rotate(-6deg) scale(1.04); opacity: 0; }
-  to { transform: none; opacity: 1; }
+  from { transform: translateY(-46px) rotate(-6deg) scale(1.04); }
+  to { transform: none; }
 }
 @keyframes hero-twist {
   from { transform: rotateY(-90deg); }

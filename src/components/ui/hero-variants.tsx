@@ -64,7 +64,8 @@ export function HeroStack({ run = 0 }: { run?: number }) {
           const style: CSSProperties = {
             // Older badges sit higher and fanned out, so their edges show behind the newest.
             transform: `translate(${depth ? tilt * 5 : 0}px, ${-depth * 16}px) rotate(${depth ? tilt * 1.6 : 0}deg) scale(${1 - depth * 0.05})`,
-            opacity: 1 - depth * 0.12,
+            // Solid, never see-through: deeper badges are just a little darker.
+            filter: depth ? `brightness(${1 - depth * 0.1})` : undefined,
             zIndex: 10 - depth,
           };
           return (
