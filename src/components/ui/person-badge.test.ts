@@ -36,7 +36,7 @@ describe("shared person badge", () => {
 describe("people without GitHub", () => {
   // Google-only accounts have no handle. The cast compiles both before and after the contract allows null.
   const noGitHub: CardPerson = { ...person, githubLogin: null as unknown as CardPerson["githubLogin"] };
-  const match = { person: noGitHub, explanation: "Works on Rust", mutual: false, highlights: [], badges: [], score: 1, rank: 0 };
+  const match = { person: noGitHub, explanation: "Works on Rust", mutual: false, highlights: [], evidence: [], badges: [], score: 1, rank: 0 };
 
   it("shows no handle and no GitHub link on cards, rows and match details", () => {
     for (const html of [

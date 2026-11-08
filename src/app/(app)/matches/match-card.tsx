@@ -10,14 +10,20 @@ import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
 
-/** What each kind of evidence is called on the open profile. */
-export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = {
+// Includes profile enrichment's kinds. Assigned through a variable so it compiles before and after
+// the contract adds them, while a kind without a label still fails typecheck.
+const labels = {
   repo: "Repository",
   commit_area: "Code area",
   paper: "Paper",
   talk: "Talk",
   abstract: "Abstract",
+  profile_page: "Profile page",
+  cv: "CV",
 };
+
+/** What each kind of evidence is called on the open profile. */
+export const evidenceKindLabel: Record<EvidenceDoc["kind"], string> = labels;
 
 /** The full profile a row opens into: their badge, why them, the evidence, and what they work with. */
 export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: string }) {
