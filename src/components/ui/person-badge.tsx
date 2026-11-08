@@ -1,7 +1,7 @@
 /**
  * A person as they chose to show themselves, shared by match and request cards. Their badge
- * colour, name and GitHub, workplace, country and hiring (hidden sections
- * aren't there), a line of bio and a few skills.
+ * colour, name, GitHub (when they've connected one), workplace, country and hiring (hidden
+ * sections aren't there), a line of bio and a few skills.
  */
 import type { CSSProperties } from "react";
 import type { CardPerson } from "@/contracts/types";
@@ -41,15 +41,17 @@ export function PersonBadge({ person, caption, nameId }: { person: CardPerson | 
         <Name id={nameId} className={`font-bold leading-snug break-words${nameId ? " text-2xl tracking-tight" : ""}`}>
           {person.name}
         </Name>
-        <a
-          href={githubProfile(person.githubLogin)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          @{person.githubLogin}
-          <span className="sr-only"> on GitHub (opens in a new tab)</span>
-        </a>
+        {person.githubLogin && (
+          <a
+            href={githubProfile(person.githubLogin)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            @{person.githubLogin}
+            <span className="sr-only"> on GitHub (opens in a new tab)</span>
+          </a>
+        )}
         {facts.length > 0 && <p className="text-sm text-muted">{facts.join(" · ")}</p>}
         {person.bio && <p className="mt-1 line-clamp-2 text-sm">{person.bio}</p>}
         {(person.synthetic || chips.length > 0) && (

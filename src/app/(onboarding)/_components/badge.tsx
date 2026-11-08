@@ -26,7 +26,8 @@ export function Badge({
   label?: ReactNode;
   colour?: string;
   name?: string;
-  handle?: string;
+  /** Their GitHub handle; null when they have none (no handle line). Leave it out for the placeholder. */
+  handle?: string | null;
   /** The chosen picture; null shows initials. */
   avatar?: AvatarId | null;
   /** A CSS colour for the picture circle; by default it follows the badge colour (--badge). */
@@ -74,7 +75,7 @@ export function Badge({
               ) : (
                 <p className="text-2xl font-extrabold leading-tight tracking-tight break-words [font-stretch:85%]">{name}</p>
               )}
-              <p className="truncate text-sm text-muted">@{handle}</p>
+              {handle && <p className="truncate text-sm text-muted">@{handle}</p>}
             </div>
           </div>
           {children !== undefined && <div aria-hidden="true">{children}</div>}

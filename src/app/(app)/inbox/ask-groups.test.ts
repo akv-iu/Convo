@@ -18,7 +18,7 @@ describe("groupByQuestion", () => {
       ["a", ["r1", "r3"], "2026-11-07T12:00:00Z"],
       ["b", ["r2"], "2026-11-07T11:00:00Z"],
     ]);
-    expect(groups[0]).toMatchObject({ question: "Question a", type: "knowledge", minutes: 5 });
+    expect(groups[0]).toMatchObject({ question: "Question a", minutes: 5 });
   });
 
   it("is empty for no requests", () => {

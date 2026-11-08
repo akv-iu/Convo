@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Request, RequestView } from "@/contracts/types";
-import { lengthLabel, typeLabel } from "../ask/asks";
+import { lengthLabel } from "../ask/asks";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 import {
@@ -199,7 +199,6 @@ function RequestCard({
         >
           {statusLabel[request.status]}
         </span>
-        {request.type && <span className="font-semibold">{typeLabel[request.type]}</span>}
         <span className="text-muted">{lengthLabel(request.minutes)}</span>
         <span className="text-muted">· {venueTime(request.createdAt)}</span>
       </div>

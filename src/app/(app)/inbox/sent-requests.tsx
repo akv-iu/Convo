@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { Request, RequestView } from "@/contracts/types";
-import { lengthLabel, typeLabel } from "../ask/asks";
+import { lengthLabel } from "../ask/asks";
 import { groupByQuestion, groupSummary, inboxFailure, sentStatusLabel, venueRange, venueTime, type AskGroup, type Failure } from "./inbox";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
@@ -153,7 +153,6 @@ function QuestionGroup({
             {group.question}
           </span>
           <span className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted">
-            {group.type && <span className="font-semibold text-foreground">{typeLabel[group.type]}</span>}
             <span>{lengthLabel(group.minutes)}</span>
             <span>· {venueTime(group.latest)}</span>
           </span>
