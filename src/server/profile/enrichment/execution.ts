@@ -30,9 +30,8 @@ export const needsGitHub = (job: EnrichmentJob) => job.sources.some(source => so
 /** Request-only: private context stays in this closure, never in a DTO or durable job. */
 export function scheduleEnrichment(owner: string, job: EnrichmentJob, github?: RunContext["github"], dispatchToken?: string): void {
   if (job.state !== "queued" || !dispatchToken) return;
-  // Discovery configuration merges separately; absent credentials fail only the research source.
-  const settings: { fakeAi: boolean; openAlexApiKey?: string } = config;
-  const context: RunContext = { fakeAi: settings.fakeAi, openAlexApiKey: settings.openAlexApiKey, dispatchToken,
+  // An unset key ("") fails only the research source.
+  const context: RunContext = { fakeAi: config.fakeAi, openAlexApiKey: config.openAlexApiKey || undefined, dispatchToken,
     ...(needsGitHub(job) && github ? { github: { ...github } } : {}) };
   try {
     after(() => runEnrichment(owner, job.jobId, context).catch(() => {
