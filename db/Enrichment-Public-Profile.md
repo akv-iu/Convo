@@ -30,10 +30,10 @@ Supporting files: `safe-fetch.ts` (the network boundary) and `page-text.ts` (pur
   - It answers 401, 403, 407 or 451.
   - It contains a password field (a login wall).
   - robots.txt disallows it for `Lanyard` or `*` (RFC 9309: longest match wins, Allow wins a tie, `*` and `$` supported).
-  - A robots meta tag or `X-Robots-Tag` says `noindex` or `none` for everyone or for Lanyard.
+  - A robots meta tag (attribute values quoted or unquoted) or `X-Robots-Tag` says `noindex` or `none` for everyone or for Lanyard.
 
   Per RFC 9309, a robots.txt 4xx means there are no rules. A 5xx or no answer means "not now" (`page_unavailable`). Login walls are never bypassed.
-- **Extraction.** The `<main>` element (else `<article>`, else the body). Scripts, styles, templates, embeds, forms, navigation, asides, and the page header/footer outside the main content are dropped. Entities are decoded and each block becomes a line. The charset comes from the header, else a `<meta>` tag, else UTF-8. The scanner uses `indexOf` and anchored or bounded patterns, so hostile markup stays linear.
+- **Extraction.** Two passes. First, comments and non-content elements are removed: scripts, styles, templates, objects, frames, media, forms, navigation and asides. Void elements such as `<embed>` and `<img>` are dropped as tags. An unclosed raw-text element (script, style, textarea, title) hides the rest of the page, as in a browser; any other unclosed element drops only its tag. Then the `<main>` element (else `<article>`, else the body) is read. A `<main>` inside a comment or script can't be chosen, and the page header/footer is dropped only outside it. Entities are decoded and each block becomes a line. The charset comes from the header, else a `<meta>` tag, else UTF-8. The scanner uses `indexOf` and anchored or bounded patterns, so hostile markup stays linear.
 - **Evidence.**
   - `id: <owner>:profile_page:public-page`, `source: public_profile`, `kind: profile_page`.
   - `title`: the page's og:title, else `<title>`, else the hostname.

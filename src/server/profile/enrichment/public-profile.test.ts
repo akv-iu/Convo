@@ -298,6 +298,8 @@ it("respects access restrictions: login, refusal, robots rules and directives", 
   await blocked();
   sites.set(PROFILE, { headers: { "content-type": "text/html" }, body: '<meta name="robots" content="noindex"><p>Bio</p>' });
   await blocked();
+  sites.set(PROFILE, { headers: { "content-type": "text/html" }, body: "<meta name=robots content=noindex><main>Do not index this biography.</main>" });
+  await blocked();
   sites.set(PROFILE, { headers: { "content-type": "text/html", "x-robots-tag": "none" }, body: "<p>Bio</p>" });
   await blocked();
 

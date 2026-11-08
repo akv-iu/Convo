@@ -27,8 +27,20 @@ it("uses the whole body when there is no main or article, and skips an unclosed 
   expect(htmlToText("<p>a <b>bold</b> word, 1 &lt; 2 &#x1F600; &unknown; &#0;</p>")).toBe("a bold word, 1 2 😀 &unknown;");
 });
 
+it("chooses the real <main>, not one inside a comment or script, and keeps text after void or unclosed elements", () => {
+  expect(htmlToText("<!-- <main>Hidden obsolete biography</main> --><main>Current public biography</main>")).toBe("Current public biography");
+  expect(htmlToText('<script>document.write("<main>Injected</main>")</script><p>Body bio.</p>')).toBe("Body bio.");
+  expect(htmlToText('<main><h1>Ada Example</h1><embed src="intro.pdf"><p>Researches distributed systems.</p></main>'))
+    .toBe("Ada Example\nResearches distributed systems.");
+  expect(htmlToText('<main><p>Bio</p><img src="a.png"><input name="q"><p>More bio</p></main>')).toBe("Bio\nMore bio");
+  // An unclosed non-raw element drops only its tag; an unclosed raw-text one (script) hides the rest, as in a browser.
+  expect(htmlToText("<nav><p>Menu-free bio stays.</p>")).toBe("Menu-free bio stays.");
+});
+
 it("stays fast on hostile markup", () => {
-  const hostile = "<b>".repeat(100_000) + "<main>".repeat(20_000) + "<script>".repeat(50_000) + "<!--".repeat(20_000) + "<".repeat(50_000);
+  // Unclosed non-raw elements (nav, iframe) come before the unclosed script, which would otherwise end the scan.
+  const hostile = "<b>".repeat(100_000) + "<nav>".repeat(60_000) + "<iframe>".repeat(60_000) + "<main>".repeat(20_000) +
+    "<script>".repeat(50_000) + "<!--".repeat(20_000) + "<".repeat(50_000);
   const started = performance.now();
   htmlToText(hostile);
   robotsAllows(`User-agent: *\n${"Disallow: /*a*a*a*a*a*a*b\n".repeat(2000)}`, `/${"a".repeat(2000)}`, "Lanyard");
@@ -39,6 +51,9 @@ it("takes the og:title, then the <title>, as plain bounded text", () => {
   expect(pageTitle(page)).toBe("Prof. Ada Example – Computer Science");
   expect(pageTitle("<title>Ada &amp; <b>Lab</b></title>")).toBe("Ada & Lab");
   expect(pageTitle("<p>no title</p>")).toBe("");
+  expect(pageTitle("<meta content='Ada &amp; Lab' property='og:title'><title>Fallback</title>")).toBe("Ada & Lab");
+  expect(pageTitle("<meta property=og:title content=Ada><title>Fallback</title>")).toBe("Ada");
+  expect(pageTitle('<meta property="og:title" content=""><title>Fallback</title>')).toBe("Fallback");
   expect(pageTitle(`<title>${"x".repeat(900)}</title>`)).toHaveLength(300);
 });
 
@@ -52,6 +67,9 @@ it("decodes with the header charset, then a meta charset, then UTF-8", () => {
 it("finds robots directives for everyone or for Lanyard, not ones aimed at another crawler", () => {
   expect(robotsDirectiveBlocks('<meta name="robots" content="noindex, follow">', undefined, "Lanyard")).toBe(true);
   expect(robotsDirectiveBlocks("<meta content='none' name='lanyard'>", undefined, "Lanyard")).toBe(true);
+  expect(robotsDirectiveBlocks("<meta name=robots content=noindex>", undefined, "Lanyard")).toBe(true);
+  expect(robotsDirectiveBlocks("<meta name=ROBOTS content=NoIndex,follow>", undefined, "Lanyard")).toBe(true);
+  expect(robotsDirectiveBlocks("<meta name=description content=noindex-free>", undefined, "Lanyard")).toBe(false);
   expect(robotsDirectiveBlocks('<meta name="googlebot" content="noindex">', undefined, "Lanyard")).toBe(false);
   expect(robotsDirectiveBlocks('<meta name="robots" content="index, follow">', undefined, "Lanyard")).toBe(false);
   expect(robotsDirectiveBlocks("", "noindex", "Lanyard")).toBe(true);

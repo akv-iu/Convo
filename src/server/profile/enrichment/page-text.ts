@@ -62,11 +62,16 @@ export function decodePage(bytes: Buffer, contentType: string | undefined): stri
   return new TextDecoder().decode(bytes);
 }
 
-// Never content: scripts, styles, embedded objects, navigation, page chrome and forms.
+// Never content: scripts, styles, embedded objects, navigation, sidebars and forms. Void elements
+// (img, embed, input…) have no content to skip, so they're dropped as plain tags.
 const SKIP = new Set([
-  "script", "style", "noscript", "template", "svg", "math", "iframe", "object", "embed", "canvas", "video", "audio",
-  "head", "title", "nav", "header", "footer", "aside", "form", "button", "select", "textarea", "dialog",
+  "script", "style", "noscript", "template", "svg", "math", "iframe", "object", "canvas", "video", "audio",
+  "head", "title", "nav", "aside", "form", "button", "select", "textarea", "dialog",
 ]);
+// Raw-text elements run to their closing tag, or to the end of the page without one, as in a browser.
+const RAW = new Set(["script", "style", "textarea", "title"]);
+// The site's header and footer: page chrome outside <main>/<article>, content inside it (often the person's name).
+const CHROME = new Set(["header", "footer"]);
 const BLOCK = new Set([
   "address", "article", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5",
   "h6", "hr", "li", "main", "ol", "p", "pre", "section", "table", "td", "th", "tr", "ul",
@@ -87,10 +92,19 @@ function mainPart(html: string): string | null {
 
 /** Visible text of the page's main content, one block per line. */
 export function htmlToText(html: string): string {
-  const main = mainPart(html);
-  const source = main ?? html;
-  // Inside <main>/<article>, a header or footer belongs to the content (often the person's name), not the site.
-  const skip = (name: string) => SKIP.has(name) && !(main && (name === "header" || name === "footer"));
+  // Comments and non-content elements go first, so a <main> written inside them can't be chosen.
+  const content = scan(html, (name) => SKIP.has(name), true);
+  const main = mainPart(content);
+  const text = scan(main ?? content, (name) => !main && CHROME.has(name), false);
+  return tidyText(decodeEntities(text).replace(/[<>]/g, " "));
+}
+
+/**
+ * One linear pass that drops comments and the elements `skip` names. With `keepMarkup`, other tags are
+ * copied for a later pass; without it, block tags become line breaks and the rest disappear.
+ */
+function scan(source: string, skip: (name: string) => boolean, keepMarkup: boolean): string {
+  const unclosed = new Set<string>();
   let out = "";
   let i = 0;
   while (i < source.length) {
@@ -112,25 +126,37 @@ export function htmlToText(html: string): string {
     if (!tag) continue; // doctype, processing instruction or a stray "<"
     const name = tag[2].toLowerCase();
     if (!tag[1] && skip(name) && source[gt - 1] !== "/") {
-      // Skip to this element's closing tag. HTML may leave </head> out, so <body> also ends a head;
-      // any other unclosed element hides the rest of the page.
+      // To this element's closing tag; HTML may leave </head> out, so <body> also ends a head.
+      // An unclosed raw-text element hides the rest of the page; any other unclosed one, only its tag.
+      // A closing tag missing once is missing for every later opening too, so each name is searched to the end at most once.
       const close = new RegExp(name === "head" ? "</head\\s*>|<body\\b" : `</${name}\\s*>`, "gi");
       close.lastIndex = i;
-      const found = close.exec(source);
-      i = found ? found.index + (found[0].startsWith("</") ? found[0].length : 0) : source.length;
+      const found = unclosed.has(name) ? null : close.exec(source);
+      if (!found) unclosed.add(name);
+      if (found) i = found.index + (found[0].startsWith("</") ? found[0].length : 0);
+      else if (RAW.has(name)) i = source.length;
       out += "\n";
       continue;
     }
-    if (BLOCK.has(name)) out += "\n";
+    if (keepMarkup) out += source.slice(lt, gt + 1);
+    else if (BLOCK.has(name)) out += "\n";
   }
-  return tidyText(decodeEntities(out).replace(/[<>]/g, " "));
+  return out;
 }
+
+/** An attribute's value from one tag: double-quoted, single-quoted or unquoted. */
+function attribute(tag: string, name: string): string | undefined {
+  const found = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`, "i").exec(tag);
+  return found ? (found[1] ?? found[2] ?? found[3]) : undefined;
+}
+
+const metaTags = (html: string) => [...html.matchAll(/<meta\s[^>]{0,500}>/gi)].map((m) => m[0]);
 
 /** The page's title: og:title, else <title>, else nothing. */
 export function pageTitle(html: string): string {
-  const og = /<meta\s[^>]{0,300}?property\s*=\s*["']og:title["'][^>]{0,300}?content\s*=\s*"([^"]{1,500})"/i.exec(html)?.[1];
+  const og = metaTags(html).find((tag) => attribute(tag, "property")?.toLowerCase() === "og:title");
   const title = /<title[^>]{0,100}>([\s\S]{1,1000}?)<\/title/i.exec(html)?.[1];
-  return oneLine(og ?? title ?? "", 300);
+  return oneLine((og && attribute(og, "content")) || title || "", 300);
 }
 
 /** A robots directive (meta tag or X-Robots-Tag) that asks not to be indexed or used. */
@@ -145,12 +171,7 @@ export function robotsDirectiveBlocks(html: string, header: string | string[] | 
     } else if (blocks(value)) return true;
   }
   const names = ["robots", token.toLowerCase()];
-  for (const meta of html.matchAll(/<meta\s[^>]{0,500}>/gi)) {
-    const name = /\bname\s*=\s*["']?([\w-]+)/i.exec(meta[0])?.[1]?.toLowerCase();
-    const content = /\bcontent\s*=\s*["']([^"']{0,200})/i.exec(meta[0])?.[1] ?? "";
-    if (name && names.includes(name) && blocks(content)) return true;
-  }
-  return false;
+  return metaTags(html).some((tag) => names.includes(attribute(tag, "name")?.toLowerCase() ?? "") && blocks(attribute(tag, "content") ?? ""));
 }
 
 /** A password field: the page is a login wall, not a public profile. */
