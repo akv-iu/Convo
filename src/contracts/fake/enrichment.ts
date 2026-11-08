@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as fixtures from "../fixtures";
 import type { Api, RouteBody, RouteResponse } from "../routes";
-import { EnrichmentSource, type EnrichmentJob, type EnrichmentErrorCode } from "../enrichment";
+import { EnrichmentSource, MAX_SOURCE_TEXT, type EnrichmentJob, type EnrichmentErrorCode } from "../enrichment";
 import { search } from "@/server/search";
 import { store } from "./store";
 
@@ -96,7 +96,7 @@ function selectedSources(userId: string, input: RouteBody<"startEnrichment">): E
   const research = input.research && !("skip" in input.research) ? chosen(userId, input.research, "research", input.identity) : null;
   const page = input.publicProfile;
   const publicProfile = !page || "skip" in page ? null : "candidateId" in page ? chosen(userId, page, "public_profile", input.identity)
-    : "url" in page ? { label: "Public profile", url: page.url } : { label: "Text you pasted" };
+    : "url" in page ? { label: "Public profile", url: page.url } : { label: "Profile text" };
   let cv: { label: string; filename: string | null } | null = null;
   if (input.cv) {
     const upload = owned(state().uploads.get(input.cv.uploadId), userId);
@@ -153,7 +153,7 @@ export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
     const upload = [...state().uploads.values()].find(u => u.owner === userId && !u.removed && Date.parse(u.value.expiresAt) > Date.now());
     const github = connection(userId);
     return {
-      signIn: { provider: userId === fixtures.DEMO_GOOGLE_NEW || userId === fixtures.DEMO_RESEARCHER ? "google" : "github" },
+      signIn: { provider: fixtures.isNewGoogleDemoUser(userId) || userId === fixtures.DEMO_RESEARCHER ? "google" : "github" },
       github: { connected: github !== null, login: github?.login ?? null }, onboarded: profile.filters !== null,
       identity: state().identities.get(userId) ?? null,
       job: latest ? { jobId: latest.value.jobId, state: jobFor(userId, latest.value.jobId).value.state } : null,
@@ -161,10 +161,14 @@ export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
     };
   },
   async connectGitHub({ userId }) {
+    store.profile(userId);
     if (state().identities.get(userId)?.name.includes("[demo:connect_cancelled]")) fail("github_connect_cancelled");
+    if (state().identities.get(userId)?.name.includes("[demo:linked_elsewhere]")) fail("github_linked_elsewhere");
     const existing = connection(userId);
     if (existing) return { status: "connected", login: existing.login };
-    const recorded = fixtures.DEMO_GITHUB_CONNECTION;
+    // Parallel browser users each get a fork of the recorded fixture, with the same canned handle.
+    const recorded = userId.startsWith("u_google_new_") ? { ...fixtures.DEMO_GITHUB_CONNECTION,
+      accountId: BigInt("0x" + fingerprint(userId).slice(0,12)).toString() } : fixtures.DEMO_GITHUB_CONNECTION;
     if ([...state().connections].some(([owner, account]) => owner !== userId && account.accountId === recorded.accountId)) fail("github_linked_elsewhere");
     state().connections.set(userId, recorded);
     store.profile(userId).githubLogin = recorded.login;
@@ -200,6 +204,7 @@ export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
   },
   async uploadCv({ userId, body }) {
     store.profile(userId);
+    let truncated = false;
     if ("file" in body) {
       const bytes = Buffer.from(await body.file.arrayBuffer());
       const text = bytes.toString("latin1");
@@ -208,13 +213,15 @@ export const enrichmentFake: Pick<Api, EnrichmentRoute> = {
       if (!pdf && !docx) fail("cv_unsupported", 415);
       if (pdf && text.includes("/Encrypt")) fail("cv_encrypted", 422);
       if (text.includes("DEMO:UNREADABLE") || text.includes("DEMO:SCANNED")) fail("cv_unreadable", 422);
+      truncated = text.includes("DEMO:LONG");
     }
     for (const old of state().uploads.values()) if (old.owner === userId && !old.removed) {
       old.removed = true;
       for (const job of state().jobs.values()) if (job.owner === userId && job.input.cv?.uploadId === old.value.uploadId && job.value.state !== "accepted") discard(job);
     }
-    const value = { uploadId: store.nextId("cv"), filename: "file" in body ? body.file.name : null,
-      characters: "text" in body ? body.text.length : 120, warnings: [], expiresAt: expiry() };
+    const value: RouteResponse<"uploadCv"> = { uploadId: store.nextId("cv"), filename: "file" in body ? body.file.name : null,
+      characters: "text" in body ? body.text.length : truncated ? MAX_SOURCE_TEXT : 120,
+      warnings: truncated ? ["cv_truncated"] : [], expiresAt: expiry() };
     // Only signatures/recorded outcomes: no extraction or private input retention in the fake.
     state().uploads.set(value.uploadId, { owner: userId, value, removed: false });
     return value;

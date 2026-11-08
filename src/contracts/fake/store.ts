@@ -17,12 +17,13 @@ export interface FakeState {
   counter: number;
 }
 
+function newGooglePerson(id: string): Omit<Person, "filters"> & { filters: null } {
+  return { id, name: "New demo attendee", githubLogin: null, bio: "", languages: [], organisations: [], filters: null, synthetic: false, freeTimes: [] };
+}
+
 export function freshState(): FakeState {
   return {
-    pendingPeople: new Map([[fixtures.DEMO_GOOGLE_NEW, {
-      id: fixtures.DEMO_GOOGLE_NEW, name: "New demo attendee", githubLogin: null, bio: "",
-      languages: [], organisations: [], filters: null, synthetic: false, freeTimes: [],
-    }]]),
+    pendingPeople: new Map([[fixtures.DEMO_GOOGLE_NEW, newGooglePerson(fixtures.DEMO_GOOGLE_NEW)]]),
     enrichment: freshEnrichment(),
     people: new Map(fixtures.people.map((p) => [p.id, structuredClone(p)])),
     asks: new Map(),
@@ -49,13 +50,16 @@ export const store = {
   },
   person(id: string): Person {
     const state = store.get();
+    if (!state.people.has(id) && fixtures.isNewGoogleDemoUser(id)) store.profile(id);
     const p = state.people.get(id);
     if (!p && state.pendingPeople.has(id)) throw Object.assign(new Error("Complete onboarding first."), { status: 409 });
     if (!p) throw new NotFound(`person ${id}`);
     return p;
   },
   profile(id: string) {
-    const profile = store.get().people.get(id) ?? store.get().pendingPeople.get(id);
+    const state = store.get();
+    if (!state.people.has(id) && !state.pendingPeople.has(id) && fixtures.isNewGoogleDemoUser(id)) state.pendingPeople.set(id, newGooglePerson(id));
+    const profile = state.people.get(id) ?? state.pendingPeople.get(id);
     if (!profile) throw new NotFound(`person ${id}`);
     return profile;
   },

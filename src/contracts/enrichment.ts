@@ -2,6 +2,7 @@ import { z } from "zod";
 import { EvidenceKind, Person, SourceUrl } from "./types";
 
 export { SourceUrl } from "./types";
+export const ENRICHMENT_RETURN_PATH = "/signin/sources";
 export const MAX_CV_BYTES = 2 * 1024 * 1024;
 export const MAX_SOURCE_TEXT = 30_000;
 const id = z.string().trim().min(1).max(200);
@@ -18,7 +19,7 @@ export const EnrichmentIdentity = z.strictObject({
 export const EnrichmentReason = z.enum([
   "github_reconnect", "github_nothing_public", "github_connect_cancelled", "github_linked_elsewhere",
   "github_not_connected", "sign_in_cancelled", "research_no_match", "page_blocked", "page_unavailable",
-  "cv_unreadable", "cv_encrypted", "cv_too_large", "cv_unsupported", "cv_expired", "rate_limited",
+  "cv_unreadable", "cv_encrypted", "cv_too_large", "cv_unsupported", "cv_expired", "cv_truncated", "rate_limited",
   "timeout", "provider_down", "unknown",
 ]);
 export const EnrichmentErrorCode = z.enum([
