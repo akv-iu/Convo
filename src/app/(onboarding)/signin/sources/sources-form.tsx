@@ -39,7 +39,7 @@ type Discovery = RouteResponse<"discoverEnrichment">;
 type Load =
   | { state: "loading" }
   | { state: "signed-out" }
-  | { state: "no-details" }
+  | { state: "no-details"; onboarded: boolean }
   | { state: "failed" }
   | { state: "ready"; owner: Owner; identity: Identity };
 
@@ -84,7 +84,8 @@ async function ownerLoad(fromDraft: Identity | null): Promise<Load> {
   const state = await enrichmentApi.state();
   if (!state.ok) return unavailable(state.status);
   const identity = fromDraft ?? state.data.identity;
-  if (!identity) return { state: "no-details" };
+  // An account that finished onboarding before enrichment has no saved details here, yet can keep its profile.
+  if (!identity) return { state: "no-details", onboarded: state.data.onboarded };
   if (!fromDraft || sameIdentity(fromDraft, state.data.identity)) return { state: "ready", owner: state.data, identity };
   const saved = await enrichmentApi.saveIdentity(fromDraft);
   return saved.ok ? { state: "ready", owner: saved.data, identity } : unavailable(saved.status);
@@ -361,6 +362,25 @@ export function SourcesForm({
           username.
         </p>
       </section>
+    );
+  }
+
+  if (load.state === "no-details" && load.onboarded) {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col gap-4">
+        <h1 className={h1Class}>You already have a profile</h1>
+        <p className="text-lg text-muted">
+          Keep it as it is, or add your details to suggest a new bio from your sources. Nothing changes until you approve it.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button href="/ask" onClick={clearOnboardingTab}>
+            Keep my profile
+          </Button>
+          <Button href="/signin" variant="secondary">
+            Add your details
+          </Button>
+        </div>
+      </div>
     );
   }
 
