@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../../../db";
-import { profileEnrichmentStates } from "../../../../db/schema";
-import { emptyOwnerData, enrichmentError, INPUT_TTL_MS, JOB_HISTORY_MS, OwnerData, StateError } from "./model";
+import { aiCache, profileEnrichmentStates } from "../../../../db/schema";
+import { cacheKeys, emptyOwnerData, enrichmentError, INPUT_TTL_MS, JOB_HISTORY_MS, OwnerData, profileCachePrefix, StateError } from "./model";
 
 export function nextSweepAt(data: OwnerData): Date | null {
   const deadlines = [...(data.cv ? [Date.parse(data.cv.metadata.expiresAt)] : []),
@@ -16,12 +16,25 @@ export async function mutateOwner<T>(userId: string, change: (data: OwnerData) =
     try {
       const [row] = await db().select().from(profileEnrichmentStates).where(eq(profileEnrichmentStates.userId, userId)).limit(1);
       const data = row ? OwnerData.parse(row.document) : emptyOwnerData();
+      const previousKeys = cacheKeys(data);
       const before = row ? JSON.stringify(data) : null;
       const result = change(data);
       const checked = OwnerData.parse(data);
       if (before === JSON.stringify(checked)) return structuredClone(result);
       const deadline = nextSweepAt(checked);
-      const saved = row
+      const removed = previousKeys.filter(key => !cacheKeys(checked).includes(key));
+      const saved = row && removed.length
+        ? (await db().execute<{userId:string}>(sql`with saved as (
+            update ${profileEnrichmentStates} set document = ${JSON.stringify(checked)}::jsonb,
+              version = ${row.version + 1}, next_sweep_at = ${deadline}
+            where user_id = ${userId} and version = ${row.version} returning user_id
+          ), purged as (
+            delete from ${aiCache} where kind = 'profile'
+              and key like ${profileCachePrefix(userId) + "%"}
+              and key in (select jsonb_array_elements_text(${JSON.stringify(removed)}::jsonb))
+              and exists (select 1 from saved)
+          ) select user_id as "userId" from saved`)).rows
+        : row
         ? await db().update(profileEnrichmentStates).set({ document: checked, version: row.version + 1, nextSweepAt: deadline })
           .where(and(eq(profileEnrichmentStates.userId, userId), eq(profileEnrichmentStates.version, row.version))).returning({ userId: profileEnrichmentStates.userId })
         : await db().insert(profileEnrichmentStates).values({ userId, document: checked, version: 1, nextSweepAt: deadline })

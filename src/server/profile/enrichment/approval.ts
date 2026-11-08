@@ -54,6 +54,7 @@ export async function acceptEnrichment(owner: string, id: string, input: RouteBo
     }
     if (job.input?.cv?.uploadId === data.cv?.metadata.uploadId && job.input?.cv) clearCv(data);
     job.input = null; job.collected = []; job.lease = null; job.value.draft = null;
+    delete job.synthesisCacheKeys;
     job.value.state = "accepted"; job.value.phase = "done";
     job.accepted = { fingerprint: digest, savedRevision: user.revision + 1 };
     return true;
@@ -75,7 +76,7 @@ export async function removeEnrichmentSource(owner: string, id: string): Promise
     expire(data); data.generation++; data.discoveries = [];
     for (const job of data.jobs) {
       if (job.value.state !== "accepted") discard(data, job, "cancelled");
-      else { job.input = null; job.collected = []; job.value.draft = null; }
+      else { job.input = null; job.collected = []; job.value.draft = null; delete job.synthesisCacheKeys; }
     }
     if (source.source === "cv") clearCv(data);
     user.profileEvidence = approvedSnapshot(user).filter(e => e.sourceId !== id);

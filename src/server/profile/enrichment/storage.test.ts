@@ -77,3 +77,14 @@ it("does not rewrite private input during a status poll when no state expired", 
   expect(await mutateOwner(owner, data => data.generation)).toBe(0);
   expect(mocks.query).toHaveBeenCalledOnce();
 });
+it("deletes discarded synthesis cache keys in the same version-guarded statement", async () => {
+  const data = emptyOwnerData();
+  data.jobs.push({ key:crypto.randomUUID(),fingerprint:"hash",input:null,collected:[],lease:null,synthesisCacheKeys:["profile:owner:hash"],
+    value:{jobId:"job",state:"cancelled",phase:"done",selectionGeneration:0,draft:null,expiresAt:new Date().toISOString(),
+      sources:(["github","research","public_profile","cv"] as const).map(source=>({source,sourceId:source,status:"not_selected",items:0,selection:null}))} });
+  mocks.query.mockResolvedValueOnce({rows:[[owner,1,JSON.stringify(data),null]]}).mockResolvedValueOnce({rows:[{userId:owner}]});
+  await mutateOwner(owner, state=>{delete state.jobs[0].synthesisCacheKeys;});
+  const [statement,params]=mocks.query.mock.calls[1];
+  expect(statement).toContain('delete from "ai_cache"'); expect(statement).toContain("exists (select 1 from saved)");
+  expect(params).toContain(JSON.stringify(["profile:owner:hash"]));
+});

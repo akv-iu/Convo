@@ -113,7 +113,7 @@ export const aiCache = pgTable(
   "ai_cache",
   {
     key: text("key").primaryKey(),
-    kind: text("kind", { enum: ["refine", "explain", "moderate"] }).notNull(),
+    kind: text("kind", { enum: ["refine", "explain", "moderate", "profile"] }).notNull(),
     value: jsonb("value").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -16,6 +16,7 @@ export function clearCv(data: OwnerData) {
 export function discard(data: OwnerData, job: PrivateJob, state: "cancelled" | "superseded" | "failed", keepUpload?: string) {
   if (job.input?.cv?.uploadId === data.cv?.metadata.uploadId && data.cv?.metadata.uploadId !== keepUpload) clearCv(data);
   job.input = null; job.collected = []; job.lease = null; job.value.draft = null; job.value.state = state; job.value.phase = "done";
+  delete job.synthesisCacheKeys;
 }
 export function expire(data: OwnerData) {
   const now = Date.now();
@@ -191,9 +192,13 @@ export function claimJob(owner: string, id: string) {
     if (job.value.state !== "queued" || !job.input || job.value.selectionGeneration !== data.generation) enrichmentError("draft_superseded");
     job.lease = { token, expiresAt: Date.now()+LEASE_MS }; job.value.state = "running";
     job.value.sources = job.value.sources.map(s => s.status === "waiting" ? { ...s, status: "running" } : s);
-    return { token, input: job.input, value: job.value, collected: job.collected };
+    return { token, input: job.input, value: job.value, collected: job.collected,
+      cvText: job.input.cv && data.cv?.metadata.uploadId === job.input.cv.uploadId ? data.cv.text : null };
   });
 }
+export const ensureLease = (owner: string, id: string, token: string) => mutate(owner, data => {
+  withLease(data, id, token);
+});
 export function recordCollection(owner: string, id: string, token: string, sources: EnrichmentJob["sources"], evidence: unknown) {
   const docs = EnrichmentEvidence.array().max(36).parse(evidence);
   const progress = SourceProgress.array().length(4).parse(sources);

@@ -50,11 +50,13 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 it("approves only selected excerpts, preserves badge/privacy/availability, and erases private collected material", async () => {
+  mocks.data!.jobs[0].synthesisCacheKeys = ["profile:owner:hash"];
   const preferences = { avatar: mocks.user!.avatar, visibility: mocks.user!.visibility, freeTimes: mocks.user!.freeTimes };
   const result = await acceptEnrichment(owner, "job", body());
   expect(result.sync).toEqual({ status: "confirmed", retryable: false, savedRevision: 9 });
   expect(mocks.user).toMatchObject({ ...preferences, bio: "My edited draft", expertise: ["Research"], textVersion: 4, profileEvidence: [paper] });
   expect(mocks.data!.jobs[0]).toMatchObject({ input: null, collected: [], value: { state: "accepted", draft: null } });
+  expect(mocks.data!.jobs[0]).not.toHaveProperty("synthesisCacheKeys");
   expect(mocks.user!.profileEvidence?.some(e => e.source === "cv")).toBe(false);
 });
 it("returns a saved revision after indexing fails, then repairs an identical retry without saving twice", async () => {
