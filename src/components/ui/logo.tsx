@@ -62,23 +62,21 @@ function TuckedY() {
 }
 
 /**
- * The y as a written one: the V's arms meet low, below the line of the other letters, and the
- * badge hangs straight from that point, swinging out to the left like a y's tail.
+ * The y set lower: the same V as the tucked version, but its top sits below the tops of the other
+ * letters, and the badge starts at the bottom of the V and swings out to the left like a y's tail.
  */
 function DropY() {
   return (
-    <svg viewBox="0 0 64 124" focusable="false" className="mx-[0.01em] inline-block h-[1.2em] w-[0.62em] align-[-0.6em]">
-      {/* The arms, meeting low; the right one bends a little into the tail. */}
-      <path d="M8 7 36 76" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-      <path d="M58 7C53 31 45 55 36 76" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-      {/* The badge starts right at the bottom of the V and swings out to the left. */}
-      <g transform="rotate(24 36 76)">
-        <rect x="31" y="72" width="10" height="7" rx="2" fill="currentColor" />
-        <rect x="22" y="77" width="28" height="40" rx="5.5" fill="var(--accent)" />
-        <path d="M22 82.5a5.5 5.5 0 0 1 5.5-5.5h17a5.5 5.5 0 0 1 5.5 5.5v3.5H22z" fill="var(--logo-stripe)" />
-        <circle cx="31" cy="100" r="4.5" fill="var(--on-accent)" />
-        <rect x="38" y="96.5" width="7.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
-        <rect x="38" y="102.5" width="5.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
+    <svg viewBox="0 0 60 92" focusable="false" className="mx-[0.01em] inline-block h-[0.9em] w-[0.6em] align-[-0.46em]">
+      {/* The strap: the y's two arms, the same V as the tucked y. */}
+      <path d="M8 6 30 43 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+      {/* The badge starts at the bottom of the V and swings out to the left. */}
+      <g transform="rotate(20 30 42)">
+        <rect x="16" y="40" width="28" height="44" rx="6" fill="var(--accent)" />
+        <path d="M16 46a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v4H16z" fill="var(--logo-stripe)" />
+        <circle cx="25.5" cy="64" r="4.8" fill="var(--on-accent)" />
+        <rect x="33" y="60" width="7.5" height="3.4" rx="1.7" fill="var(--on-accent)" />
+        <rect x="33" y="66.5" width="5.5" height="3.4" rx="1.7" fill="var(--on-accent)" />
       </g>
     </svg>
   );
