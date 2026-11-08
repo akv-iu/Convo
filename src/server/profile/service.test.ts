@@ -15,7 +15,9 @@ function result(value: Person = person, filters: Person["filters"] | null = valu
   return { rows: [[value.id, value.githubLogin, value.name, value.bio,
     JSON.stringify(value.languages), JSON.stringify(value.organisations),
     filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision,
-    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), JSON.stringify(evidence), pending]] };
+    value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), JSON.stringify(evidence), pending,
+    // The avatar column is last; rows from before it existed simply end earlier.
+    ...(value.avatar === undefined ? [] : [value.avatar])]] };
 }
 const evidence: EvidenceDoc[] = [{ id: `${person.id}:repo:durable`, personId: person.id,
   kind: "repo", title: "DurableRepository", text: "Repository evidence", url: "https://github.com/example/durable" }];
@@ -32,12 +34,13 @@ describe("real profile and availability services", () => {
     const user = {
       ...person, createdAt: new Date("2026-11-05T00:00:00Z"), revision: 4, workplaceName: null,
       badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
-      githubEvidence: evidence, githubEvidencePending: true,
+      githubEvidence: evidence, githubEvidencePending: true, avatar: null,
     };
+    const synced = { ...person, avatar: null }; // no picture chosen: initials
 
-    await expect(syncProfile(user, target as never)).resolves.toEqual(person);
+    await expect(syncProfile(user, target as never)).resolves.toEqual(synced);
 
-    expect(target.ingestPerson).toHaveBeenCalledExactlyOnceWith(person, evidence, 4);
+    expect(target.ingestPerson).toHaveBeenCalledExactlyOnceWith(synced, evidence, 4);
     expect(ingestPerson).not.toHaveBeenCalled(); // the app's own search is untouched
     expect(query).toHaveBeenCalledOnce();
     expect(String(query.mock.calls[0][0])).toContain('update "users" set "github_evidence_pending"');
@@ -100,6 +103,25 @@ describe("real profile and availability services", () => {
     query.mockResolvedValueOnce(result(updated));
     expect(await getProfile(person.id)).toEqual(updated);
   });
+  it("persists the chosen picture in Postgres and passes it to search", async () => {
+    const updated = { ...person, avatar: "moon" as const };
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
+    expect(await updateProfile(person.id, { avatar: "moon" })).toEqual(updated);
+    expect(query.mock.calls[1][0]).toContain('"avatar" =');
+    expect(query.mock.calls[1][1]).toEqual(["moon", person.id]);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
+    query.mockResolvedValueOnce(result(updated));
+    expect(await getProfile(person.id)).toEqual(updated);
+    // Back to initials.
+    query.mockResolvedValueOnce(result(updated)).mockResolvedValueOnce(result({ ...person, avatar: null }));
+    expect((await updateProfile(person.id, { avatar: null })).avatar).toBeNull();
+  });
+
+  it("refuses a stored picture that isn't one of the built-in ones", async () => {
+    query.mockResolvedValueOnce(result({ ...person, avatar: "photo.jpg" as never }));
+    await expect(getProfile(person.id)).rejects.toMatchObject({ status: 503 });
+  });
+
   it("persists workplace and colour in Postgres and passes them to search", async () => {
     const updated = { ...person, workplaceName: "Acme Robotics", badgeColour: "lilac" as const };
     query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));

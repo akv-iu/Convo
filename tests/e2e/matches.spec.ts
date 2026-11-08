@@ -77,6 +77,7 @@ function fakeMatches(n: number) {
       filters: { country: rank === 0 ? null : "US", rorId: null, hiring: rank === 0 ? null : true },
       workplaceName: null,
       badgeColour: "mint",
+      avatar: rank === 1 ? "star" : null,
       synthetic: rank % 2 === 1,
       freeTimes: [],
     },
@@ -188,6 +189,17 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(c).toContainText("Looking for someone like you too");
     await expect(c).toContainText("Hiring");
     await expect(c).toContainText("United States");
+  });
+
+  test("rows and open profiles show each person's picture, or their initials", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await open(page, "made-up");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveText("P1");
+    await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
+    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
+    await rows(page).nth(1).click();
+    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
   });
 
   test("the open profile lists projects and papers, linking out safely", async ({ page }) => {
