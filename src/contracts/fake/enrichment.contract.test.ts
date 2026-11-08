@@ -120,7 +120,7 @@ describe("revised enrichment contract", () => {
     expect((await fake.startEnrichment(ctx(input))).jobId).toBe(job.jobId);
     expect(JSON.stringify(store.get().enrichment.jobs.get(job.jobId))).not.toContain("Owner's private professional text");
     const excerpt = job.draft!.evidence.find(e => e.source === "public_profile")!;
-    expect(excerpt).toMatchObject({ title: "Text you pasted", kind: "profile_page" });
+    expect(excerpt).toMatchObject({ title: "Profile text", kind: "profile_page" });
     expect(excerpt).not.toHaveProperty("url");
     await expect(fake.startEnrichment(ctx({ ...input, publicProfile: { kind: "text", text: "Edited text" } }))).rejects.toMatchObject({ status: 409, code: "idempotency_conflict" });
     const replacement = await fake.startEnrichment(ctx({ ...input, idempotencyKey: crypto.randomUUID() }));
@@ -203,4 +203,34 @@ describe("revised enrichment contract", () => {
   it.each(["http://example.org","javascript:alert(1)","https://user:secret@example.org"])("rejects unsafe evidence links: %s", url => {
     expect(EvidenceDoc.safeParse({ id: "e", personId: "p", kind: "paper", title: "t", text: "t", url }).success).toBe(false);
   });
+});
+
+it("keeps parallel fresh Google users isolated through onboarding, uploads and recorded GitHub connections", async () => {
+  const owners = ["u_google_new_parallel_a", "u_google_new_parallel_b"];
+  await Promise.all(owners.map(async owner => {
+    expect(await fake.enrichmentState(ctx(undefined, owner))).toMatchObject({ onboarded: false, signIn: { provider: "google" }, github: { connected: false, login: null } });
+    await expect(fake.getMe(ctx(undefined, owner))).rejects.toMatchObject({ status: 409 });
+    await fake.saveEnrichmentIdentity(ctx({ ...enrichmentIdentity, name: owner }, owner));
+    await fake.uploadCv(ctx({ consent: true, text: owner }, owner));
+    expect(await fake.connectGitHub(ctx(undefined, owner))).toMatchObject({ status: "connected", login: "demo-connected" });
+  }));
+  const states = await Promise.all(owners.map(owner => fake.enrichmentState(ctx(undefined, owner))));
+  expect(states.map(s => s.identity?.name)).toEqual(owners);
+  expect(states[0].pendingCv?.uploadId).not.toBe(states[1].pendingCv?.uploadId);
+  expect(states.every(s => s.signIn.provider === "google")).toBe(true);
+  expect(store.profile(DEMO_GOOGLE_NEW).githubLogin).toBeNull();
+});
+
+it("provides a deterministic already-linked refusal without another test consuming the fixture", async () => {
+  const owner = "u_google_new_refusal";
+  await fake.saveEnrichmentIdentity(ctx({ ...enrichmentIdentity, name: "[demo:linked_elsewhere]" }, owner));
+  await expect(fake.connectGitHub(ctx(undefined, owner))).rejects.toMatchObject({ status: 409, code: "github_linked_elsewhere" });
+  expect((await fake.enrichmentState(ctx(undefined, owner))).github).toEqual({ connected: false, login: null });
+});
+
+it("reports recorded extracted-CV truncation without retaining or returning the file body", async () => {
+  const cv = routes.uploadCv.response.parse(await fake.uploadCv(ctx({ consent: true, file: new File(["%PDF-1.7 DEMO:LONG private-body"], "long.pdf", { type: "application/pdf" }) })));
+  expect(cv).toMatchObject({ characters: 30_000, warnings: ["cv_truncated"] });
+  expect(JSON.stringify([...store.get().enrichment.uploads.values()])).not.toContain("private-body");
+  expect((await fake.enrichmentState(ctx())).pendingCv).toEqual(cv);
 });

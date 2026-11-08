@@ -1,6 +1,6 @@
 # Profile enrichment foundation: revised contract and handoff
 
-Status: proposal for Claude's CONTRACT ACK; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. Main advanced to `1f763c7` while this revision was built: #44, #45 and the gate update #46 are merged and included here. Claude's nullable-handle compatibility commit `ad0c26f` is still needed before typecheck passes on main. No feature PR has been opened or merged by Codex.
+Status: proposal for Claude's CONTRACT ACK; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. Main advanced to `1f763c7` while this revision was built: #44, #45 and the gate update #46 are merged and included here. Claude's nullable-handle compatibility commit `6924256` is still needed before typecheck passes on main. No feature PR has been opened or merged by Codex.
 
 Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-plan/db/Profile-Enrichment-Plan.md), AGENTS.md and the quality gates. The user's 7 November decision supersedes GitHub-only authentication: **Google or GitHub sign-in, no ORCID sign-in**. Research still reads OpenAlex.
 
@@ -15,7 +15,7 @@ Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrich
 - `expertise` remains optional (no default through partial updates), bounded to eight 60-character labels. Ordinary expertise edits/storage belong to the real backend implementation; approval is the foundation's write interface.
 - Paper titles/abstracts are normalized as plain text in the real importer; abstracts are optional. Every paper has an HTTPS source URL. Missing abstracts do not fail an import. Limit to ten papers, deduplicated by DOI/OpenAlex ID.
 - Generated bio/expertise must omit country, workplace and hiring claims regardless of later visibility selections. Human edits remain editable; the UI warns about hidden facts in edited prose. Sign-in and author selection do not verify authorship.
-- Public-profile text fallback is retained: `{kind:"text",text}`, ≤30,000 characters. It is owner-private, never logged, discarded on cancel/supersede/expiry/withdrawal, and returned only as bounded owner-only review excerpts. Its evidence is `source:"public_profile", kind:"profile_page"`, title “Text you pasted”, and **no URL**.
+- Public-profile text fallback is retained: `{kind:"text",text}`, ≤30,000 characters. It is owner-private, never logged, discarded on cancel/supersede/expiry/withdrawal, and returned only as bounded owner-only review excerpts. Its evidence is `source:"public_profile", kind:"profile_page"`, title “Profile text” (the owner review labels it “Text you pasted”), and **no URL**.
 
 The foundation implements schemas, fake behavior, thin adapters, and the provider-identity schema migration. **Real enrichment endpoints still return sanitized 501/not_ready.** Google OAuth, real account linking, source collection, isolated CV parsing, durable jobs, synthesis, full-evidence persistence/index recovery and private-input cleanup are next backend work. No new dependencies are installed and no production setting is changed.
 
@@ -50,6 +50,8 @@ Approval returns 200 after a committed save, with `person` (nullable before onbo
 Every failure body is `{error,code,retryAfterSeconds?}`. `EnrichmentReason` is the single source/help-code enum; `EnrichmentErrorCode` adds request/auth/version guards. Source off is a status, not an error reason. The new B2 adapter sanitizes provider messages and logs; the foundation does not silently change every legacy API's error behavior. HTTPS schema validation is not SSRF protection; the real fetcher must still enforce the brief's redirect/DNS/connection/body limits.
 
 ## Migration and account identity
+
+**Migration hold:** A's #47 and #50 also propose migration 0005. Do not apply any competing 0005 to Neon now. Prefer the foundation after those changes and nullable-handle compatibility. Each later branch must merge the committed schema/snapshot chain and regenerate with drizzle-kit, preserving its data backfill; renaming files alone is not valid. Authentication's following migration must be regenerated too. #48's ai_cache.kind change must be retained when adding synthesis caching.
 
 `0005_provider-identities.sql`:
 - Drops NOT NULL from users.github_login; no existing handles or rows are deleted.
@@ -170,8 +172,21 @@ Real OAuth, real extraction, indexing/rebuild, cleanup/retention and the complet
 
 ## Verification and review handoff (7 November)
 
-The foundation was critically reviewed and tested in two rounds; fixes included stale-tab identity protection, stable numeric fake GitHub identity, and explicit per-category import consent. Latest integrated validation: **709 tests in 51 files, 98.63% line coverage; lint and typecheck pass**. This validation combines the foundation with Claude's existing nullable-screen commit `ad0c26f` in a disposable checkout; that screen patch is not authored or bundled into this branch. Without it, existing screen callers still fail nullable-handle typecheck. CI on the foundation must be rerun after that patch lands.
+The foundation was critically reviewed and tested in two rounds; fixes included stale-tab identity protection, stable numeric fake GitHub identity, and explicit per-category import consent. Latest integrated validation: **709 tests in 51 files, 98.63% line coverage; lint and typecheck pass**. This validation combines the foundation with Claude's existing nullable-screen commit `6924256` in a disposable checkout; that screen patch is not authored or bundled into this branch. Without it, existing screen callers still fail nullable-handle typecheck. CI on the foundation must be rerun after that patch lands.
 
 The complete API checklist below passed against the local Next server twice with recorded fakes. A separate HTTP check confirmed private identity staging survives another owner-state request. Flag-off and unchanged demo-profile checks also passed. No live providers, credentials or Neon migration were used; no new screen journey or Playwright coverage is claimed. Real routes remain unavailable until their implementation phase.
 
 The approved [feature checklist](../docs/features/profile-enrichment.md) tracks unfinished backend, screens, migrations and live acceptance. Next: Claude pushes/merges the nullable-handle compatibility patch, returns CONTRACT ACK on these revised schemas, and coordinates the flag-on browser project. PR creation still waits for the user's approval; merging additionally requires current CI and the other person's contract/sign-in/consent approval. Production remains disabled.
+## Claude review amendments (7 November)
+
+The five pages, independent imports, shared shapes and ownership split are unchanged: Codex owns sign-in/linking/backend/contracts; Claude owns screens/B1. Shared `ENRICHMENT_RETURN_PATH` is `/signin/sources`; page one stays `/signin`, badge `/onboarding`, availability `/onboarding/free-time`. Normal authentication and connection success return to the bare path and the screen re-reads owner state. Cancel/deny/refusal use `?reason=sign_in_cancelled`, `github_connect_cancelled` or `github_linked_elsewhere`. The screen ignores unknown reason values.
+
+The real connection POST returns a redirect path carrying a single-use, session/owner-bound, ten-minute token; GET without that token must not initiate OAuth, even if a pending cookie exists. Token consumption does not attach an account; verified OAuth state/PKCE and the final database claim still protect attachment. This is implemented in the separate authentication branch.
+
+- `cv_truncated` is a shared warning. Real extraction keeps the first 30,000 characters and reports it; pasted input still has its explicit 30,000-character validation limit. The fake PDF/DOCX marker `DEMO:LONG` reports 30,000 characters with that warning, without pretending to extract documents.
+- Pasted public-profile evidence has the neutral stored title **Profile text**, `source:public_profile`, `kind:profile_page`, no URL. The owner review can label it Text you pasted. Selected approved excerpts may be shown to matches; raw temporary input remains owner-private and disposable.
+- Any `u_google_new_<nonempty suffix>` initializes a separate unfinished Google-only fixture. Parallel users receive isolated CVs/identities and their own fork of the recorded GitHub fixture (same canned handle). `[demo:linked_elsewhere]` on the staged name forces refusal independently of test ordering.
+- Fake `getUserId` accepts the `convo_demo_user` cookie as well as `x-demo-user`; the header wins. Both are ignored in real mode. For a manual fake browser session, set `document.cookie = "convo_demo_user=u_google_new_manual; Path=/; SameSite=Lax"`; cleanup with `document.cookie = "convo_demo_user=; Path=/; Max-Age=0"`.
+- Re-send the **identical accept body** to retry a saved `sync.status:"pending"` result. The fake repairs indexing without writing a second profile revision; changed acceptance data does not reuse that save.
+
+Merge coordination: nullable-handle compatibility before the foundation; prefer #47/#50 before foundation migration regeneration. Claude starts B1 search edits after #49 lands, and builds pages 3-4 on #50's badge while retaining nullable guards. Full flag-on Playwright remains Claude's work and needs the user's configuration approval. This handoff does not grant ACK on Claude's behalf; request his confirmation of the revised commit.

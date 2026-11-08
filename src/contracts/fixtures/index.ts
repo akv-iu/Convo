@@ -18,6 +18,7 @@ export const DEMO_USER_A = "u_demo_a";
 export const DEMO_USER_B = "u_demo_b";
 export const DEMO_RESEARCHER = "u_demo_researcher";
 export const DEMO_GOOGLE_NEW = "u_demo_google_new";
+export const isNewGoogleDemoUser = (id: string) => id === DEMO_GOOGLE_NEW || /^u_google_new_.+$/.test(id);
 export const DEMO_GITHUB_CONNECTION = { accountId: "9001", login: "demo-connected" };
 
 export const ror: RorMatch[] = [
