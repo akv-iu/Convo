@@ -120,7 +120,9 @@ describe("toProfileBody (step 2 save, db/Frontend-Support.md)", () => {
       workplaceName: "Stanford University",
       badgeColour: "lilac",
       visibility: hidden,
+      avatar: null, // no picture chosen: initials
     });
+    expect(toProfileBody(complete, "lilac", hidden, "moon").avatar).toBe("moon");
     expect(routes.putMe.body.safeParse(body).success).toBe(true);
   });
 

@@ -27,7 +27,7 @@ The collector has **29 recorded-response tests**. The focused collector, existin
 
 Both complete rounds passed lint, typecheck and **944 tests in 65 files**, with **98.59% line coverage**. These ran against source a3f89bc plus Claude's compatibility 8ee0b3a, which includes main d139e82 and avatars. The shared JSON reader's extraction also passed all existing OpenAlex tests; existing auth/profile callers passed the full regression suite.
 
-For these functional checks only, the temporary merge retained both B2 schema imports and isolated conflicting migration metadata. It was aborted after verification and was not published. The foundation/auth/state migrations still need regeneration on the final main schema; this test merge is not a deployable migration chain. No screen code was edited, and Playwright was not run for this provider-only change.
+For these functional checks only, the temporary merge retained both B2 schema imports and isolated conflicting migration metadata. It was aborted after verification and was not published. That earlier validation merge was not a deployable migration chain. The current branch now includes main 576692d and the regenerated 0007-0009 chain; see Enrichment-Integration.md for fresh verification and Enrichment-Migrations.md for the future live application checklist. No screen code was edited, and Playwright was not run for this provider-only change.
 
 Repeat the focused recorded checks without accounts or credentials:
 
@@ -36,3 +36,7 @@ npx vitest run src/server/profile/enrichment/github.test.ts src/server/profile/g
 ```
 
 No live GitHub requests, real credentials or database writes were used. At configuration/runner integration time, supply the complete setup, consent combinations, owner-isolation, empty/revoked/error and cleanup checklist together and ask before live tests. End-to-end import, synthesis, acceptance and publication are not established by this module.
+
+## Current main integration
+
+The branch now integrates main 576692d through the regenerated foundation/auth/state chain (0007-0009). Both full rounds pass lint/typecheck and 944 tests in 65 files, 98.59% line coverage; Drizzle check passes. GitHub/OpenAlex provider source/tests and the shared JSON reader are unchanged. This is the combined development base for the other sessions; pending backend work and live acceptance remain explicit in Enrichment-Integration.md.

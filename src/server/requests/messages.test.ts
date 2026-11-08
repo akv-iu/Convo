@@ -43,9 +43,9 @@ describe("saved outgoing requests", () => {
     expect(getPerson).not.toHaveBeenCalled();
   });
 
-  it("uses raw text and ten minutes for an ask without refinement", async () => {
+  it("uses raw text and five minutes for an ask without refinement", async () => {
     query.mockResolvedValueOnce({ rows: [["Original question", null]] }); recipient(); save();
-    expect(await sendRequest("sender", body)).toMatchObject({ question: "Original question", minutes: 10 });
+    expect(await sendRequest("sender", body)).toMatchObject({ question: "Original question", minutes: 5 });
   });
 
   it("allows a search-only synthetic recipient without writing a fabricated user row", async () => {

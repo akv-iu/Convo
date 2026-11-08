@@ -62,6 +62,11 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
   });
 
   it("saves a workplace name and badge colour, preserves them on unrelated edits and clears the workplace", async () => {
+    const pictured = await api.putMe(ctx(DEMO_USER_A, routes.putMe.body.parse({ avatar: "moon" })));
+    expect(pictured.avatar).toBe("moon");
+    expect((await api.getMe(ctx(DEMO_USER_A))).avatar).toBe("moon");
+    expect(routes.putMe.body.safeParse({ avatar: "photo.jpg" }).success).toBe(false);
+    expect((await api.putMe(ctx(DEMO_USER_A, { avatar: null }))).avatar).toBeNull();
     const body = routes.putMe.body.parse({ workplaceName: "  Acme Robotics  ", badgeColour: "lilac" });
     const saved = await api.putMe(ctx(DEMO_USER_A, body));
     expect(saved).toMatchObject({ workplaceName: "Acme Robotics", badgeColour: "lilac" });
@@ -103,6 +108,14 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     }
   });
 
+  it("lists each match's evidence, best first, with only https links", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const results = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId })));
+    expect(results.every((r) => r.evidence.length <= 5 && r.evidence.every((e) => !e.url || e.url.startsWith("https://")))).toBe(true);
+    const b = results.find((r) => r.person.id === DEMO_USER_B);
+    expect(b?.evidence[0]).toMatchObject({ kind: "commit_area", url: expect.stringMatching(/^https:\/\/github\.com\//) });
+  });
+
   it("marks mutual interest and counts who is looking for you", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const results = await api.match(ctx(DEMO_USER_A, { askId }));
@@ -113,6 +126,7 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
 
   it("hides rejected people, batch-hides after three, and the soft blocker switches it off", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: true })); // new asks start with it off
     const first = await api.match(ctx(DEMO_USER_A, { askId }));
     expect(first.length).toBeGreaterThanOrEqual(4);
 
@@ -177,12 +191,52 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(await api.sentRequests(ctx(DEMO_USER_B))).toEqual([]);
   });
 
+  it("with the soft blocker off (the default), a person passed on stays in the matches", async () => {
+    const { askId } = await api.refine(ctx(DEMO_USER_A, { text: "kubernetes scheduling preemption etcd raft argo gitops" }));
+    const first = await api.match(ctx(DEMO_USER_A, { askId }));
+    await api.reject(ctx(DEMO_USER_A, { askId, personId: first[0].person.id, rank: 0 }));
+    expect((await api.match(ctx(DEMO_USER_A, { askId }))).map((x) => x.person.id)).toContain(first[0].person.id);
+  });
+
+  it("previews a sharper question without saving or registering an ask", async () => {
+    const before = store.get().asks.size;
+    const preview = routes.previewRefine.response.parse(await api.previewRefine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw })));
+    expect(preview.refined.text).toContain(sampleAsks[0].raw.replace(/[.?!]+$/, ""));
+    expect(store.get().asks.size).toBe(before);
+    await expect(api.previewRefine(ctx(DEMO_USER_A, { text: "you idiot" }))).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("saves an ask exactly as written, with the defaults, and it matches like any other", async () => {
+    const text = "How do you size etcd for a 500-node cluster?";
+    const saved = routes.saveAsk.response.parse(await api.saveAsk(ctx(DEMO_USER_A, { text })));
+    expect(saved.ask).toMatchObject({ id: saved.askId, userId: DEMO_USER_A, rawText: text, status: "open", softBlocker: false });
+    expect(saved.ask.refined).toEqual({ text, type: "knowledge", minutes: 5 });
+    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: saved.askId }))).toEqual(saved.ask);
+    expect(Array.isArray(await api.match(ctx(DEMO_USER_A, { askId: saved.askId })))).toBe(true);
+    const chosen = await api.saveAsk(ctx(DEMO_USER_A, { text, type: "collaboration", minutes: 15 }));
+    expect(chosen.ask.refined).toEqual({ text, type: "collaboration", minutes: 15 });
+    const before = store.get().asks.size;
+    await expect(api.saveAsk(ctx(DEMO_USER_A, { text: "you idiot" }))).rejects.toMatchObject({ status: 422 });
+    expect(store.get().asks.size).toBe(before);
+  });
+
+  it("checks the as-written bodies at the contract", () => {
+    expect(routes.saveAsk.body.parse({ text: "  Hi there  " })).toEqual({ text: "Hi there" });
+    expect(routes.saveAsk.body.safeParse({ text: "  ok  " }).success).toBe(false); // trimmed below 3
+    expect(routes.saveAsk.body.safeParse({ text: "x".repeat(501) }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", type: "gossip" }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 4 }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 31 }).success).toBe(false);
+    expect(routes.saveAsk.body.safeParse({ text: "Hi there", minutes: 7.5 }).success).toBe(false);
+    expect(routes.previewRefine.body.safeParse({ text: "x".repeat(501) }).success).toBe(false);
+  });
+
   it("reads back the caller's own ask, including its soft-blocker setting", async () => {
     const { askId, refined } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     expect(routes.getAsk.response.parse(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))))
-      .toMatchObject({ id: askId, userId: DEMO_USER_A, refined, status: "open", softBlocker: true });
-    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: false }));
-    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))).toMatchObject({ softBlocker: false });
+      .toMatchObject({ id: askId, userId: DEMO_USER_A, refined: { ...refined, minutes: 5 }, status: "open", softBlocker: false });
+    await api.setSoftBlocker(ctx(DEMO_USER_A, { askId, enabled: true }));
+    expect(await api.getAsk(ctx(DEMO_USER_A, undefined, { id: askId }))).toMatchObject({ softBlocker: true });
     await expect(api.getAsk(ctx(DEMO_USER_B, undefined, { id: askId }))).rejects.toMatchObject({ status: 404 });
   });
 

@@ -6,6 +6,7 @@ import { Person, RefinedAsk, Request, type CardPerson, type ProfileVisibility, t
 import type { RouteBody } from "@/contracts/routes";
 import { toPerson } from "@/server/profile/service";
 import { visiblePerson } from "@/server/profile/visibility";
+import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { search } from "@/server/search";
 
 class RequestError extends Error {
@@ -75,7 +76,7 @@ export async function sendRequest(userId: string, body: RouteBody<"sendRequest">
     const refined = ask.refined === null ? null : RefinedAsk.parse(ask.refined);
     value = Request.parse({
       id: randomUUID(), askId: body.askId, fromUserId: userId, toPersonId: body.toPersonId,
-      question: refined?.text ?? ask.rawText, minutes: refined?.minutes ?? 10,
+      question: refined?.text ?? ask.rawText, minutes: refined?.minutes ?? MEETING_MINUTES,
       status: "sent", reply: null, slot: null, createdAt: new Date().toISOString(),
     });
   } catch {

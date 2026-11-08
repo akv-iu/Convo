@@ -1,6 +1,6 @@
 # Profile enrichment foundation: revised contract and handoff
 
-Status: Claude returned CONTRACT ACK on `502bd6c`; not merge-ready. Replaces the GitHub-only foundation at `a4e143f`. Main advanced to `1f763c7` while this revision was built: #44, #45 and the gate update #46 are merged and included here. Claude's updated nullable-handle compatibility commit `500352a` must land before this foundation. No feature PR has been opened or merged by Codex.
+Status: Claude returned CONTRACT ACK on `502bd6c`. Main `576692d` now includes #47, #50 and nullable-handle compatibility #51, and is integrated into this branch. The provider-identity migration has been regenerated as `0007_provider-identities` against main's actual snapshot chain, retaining its numeric GitHub backfill. See [the integration ledger](Enrichment-Integration.md) for fresh verification and downstream dependencies. No feature PR has been opened or merged by Codex.
 
 Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrichment-plan/db/Profile-Enrichment-Plan.md), AGENTS.md and the quality gates. The user's 7 November decision supersedes GitHub-only authentication: **Google or GitHub sign-in, no ORCID sign-in**. Research still reads OpenAlex.
 
@@ -15,7 +15,7 @@ Read [the delivery brief](https://github.com/akv-iu/Convo/blob/b2/profile-enrich
 - `expertise` remains optional (no default through partial updates), bounded to eight 60-character labels. Ordinary expertise edits/storage belong to the real backend implementation; approval is the foundation's write interface.
 - Paper titles/abstracts are normalized as plain text in the real importer; abstracts are optional. Every paper has an HTTPS source URL. Missing abstracts do not fail an import. Limit to ten papers, deduplicated by DOI/OpenAlex ID.
 - Generated bio/expertise must omit country, workplace and hiring claims regardless of later visibility selections. Human edits remain editable; the UI warns about hidden facts in edited prose. Sign-in and author selection do not verify authorship.
-- Public-profile text fallback is retained: `{kind:"text",text}`, ≤30,000 characters. It is owner-private, never logged, discarded on cancel/supersede/expiry/withdrawal, and returned as bounded owner-only review excerpts until approval; selected approved excerpts may be shown to matches. Its evidence is `source:"public_profile", kind:"profile_page"`, title “Profile text” (the owner review labels it “Text you pasted”), and **no URL**.
+- Public-profile text fallback is retained: `{kind:"text",text}`, â‰¤30,000 characters. It is owner-private, never logged, discarded on cancel/supersede/expiry/withdrawal, and returned as bounded owner-only review excerpts until approval; selected approved excerpts may be shown to matches. Its evidence is `source:"public_profile", kind:"profile_page"`, title â€œProfile textâ€ (the owner review labels it â€œText you pastedâ€), and **no URL**.
 
 The foundation implements schemas, fake behavior, thin adapters, and the provider-identity schema migration. **Real enrichment endpoints still return sanitized 501/not_ready.** Google OAuth, real account linking, source collection, isolated CV parsing, durable jobs, synthesis, full-evidence persistence/index recovery and private-input cleanup are next backend work. No new dependencies are installed and no production setting is changed.
 
@@ -28,8 +28,8 @@ The exact shapes are in `src/contracts/enrichment.ts` and `routes.ts`; do not in
 | enrichmentState | GET /api/profile-enrichment | Owner's sign-in provider, GitHub connection/login, onboarded flag, saved page-one identity, latest job and pending CV; works before onboarding. 401 shows sign-in. |
 | saveEnrichmentIdentity | PUT /api/profile-enrichment | Privately stage page-one answers after authentication, before discovery/upload, so another tab can resume even before final Continue. Does not publish a profile. |
 | connectGitHub | POST /api/profile-enrichment/github/connect | Preserves the current account. Fake returns a recorded connected login; real implementation will return a same-origin /api/auth/ path for the protected connection flow. No client-supplied owner, handle or return URL. |
-| discoverEnrichment | POST /api/profile-enrichment/discover | One research/public_profile source per request; ≤4 candidates; independent retries; owner-bound discovery ID and input fingerprint. Human-readable links. |
-| uploadCv | POST /api/profile-enrichment/cv | Multipart: consent="true" and exactly one file or text field. PDF/DOCX ≤2 MiB or pasted text ≤30,000 characters. Response contains metadata only; pasted filename is null. |
+| discoverEnrichment | POST /api/profile-enrichment/discover | One research/public_profile source per request; â‰¤4 candidates; independent retries; owner-bound discovery ID and input fingerprint. Human-readable links. |
+| uploadCv | POST /api/profile-enrichment/cv | Multipart: consent="true" and exactly one file or text field. PDF/DOCX â‰¤2 MiB or pasted text â‰¤30,000 characters. Response contains metadata only; pasted filename is null. |
 | removeCv | POST /api/profile-enrichment/cv/:id/remove | Idempotent private staging removal; a new upload replaces the old pending upload. |
 | startEnrichment | POST /api/profile-enrichment | Includes identity, UUID idempotencyKey and independently selected sources. New confirmation supersedes unaccepted work. |
 | getEnrichment | GET /api/profile-enrichment/:id | State, phase, confirmed-source snapshots/progress and owner-only review draft; no raw pasted input or CV body. |
@@ -51,9 +51,9 @@ Every failure body is `{error,code,retryAfterSeconds?}`. `EnrichmentReason` is t
 
 ## Migration and account identity
 
-**Migration hold:** A's #47 and #50 also propose migration 0005. Do not apply any competing 0005 to Neon now. Prefer the foundation after those changes and nullable-handle compatibility. Each later branch must merge the committed schema/snapshot chain and regenerate with drizzle-kit, preserving its data backfill; renaming files alone is not valid. Authentication's following migration must be regenerated too. #48's ai_cache.kind change must be retained when adding synthesis caching.
+**Regenerated foundation:** main owns `0005_new_ask_defaults` and `0006_default_avatars`; this branch adds `0007_provider-identities`, generated against their committed snapshots. The old competing 0005 proposal was never applied and is removed. Existing migration files remain unchanged. Authentication and state must follow this regenerated chain; see [the integration ledger](Enrichment-Integration.md). Keep #48's ai_cache.kind moderate when adding synthesis caching. No migration is authorized for live application by this update.
 
-`0005_provider-identities.sql`:
+`0007_provider-identities.sql`:
 - Drops NOT NULL from users.github_login; no existing handles or rows are deleted.
 - Adds auth_identities keyed by (provider, provider_account_id), with at most one of each provider per user.
 - Backfills GitHub's numeric account ID from existing `github:<number>` user IDs, **not mutable handles**.
@@ -87,7 +87,7 @@ Existing demo A/B handles remain unchanged.
 - `u_demo_google_new`: authenticated Google-only, unfinished onboarding. `/api/me` returns 409, but owner-state/upload/discovery/start work.
 - Use `x-demo-user` to select those API identities. Default remains demo A. This is not a simulation of real OAuth redirects.
 - Connect GitHub uses the fixed `DEMO_GITHUB_CONNECTION` fixture, never a generated handle. Connecting that same fixture to a different account returns github_linked_elsewhere.
-- Polling progresses queued → running/collecting → running/writing → ready/done. No timers or provider calls.
+- Polling progresses queued â†’ running/collecting â†’ running/writing â†’ ready/done. No timers or provider calls.
 - Identity-name triggers: `[demo:partial]`, `[demo:failed]`, `[demo:stalled]`, `[demo:reconnect]`, `[demo:empty]`. Retry clears recorded temporary failures and creates a new draft version. A staged identity named `[demo:connect_cancelled]` exercises cancelled connection without signing out.
 - Discovery-name triggers: `[demo:no_matches]`, `[demo:unavailable]`. Toggling a source off means no discovery request for it.
 - CV uses actual file signatures/container markers and bounded bytes, but **does not extract real documents**. PDF marker `%PDF-` passes; `/Encrypt` yields cv_encrypted; `DEMO:UNREADABLE` or `DEMO:SCANNED` yields cv_unreadable. DOCX marker requires ZIP signature plus word/document.xml and [Content_Types].xml. Wrong signatures/MIME are cv_unsupported; oversize is cv_too_large. These checks are recorded fake outcomes, not secure parsing.
@@ -99,10 +99,10 @@ Existing demo A/B handles remain unchanged.
 2. Claude returned CONTRACT ACK on `502bd6c`. Its nullable type intentionally exposes old screen callers until the compatibility patch lands. No screen files are changed by Codex; migration and PR checks remain outstanding.
 3. Update/retest against the resulting exact main; get user approval before opening the foundation PR. Main now requires five checks including Feature sign-off; this breaking identity/consent change needs the other person's approval. No gate bypass.
 4. After the foundation merges, parallel backend and frontend/B1 implementation from the same commit, behind PROFILE_ENRICHMENT_ENABLED=0.
-5. Claude owns UI/e2e tests. The flag-on Playwright configuration/specs from request 18 still require the agreed config owner/approval and must land with the frontend; no empty “passing” browser gate is added before screens exist. Existing flag-off browser checks remain required.
+5. Claude owns UI/e2e tests. The flag-on Playwright configuration/specs from request 18 still require the agreed config owner/approval and must land with the frontend; no empty â€œpassingâ€ browser gate is added before screens exist. Existing flag-off browser checks remain required.
 6. Account setup, migration, cleanup and live acceptance remain user-controlled. Ask before any live providers or paid tests.
 
-Requests 1–29 are reflected above, with these explicit amendments: retain identity on start/state, retain terminal manual mode, retain public-profile text, retain structured saved-revision sync, and stage nullable-handle rollout behind the compatibility patch. Browser flag-on work is an explicit frontend dependency, not claimed complete.
+Requests 1â€“29 are reflected above, with these explicit amendments: retain identity on start/state, retain terminal manual mode, retain public-profile text, retain structured saved-revision sync, and stage nullable-handle rollout behind the compatibility patch. Browser flag-on work is an explicit frontend dependency, not claimed complete.
 
 ## Complete local manual checklist (API foundation only)
 

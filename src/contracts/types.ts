@@ -34,6 +34,10 @@ export type Slot = TimeBlock;
 export const BadgeColour = z.enum(["sunflower", "mint", "sky", "lilac", "coral"]);
 export type BadgeColour = z.infer<typeof BadgeColour>;
 
+/** The built-in pictures a person can choose for their badge (original art in src/components/ui/avatars.tsx). */
+export const AvatarId = z.enum(["star", "moon", "sun", "leaf", "wave", "peak", "bolt", "heart", "flower", "cloud", "gem", "spark"]);
+export type AvatarId = z.infer<typeof AvatarId>;
+
 export const ProfileVisibility = z.object({
   country: z.boolean(),
   workplace: z.boolean(),
@@ -55,6 +59,11 @@ export const Person = z.object({
   workplaceName: z.string().trim().min(1).max(200).nullable().optional(),
   /** Optional for older profiles/clients; display sunflower when absent. */
   badgeColour: BadgeColour.optional(),
+  /**
+   * A built-in picture, always shown (not a show/hide section). Null or absent means initials on
+   * the badge colour; synthetic profiles have none. Photo uploads are a later, separate field.
+   */
+  avatar: AvatarId.nullable().optional(),
   /** Card display only; hidden values remain available for matching. */
   visibility: ProfileVisibility.optional(),
   /** Shown as a label in the UI. Demo profiles are synthetic; real sign-ups are not. */
@@ -100,6 +109,17 @@ export const Ask = z.object({
 });
 export type Ask = z.infer<typeof Ask>;
 
+/**
+ * One piece of evidence behind a match, for the open profile: what it is, its title, and a
+ * link when it has a public https one (other schemes are dropped before they get here).
+ */
+export const MatchEvidence = z.object({
+  kind: EvidenceKind,
+  title: z.string(),
+  url: z.string().url().startsWith("https://").optional(),
+});
+export type MatchEvidence = z.infer<typeof MatchEvidence>;
+
 export const MatchResult = z.object({
   person: CardPerson,
   /**
@@ -107,6 +127,8 @@ export const MatchResult = z.object({
    * <em>…</em>; render everything as text and treat only those two tags as marks.
    */
   highlights: z.array(z.string()),
+  /** The evidence behind the match, best match first (the search's order), at most 5. */
+  evidence: z.array(MatchEvidence).max(5),
   /** Hard-filter badges, e.g. "not hiring". */
   badges: z.array(z.string()),
   /** True when this person's own asks match the requester. */

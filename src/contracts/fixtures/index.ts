@@ -194,6 +194,7 @@ export const evidence: EvidenceDoc[] = [
     kind: "repo",
     title: "grafana/loki",
     text: "Loki ingester and compactor work; on-call runbooks for Loki and Tempo at Grafana Labs.",
+    url: "https://github.com/grafana/loki",
   },
   {
     id: "e_001_2",
@@ -208,6 +209,7 @@ export const evidence: EvidenceDoc[] = [
     kind: "repo",
     title: "etcd-io/raft",
     text: "Raft log compaction, snapshots and leader election; etcd defrag and performance tuning.",
+    url: "https://github.com/etcd-io/raft",
   },
   {
     id: "e_003_1",
@@ -215,6 +217,7 @@ export const evidence: EvidenceDoc[] = [
     kind: "repo",
     title: "open-telemetry/opentelemetry-collector-contrib",
     text: "Collector processors and exporters; tail sampling; OTLP exporter retry and queueing.",
+    url: "https://github.com/open-telemetry/opentelemetry-collector-contrib",
   },
   {
     id: "e_003_2",
@@ -236,6 +239,7 @@ export const evidence: EvidenceDoc[] = [
     kind: "repo",
     title: "argoproj/argo-cd",
     text: "Argo CD sync waves, hooks and ApplicationSet generators; GitOps rollout patterns.",
+    url: "https://github.com/argoproj/argo-cd",
   },
   {
     id: "e_006_1",
@@ -257,6 +261,7 @@ export const evidence: EvidenceDoc[] = [
     kind: "repo",
     title: "sigstore/cosign",
     text: "Keyless signing with Fulcio certificates and Rekor transparency log entries; verifying container signatures in CI and at admission.",
+    url: "https://github.com/sigstore/cosign",
   },
 ];
 
