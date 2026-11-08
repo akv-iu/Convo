@@ -17,7 +17,8 @@ function result(value: Person = person, filters: Person["filters"] | null = valu
     filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision,
     value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), JSON.stringify(evidence), pending,
     // The avatar column is last; rows from before it existed simply end earlier.
-    ...(value.avatar === undefined ? [] : [value.avatar])]] };
+    ...(value.avatar === undefined && value.avatarColour === undefined ? [] : [value.avatar ?? null]),
+    ...(value.avatarColour === undefined ? [] : [value.avatarColour])]] };
 }
 const evidence: EvidenceDoc[] = [{ id: `${person.id}:repo:durable`, personId: person.id,
   kind: "repo", title: "DurableRepository", text: "Repository evidence", url: "https://github.com/example/durable" }];
@@ -34,9 +35,9 @@ describe("real profile and availability services", () => {
     const user = {
       ...person, createdAt: new Date("2026-11-05T00:00:00Z"), revision: 4, workplaceName: null,
       badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
-      githubEvidence: evidence, githubEvidencePending: true, avatar: null,
+      githubEvidence: evidence, githubEvidencePending: true, avatar: null, avatarColour: null,
     };
-    const synced = { ...person, avatar: null }; // no picture chosen: initials
+    const synced = { ...person, avatar: null, avatarColour: null }; // no picture chosen: initials on the badge colour
 
     await expect(syncProfile(user, target as never)).resolves.toEqual(synced);
 
@@ -115,6 +116,17 @@ describe("real profile and availability services", () => {
     // Back to initials.
     query.mockResolvedValueOnce(result(updated)).mockResolvedValueOnce(result({ ...person, avatar: null }));
     expect((await updateProfile(person.id, { avatar: null })).avatar).toBeNull();
+  });
+
+  it("persists the picture's own colour, and clears it back to the badge colour", async () => {
+    const updated = { ...person, avatar: null, avatarColour: "mint" as const }; // no picture: initials, in mint
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result(updated));
+    expect(await updateProfile(person.id, { avatarColour: "mint" })).toEqual(updated);
+    expect(query.mock.calls[1][0]).toContain('"avatar_colour" =');
+    expect(query.mock.calls[1][1]).toEqual(["mint", person.id]);
+    expect(ingestPerson).toHaveBeenCalledWith(updated, [], 1);
+    query.mockResolvedValueOnce(result(updated)).mockResolvedValueOnce(result({ ...person, avatarColour: null }));
+    expect((await updateProfile(person.id, { avatarColour: null })).avatarColour).toBeNull();
   });
 
   it("refuses a stored picture that isn't one of the built-in ones", async () => {

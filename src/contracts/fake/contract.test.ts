@@ -59,6 +59,10 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect((await api.getMe(ctx(DEMO_USER_A))).avatar).toBe("moon");
     expect(routes.putMe.body.safeParse({ avatar: "photo.jpg" }).success).toBe(false);
     expect((await api.putMe(ctx(DEMO_USER_A, { avatar: null }))).avatar).toBeNull();
+    // The picture's own colour: one of the badge colours, or null to follow the badge.
+    expect((await api.putMe(ctx(DEMO_USER_A, routes.putMe.body.parse({ avatarColour: "mint" })))).avatarColour).toBe("mint");
+    expect(routes.putMe.body.safeParse({ avatarColour: "teal" }).success).toBe(false);
+    expect((await api.putMe(ctx(DEMO_USER_A, { avatarColour: null }))).avatarColour).toBeNull();
     const body = routes.putMe.body.parse({ workplaceName: "  Acme Robotics  ", badgeColour: "lilac" });
     const saved = await api.putMe(ctx(DEMO_USER_A, body));
     expect(saved).toMatchObject({ workplaceName: "Acme Robotics", badgeColour: "lilac" });

@@ -12,6 +12,7 @@ describe("step 3's badge details", () => {
       handle: saved.githubLogin,
       country: "GB",
       avatar: null,
+      avatarColour: null,
       workplace: "Analytical Engines",
       hiring: saved.filters.hiring,
       visibility: saved.visibility,
@@ -19,11 +20,12 @@ describe("step 3's badge details", () => {
   });
 
   it("uses the saved profile, with its show/hide choices, once step 1 is saved", () => {
-    expect(badgeDetails({ ...saved, avatar: "moon" }, null)).toMatchObject({
+    expect(badgeDetails({ ...saved, avatar: "moon", avatarColour: "mint" }, null)).toMatchObject({
       name: saved.name,
       country: saved.filters.country,
       workplace: "Acme",
       avatar: "moon",
+      avatarColour: "mint",
       visibility: saved.visibility,
     });
   });

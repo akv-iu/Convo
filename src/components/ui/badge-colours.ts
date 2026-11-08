@@ -34,3 +34,8 @@ export const BADGE_COOKIE = "convo_badge";
 export function personColour(person: CardPerson | null): string {
   return colourHex(person?.badgeColour ?? DEFAULT_COLOUR);
 }
+
+/** A person's picture circle colour: their own choice, or their badge colour. */
+export function pictureColour(person: Pick<CardPerson, "badgeColour" | "avatarColour"> | null): string {
+  return colourHex(person?.avatarColour ?? person?.badgeColour ?? DEFAULT_COLOUR);
+}

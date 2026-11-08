@@ -5,7 +5,7 @@
  */
 import type { CSSProperties } from "react";
 import type { MatchResult } from "@/contracts/types";
-import { personColour } from "./badge-colours";
+import { personColour, pictureColour } from "./badge-colours";
 import { Avatar } from "./avatars";
 import { badgeFacts } from "./person-badge";
 
@@ -24,7 +24,7 @@ export function MatchSummary({
   const facts = badgeFacts(p);
   return (
     <span style={{ "--badge": personColour(p) } as CSSProperties} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-      <Avatar avatar={p.avatar} name={p.name} className="mt-0.5 size-10 text-sm" />
+      <Avatar avatar={p.avatar} name={p.name} colour={pictureColour(p)} className="mt-0.5 size-10 text-sm" />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-lg font-bold leading-snug break-words">{p.name}</span>

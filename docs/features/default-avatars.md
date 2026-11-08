@@ -1,6 +1,6 @@
 # Feature: Default avatars
 
-Owner: Person A · PRs: #50
+Owner: Person A · PRs: #50, the picture colour PR
 
 ## What it covers
 
@@ -9,7 +9,8 @@ Owner: Person A · PRs: #50
   - The picture, or the person's initials on their badge colour, shows on the badge (steps 2 to 4), the step 4 "How people see you" row, match rows and open profiles, and the request badges in Requests.
 - [x] **Contract:** `AvatarId` and an optional, nullable `Person.avatar`, saved through `PUT /api/me`. It's always shown, not a show/hide section. The fake and `contract.test.ts` are updated.
 - [x] **Backend:** a `users.avatar` column, carried through `toPerson`, `writeUser` and the search index's stored person. An unknown stored value is refused (503).
-- [ ] **Data:** migration `0006_default_avatars.sql` (one nullable column, additive) applied to Neon before the deployed app runs this code.
+- [x] **Picture colour:** a "Picture colour" picker under the badge colour on step 2 (Same as badge, or one of the five colours), saved with Continue as `Person.avatarColour`. It's shown wherever the picture is.
+- [ ] **Data:** migrations `0006_default_avatars.sql` and `0007_avatar_colour.sql` (one nullable column each, additive) applied to Neon before the deployed app runs this code.
 - [x] **Tests:**
   - **Unit:** the profile service, visibility, answers, initials and art.
   - **Contract.**

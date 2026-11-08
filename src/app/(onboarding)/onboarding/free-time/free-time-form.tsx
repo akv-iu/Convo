@@ -18,6 +18,7 @@ import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
 import { readDraft } from "../../_components/draft";
 import { badgeDetails, type BadgeDetails } from "./badge-details";
 import { showSavedColour } from "../../_components/badge-prefs";
+import { colourHex } from "@/components/ui/badge-colours";
 import { countryName } from "@/components/ui/countries";
 import { loadProblem } from "../profile/edits";
 import {
@@ -202,6 +203,7 @@ export function FreeTimeForm() {
       name={who?.name}
       handle={who?.handle ?? undefined}
       avatar={who?.avatar}
+      avatarColour={who?.avatarColour ? colourHex(who.avatarColour) : undefined}
       label={who ? <BadgeCountry country={countryName(who.country)} shown={who.visibility.country} /> : undefined}
     >
       {who && <BadgeLines workplace={who.workplace} hiring={who.hiring} visibility={who.visibility} />}

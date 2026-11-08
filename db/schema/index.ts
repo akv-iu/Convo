@@ -23,6 +23,8 @@ export const users = pgTable("users", {
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
   /** A built-in picture (Person.avatar); null shows initials. Last, so existing row reads keep their column order. */
   avatar: text("avatar").$type<AvatarId>(),
+  /** The picture circle's colour (Person.avatarColour); null follows the badge colour. Last, like avatar. */
+  avatarColour: text("avatar_colour").$type<BadgeColour>(),
 });
 
 export const asks = pgTable(

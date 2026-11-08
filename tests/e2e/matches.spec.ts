@@ -78,6 +78,7 @@ function fakeMatches(n: number) {
       workplaceName: null,
       badgeColour: "mint",
       avatar: rank === 1 ? "star" : null,
+      avatarColour: rank === 1 ? "lilac" : null,
       synthetic: rank % 2 === 1,
       freeTimes: [],
     },
@@ -215,6 +216,9 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
     await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveText("P1");
     await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
+    // The picture's own colour (lilac) over the badge colour (mint); without one it follows the badge.
+    await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveCSS("background-color", "rgb(196, 181, 253)");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveCSS("background-color", "rgb(94, 230, 180)");
     // The open part doesn't repeat the picture: the row above it shows it.
     await expect(card(page).locator("[data-avatar]")).toHaveCount(0);
   });

@@ -97,7 +97,13 @@ export const VISIBILITY_SECTIONS = [
  * visibility object and the picture (null for initials). Only call once
  * nothing is missing.
  */
-export function toProfileBody(a: Answers, badgeColour: BadgeColour, visibility: ProfileVisibility, avatar: AvatarId | null = null) {
+export function toProfileBody(
+  a: Answers,
+  badgeColour: BadgeColour,
+  visibility: ProfileVisibility,
+  avatar: AvatarId | null = null,
+  avatarColour: BadgeColour | null = null,
+) {
   return {
     name: a.name.trim(),
     filters: toFilters(a),
@@ -105,6 +111,7 @@ export function toProfileBody(a: Answers, badgeColour: BadgeColour, visibility: 
     badgeColour,
     visibility,
     avatar,
+    avatarColour,
   };
 }
 
