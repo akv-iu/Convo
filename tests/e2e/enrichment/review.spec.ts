@@ -171,19 +171,115 @@ test.describe("profile enrichment: review and approve", () => {
       await route.fulfill({ json: { person: null, sync: { status: "pending", retryable: true, savedRevision: 3 } } });
     });
     await page.getByRole("button", { name: "Approve and continue" }).click();
-    await expect(page.getByText("Your bio is saved, but your matches may not show it yet")).toBeVisible();
+    // Pending search is still a saved approval: no error, and the details page follows.
+    await expect(page.getByText("Your bio is approved and saved, but your matches may not show it yet")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0); // outside main, Next's route announcer is an alert too
+    await expect(heading(page)).toHaveText("Are these the correct details?");
     await page.getByRole("button", { name: "Update my matches" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Your bio is approved." })).toBeVisible();
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]); // the identical body repairs the saved approval
   });
 
-  test("approving before the badge is finished saves it and says what's left", async ({ page }) => {
-    await startImport(page, { onboard: false });
+  test("a pending save the server can't retry offers no retry", async ({ page }) => {
+    await startImport(page);
     await toReview(page);
+    await page.route("**/api/profile-enrichment/*/accept", (route) =>
+      route.fulfill({ json: { person: null, sync: { status: "pending", retryable: false, savedRevision: 3 } } }));
+    await page.getByRole("button", { name: "Approve and continue" }).click();
+    await expect(page.getByText("Your bio is approved and saved, but your matches may not show it yet")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Update my matches" })).toHaveCount(0);
+  });
+
+  test("the badge is saved before approval: page five sends you there first", async ({ page }) => {
+    const { user } = await startImport(page, { onboard: false });
+    await page.goto("/onboarding/profile");
+    await expect(page.getByText("Your bio is ready to check. Save your badge first")).toBeVisible({ timeout: READY });
+    await expect(page.getByRole("button", { name: "Approve and continue" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Go to your badge" })).toHaveAttribute("href", "/onboarding");
+    await send(page, user, "PUT", "/api/me", { filters: { country: "GB", rorId: null, hiring: true }, workplaceName: "Analytical Engines" }); // as the badge page does
+    await toReview(page);
+    await page.getByRole("button", { name: "Approve and continue" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Your bio is approved." })).toBeVisible();
+  });
+
+  test("if the server still reports the badge unsaved at approval, page five says what's left", async ({ page }) => {
+    await startImport(page);
+    await toReview(page);
+    await page.route("**/api/profile-enrichment/*/accept", (route) =>
+      route.fulfill({ json: { person: null, sync: { status: "not_onboarded", retryable: false, savedRevision: 1 } } }));
     await page.getByRole("button", { name: "Approve and continue" }).click();
     await expect(page.getByText("Your bio is saved. Finish your badge to publish it.")).toBeVisible();
     await expect(page.getByRole("link", { name: "Go to your badge" })).toHaveAttribute("href", "/onboarding");
+  });
+
+  test("a profile that can't be read stops approval, so hidden-fact warnings can't silently go missing", async ({ page }) => {
+    await startImport(page, { hide: { country: false } });
+    await page.route("**/api/me", (route) => route.fulfill({ status: 503, json: { error: "Unavailable" } }));
+    await page.goto("/onboarding/profile");
+    await expect(page.getByRole("alert").filter({ hasText: "Your profile didn't load. Try again in a moment." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve and continue" })).toHaveCount(0);
+    await page.unroute("**/api/me");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(heading(page)).toHaveText("Check your bio", { timeout: READY });
+    await page.getByRole("textbox", { name: "Bio" }).fill("Based in the United Kingdom.");
+    await expect(page.getByText("Your bio mentions your country (United Kingdom)")).toBeVisible();
+  });
+
+  test("edits survive a retry, a newer draft and a reload; picks of evidence that's gone are dropped", async ({ page }) => {
+    const { user, jobId } = await startImport(page, { name: "Ada [demo:partial]" });
+    await toReview(page);
+    await page.getByRole("textbox", { name: "Bio" }).fill("My edited bio.");
+    await page.getByRole("button", { name: "Remove Reliable systems from your profile" }).click();
+    await page.getByRole("textbox", { name: "Add expertise" }).fill("Qubit calibration");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await evidence(page, "Recorded research example").uncheck();
+    await evidence(page, "CV excerpt").check();
+
+    // The newer draft no longer has the pasted text, as when a re-read source yields less.
+    await page.route(`**/api/profile-enrichment/${jobId}`, async (route) => {
+      const response = await route.fetch();
+      const job = await response.json();
+      if (job.draft) job.draft.evidence = job.draft.evidence.filter((e: { source: string }) => e.source !== "public_profile");
+      if (job.draft) job.draft.bioEvidenceIds = job.draft.evidence.map((e: { id: string }) => e.id);
+      await route.fulfill({ response, json: job });
+    });
+    await page.getByRole("button", { name: "Try them again" }).click();
+    await expect(page.getByText("Some sources didn't work")).toHaveCount(0, { timeout: READY });
+    await expect(heading(page)).toHaveText("Check your bio", { timeout: READY });
+
+    const check = async () => {
+      await expect(page.getByRole("textbox", { name: "Bio" })).toHaveValue("My edited bio.");
+      await expect(page.getByRole("button", { name: "Remove Qubit calibration from your profile" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Remove Reliable systems from your profile" })).toHaveCount(0);
+      await expect(evidence(page, "Recorded research example")).not.toBeChecked(); // removed stays removed
+      await expect(evidence(page, "CV excerpt")).toBeChecked(); // chosen stays chosen
+      await expect(evidence(page, "GitHub")).toBeChecked(); // new evidence starts as usual
+      await expect(evidence(page, "Text you pasted")).toHaveCount(0);
+    };
+    await check();
+    await page.reload();
+    await expect(heading(page)).toHaveText("Check your bio", { timeout: READY });
+    await check();
+
+    const accepted = page.waitForRequest("**/api/profile-enrichment/*/accept");
+    await page.getByRole("button", { name: "Approve and continue" }).click();
+    const body = (await accepted).postDataJSON();
+    expect(body).toMatchObject({ bio: "My edited bio.", expertise: ["Qubit calibration"] });
+    expect(body.evidenceIds.some((id: string) => id.endsWith("-public_profile") || id.endsWith("-research"))).toBe(false);
+    await expect(page.getByRole("status").filter({ hasText: "Your bio is approved." })).toBeVisible();
+    expect((await send(page, user, "GET", "/api/me")).bio).toBe("My edited bio.");
+  });
+
+  test("a new tab starts from the draft, not another tab's edits", async ({ page, context }) => {
+    const { user } = await startImport(page);
+    await toReview(page);
+    await page.getByRole("textbox", { name: "Bio" }).fill("Only in the first tab.");
+    const other = await context.newPage();
+    await other.setExtraHTTPHeaders({ "x-demo-user": user });
+    await other.goto("/onboarding/profile");
+    await expect(heading(other)).toHaveText("Check your bio", { timeout: READY });
+    await expect(other.getByRole("textbox", { name: "Bio" })).toHaveValue("Works on reliable systems. Enjoys sharing practical experience.");
   });
 
   test("if the import can't be read, page five says so and still lets you check your details", async ({ page }) => {

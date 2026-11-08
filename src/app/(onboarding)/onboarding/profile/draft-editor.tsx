@@ -6,7 +6,7 @@
  * published until Approve succeeds; a person who edited their bio since the
  * draft was written keeps their words (the server would refuse the draft anyway).
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { EnrichmentJob } from "@/contracts/enrichment";
 import type { Person } from "@/contracts/types";
@@ -14,13 +14,13 @@ import { enrichmentApi } from "../../signin/sources/api";
 import { ChipEditor } from "./chip-editor";
 import { addPending } from "./edits";
 import {
-  acceptBody, acceptProblem, BIO_MAX, claimsWithoutEvidence, evidenceTitle, EXPERTISE, hiddenFacts, initialPicks,
-  type AcceptAction, type ReviewEdits,
+  acceptBody, acceptProblem, BIO_MAX, carryEdits, claimsWithoutEvidence, evidenceTitle, EXPERTISE, hiddenFacts, keepEdits,
+  readKept, saveKept, type AcceptAction, type ReviewEdits,
 } from "./review";
 import { SOURCE_NAME, SourceFailures } from "./review-progress";
 
 type Draft = NonNullable<EnrichmentJob["draft"]>;
-export type Accepted = { sync: "confirmed" | "pending" | "not_onboarded"; body: ReturnType<typeof acceptBody> };
+export type Accepted = { sync: "confirmed" | "pending" | "not_onboarded"; retryable: boolean; body: ReturnType<typeof acceptBody> };
 
 const headingClass = "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 const labelClass = "text-xl font-bold leading-snug tracking-tight";
@@ -107,9 +107,9 @@ export function DraftEditor({
   retrying: boolean;
 }) {
   const draft = job.draft;
-  const [edits, setEdits] = useState<ReviewEdits>(() => ({
-    bio: draft.bio, expertise: draft.expertise.map((e) => e.label), picks: initialPicks(draft),
-  }));
+  // Edits made to an earlier draft of this import, or before a reload, carry over.
+  const [edits, setEdits] = useState<ReviewEdits>(() => carryEdits(draft, readKept(job.jobId)));
+  useEffect(() => saveKept(keepEdits(job.jobId, draft, edits, readKept(job.jobId))), [job.jobId, draft, edits]);
   const [chip, setChip] = useState({ text: "", problem: null as string | null });
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<{ message: string; action: AcceptAction } | null>(null);
@@ -134,7 +134,8 @@ export function DraftEditor({
     const result = await enrichmentApi.accept(job.jobId, body);
     setSaving(false);
     if (!result.ok) return setProblem(acceptProblem(result));
-    onAccepted({ sync: result.data.sync.status, body });
+    saveKept(null); // approved: nothing left to carry over
+    onAccepted({ sync: result.data.sync.status, retryable: result.data.sync.retryable, body });
   }
 
   const problemAction: Record<AcceptAction, ReactNode> = {

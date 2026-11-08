@@ -7,7 +7,7 @@ import type { AcceptEnrichment, EnrichmentErrorCode, EnrichmentJob } from "@/con
 import { countryName } from "@/components/ui/countries";
 import type { Person } from "@/contracts/types";
 import { SHOW_ALL } from "../answers";
-import type { z } from "zod";
+import { z } from "zod";
 
 type Draft = NonNullable<EnrichmentJob["draft"]>;
 type Evidence = Draft["evidence"][number];
@@ -38,6 +38,74 @@ export interface ReviewEdits {
   bio: string;
   expertise: string[];
   picks: string[];
+}
+
+/**
+ * What the person changed on page five, kept for one import in this tab, so a
+ * retry, a newer draft or a refresh doesn't lose it. bio and expertise are kept
+ * only once edited (otherwise a newer draft's text is used); seen lists every
+ * evidence ID already shown, so a pick the person removed stays removed.
+ */
+export const KeptEdits = z.object({
+  jobId: z.string(),
+  bio: z.string().max(BIO_MAX).optional(),
+  expertise: z.array(z.string().max(EXPERTISE.chip)).max(EXPERTISE.chips).optional(),
+  picks: z.array(z.string()).max(200),
+  seen: z.array(z.string()).max(200),
+});
+export type KeptEdits = z.infer<typeof KeptEdits>;
+
+const labels = (draft: Draft) => draft.expertise.map((e) => e.label);
+const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * The editor's starting point for a draft: the person's own bio and expertise if they
+ * edited them, else the draft's. Evidence picks survive only where that evidence is
+ * still in the draft; evidence new to the person starts as usual (CV excerpts unticked).
+ */
+export function carryEdits(draft: Draft, kept: KeptEdits | null): ReviewEdits {
+  if (!kept) return { bio: draft.bio, expertise: labels(draft), picks: initialPicks(draft) };
+  const picked = new Set(kept.picks);
+  const seen = new Set(kept.seen);
+  return {
+    bio: kept.bio ?? draft.bio,
+    expertise: kept.expertise ?? labels(draft),
+    picks: draft.evidence.filter((e) => (seen.has(e.id) ? picked.has(e.id) : e.source !== "cv")).map((e) => e.id),
+  };
+}
+
+/** What to remember of the current edits; evidence shown by this import's earlier drafts stays seen. */
+export function keepEdits(jobId: string, draft: Draft, edits: ReviewEdits, previous: KeptEdits | null): KeptEdits {
+  const seen = new Set([...(previous?.jobId === jobId ? previous.seen : []), ...draft.evidence.map((e) => e.id)]);
+  return {
+    jobId,
+    ...(edits.bio === draft.bio ? {} : { bio: edits.bio }),
+    ...(sameList(edits.expertise, labels(draft)) ? {} : { expertise: edits.expertise }),
+    picks: edits.picks,
+    seen: [...seen].slice(-200),
+  };
+}
+
+const KEPT_KEY = "convo_enrichment_review";
+
+/** This tab's kept edits for jobId, or null (none, another import's, unreadable or blocked storage). */
+export function readKept(jobId: string): KeptEdits | null {
+  try {
+    const parsed = KeptEdits.safeParse(JSON.parse(sessionStorage.getItem(KEPT_KEY) ?? "null"));
+    return parsed.success && parsed.data.jobId === jobId ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers the edits, or forgets them (null) once approved or discarded. */
+export function saveKept(kept: KeptEdits | null): void {
+  try {
+    if (kept) sessionStorage.setItem(KEPT_KEY, JSON.stringify(kept));
+    else sessionStorage.removeItem(KEPT_KEY);
+  } catch {
+    // Storage blocked: edits still work on this page, they just don't survive a reload.
+  }
 }
 
 export function acceptBody(draft: Draft, edits: ReviewEdits): z.infer<typeof AcceptEnrichment> {

@@ -14,7 +14,7 @@ import { DiscardChoice } from "./discard-choice";
 import { DraftEditor, type Accepted } from "./draft-editor";
 import { loadProblem } from "./edits";
 import { ProfileForm } from "./profile-form";
-import { acceptProblem, reviewView } from "./review";
+import { acceptProblem, reviewView, saveKept } from "./review";
 import { ReviewProgress } from "./review-progress";
 
 const POLL_MS = 2000;
@@ -27,6 +27,17 @@ type Stage =
   | { kind: "unfinished" };
 
 const statusClass = "max-w-xl rounded-xl border-2 border-border bg-surface px-4 py-3";
+
+/** The saved profile; "no-badge" before the badge page has saved one (409); otherwise the failed status (0: offline). */
+async function loadPerson(): Promise<Person | "no-badge" | number> {
+  try {
+    const response = await fetch("/api/me", { cache: "no-store" });
+    if (response.status === 409) return "no-badge";
+    return response.ok ? ((await response.json()) as Person) : response.status;
+  } catch {
+    return 0;
+  }
+}
 const headingClass = "text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 
 /** After approval: approved, or saved but search hasn't caught up (the identical approval repairs it). */
@@ -49,13 +60,16 @@ function SavedNotice({ notice, jobId, onApproved }: { notice: "approved" | Accep
     if (result.data.sync.status === "confirmed") return onApproved();
     setProblem("Your matches still aren't updated. Try again in a moment.");
   }
+  // Saved either way; a retry only helps when the server says it can.
   return (
     <div className={`mb-8 flex flex-col gap-3 ${statusClass}`}>
-      <p>Your bio is saved, but your matches may not show it yet.</p>
+      <p role="status">Your bio is approved and saved, but your matches may not show it yet.</p>
       {problem && <p role="alert" className="font-medium text-[var(--danger)]">{problem}</p>}
-      <Button variant="secondary" onClick={() => retry(notice.body)} disabled={busy} className="self-start">
-        {busy ? "Updating…" : "Update my matches"}
-      </Button>
+      {notice.retryable && (
+        <Button variant="secondary" onClick={() => retry(notice.body)} disabled={busy} className="self-start">
+          {busy ? "Updating…" : "Update my matches"}
+        </Button>
+      )}
     </div>
   );
 }
@@ -63,22 +77,23 @@ function SavedNotice({ notice, jobId, onApproved }: { notice: "approved" | Accep
 export function ReviewForm() {
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [person, setPerson] = useState<Person | null>(null);
+  const [badgeSaved, setBadgeSaved] = useState(true);
   const [jobId, setJobId] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState<"retry" | "discard" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Load the job and the profile (for hidden-fact warnings; it can't load before onboarding is finished).
+  // Load the job and the profile: the badge must be saved before approval, and its hidden facts drive the warnings.
   useEffect(() => {
     let live = true;
     void (async () => {
-      const [state, me] = await Promise.all([
-        enrichmentApi.state(),
-        fetch("/api/me", { cache: "no-store" }).then((r) => (r.ok ? (r.json() as Promise<Person>) : null)).catch(() => null),
-      ]);
+      const [state, me] = await Promise.all([enrichmentApi.state(), loadPerson()]);
       if (!live) return;
-      setPerson(me);
+      setPerson(typeof me === "object" ? me : null);
+      setBadgeSaved(me !== "no-badge");
       if (!state.ok) return setStage({ kind: "failed", status: state.status });
+      // Without the profile, the owner's hidden-fact warnings would silently go missing, so say so instead.
+      if (typeof me === "number") return setStage({ kind: "failed", status: me });
       if (!state.data.job) return setStage({ kind: "details", notice: null });
       const job = await enrichmentApi.job(state.data.job.jobId);
       if (!live) return;
@@ -124,7 +139,10 @@ export function ReviewForm() {
     setProblem(null);
     const result = await enrichmentApi.cancel(id);
     setBusy(null);
-    if (result.ok || result.code === "not_found") return setStage({ kind: "details", notice: null });
+    if (result.ok || result.code === "not_found") {
+      saveKept(null); // the draft is gone, and so are edits to it
+      return setStage({ kind: "details", notice: null });
+    }
     setProblem("The draft wasn't discarded. Try again in a moment.");
   }
 
@@ -192,6 +210,16 @@ export function ReviewForm() {
   );
   const view = reviewView(job);
   if (view === "none" || view === "done") return <ProfileForm />;
+  if (view === "review" && job.draft && !badgeSaved) {
+    // Approval publishes onto the saved card, so the badge comes first; the draft waits here.
+    return (
+      <div className="flex max-w-xl flex-col gap-6">
+        <h1 className={headingClass}>Your bio</h1>
+        <p role="status" className={statusClass}>Your bio is ready to check. Save your badge first, then come back here to approve it.</p>
+        <Button href="/onboarding" className="self-start">Go to your badge</Button>
+      </div>
+    );
+  }
   if (view === "review" && job.draft) {
     return (
       <DraftEditor
