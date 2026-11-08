@@ -317,27 +317,41 @@ export function BadgeForm() {
           {/* The picture circle's own colour; "Same as badge" follows the badge colour above. */}
           <fieldset className="text-center">
             <legend className="mx-auto mb-3 text-base font-semibold">Picture colour</legend>
-            <div className="flex flex-wrap justify-center gap-2.5">
-              {[{ id: null, name: "Same as badge", hex: null }, ...badgeColours].map((c) => (
-                <label key={c.id ?? "same"} title={c.name} className="relative cursor-pointer">
-                  <input
-                    type="radio"
-                    name="avatarColour"
-                    value={c.id ?? ""}
-                    checked={avatarColour === c.id}
-                    onChange={() => setAvatarColour(c.id)}
-                    className="peer sr-only"
-                  />
-                  <span
-                    aria-hidden="true"
-                    style={c.hex ? { backgroundColor: c.hex } : undefined}
-                    className={`block size-10 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none ${
-                      c.hex ? "" : "bg-[var(--badge)] [background-image:linear-gradient(135deg,transparent_44%,var(--surface)_44%,var(--surface)_56%,transparent_56%)]"
-                    }`}
-                  />
-                  <span className="sr-only">{c.name}</span>
-                </label>
-              ))}
+            <div className="flex flex-col items-center gap-3">
+              {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
+              <label className="cursor-pointer">
+                <input
+                  type="radio"
+                  name="avatarColour"
+                  value=""
+                  checked={avatarColour === null}
+                  onChange={() => setAvatarColour(null)}
+                  className="peer sr-only"
+                />
+                <span className="flex h-10 items-center rounded-full border-2 border-border px-4 text-sm font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
+                  Same as badge
+                </span>
+              </label>
+              <div className="flex flex-wrap justify-center gap-2.5">
+                {badgeColours.map((c) => (
+                  <label key={c.id} title={c.name} className="relative cursor-pointer">
+                    <input
+                      type="radio"
+                      name="avatarColour"
+                      value={c.id}
+                      checked={avatarColour === c.id}
+                      onChange={() => setAvatarColour(c.id)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      aria-hidden="true"
+                      style={{ backgroundColor: c.hex }}
+                      className="block size-10 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none"
+                    />
+                    <span className="sr-only">{c.name}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </fieldset>
         </div>
