@@ -1,7 +1,12 @@
-const STEPS = ["About you", "Your badge", "Free time", "Your details"] as const;
+const FLOWS = {
+  classic: ["About you", "Your badge", "Free time", "Your details"],
+  // Profile enrichment (PROFILE_ENRICHMENT_ENABLED): sign-in and source choices get their own page.
+  enrichment: ["About you", "Sign in and sources", "Your badge", "Free time", "Your bio"],
+} as const;
 
 /** Progress through onboarding. `current` is 1-based. */
-export function Steps({ current }: { current: number }) {
+export function Steps({ current, flow = "classic" }: { current: number; flow?: keyof typeof FLOWS }) {
+  const STEPS = FLOWS[flow];
   return (
     <nav aria-label="Onboarding progress" className="mb-6 flex items-center gap-3 sm:mb-10">
       <ol className="flex flex-1 gap-1.5 sm:max-w-56" role="list">

@@ -10,6 +10,7 @@
  */
 import { z } from "zod";
 import { RorMatch } from "@/contracts/types";
+import { SourceChoices } from "./enrichment";
 
 const KEY = "convo_onboarding_draft";
 
@@ -24,6 +25,9 @@ export const Draft = z.object({
   name: z.string().trim().min(1).max(80),
   country: z.string().length(2),
   workplace: Workplace,
+  /** Profile enrichment's page one only: an ORCID iD and which sources to import. */
+  orcid: z.string().nullable().optional(),
+  sources: SourceChoices.optional(),
 });
 export type Draft = z.infer<typeof Draft>;
 
@@ -35,15 +39,27 @@ export function saveDraft(draft: Draft): void {
   }
 }
 
-export function readDraft(): Draft | null {
+/** The stored draft as text: a stable snapshot for useSyncExternalStore. */
+export function draftSnapshot(): string | null {
   try {
-    const raw = sessionStorage.getItem(KEY);
-    if (!raw) return null;
+    return sessionStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function parseDraft(raw: string | null): Draft | null {
+  if (!raw) return null;
+  try {
     const parsed = Draft.safeParse(JSON.parse(raw));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
+}
+
+export function readDraft(): Draft | null {
+  return parseDraft(draftSnapshot());
 }
 
 export function clearDraft(): void {
