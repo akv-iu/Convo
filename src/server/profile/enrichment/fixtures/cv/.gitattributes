@@ -1,0 +1,4 @@
+# Test documents: byte-exact, never line-ending normalized.
+* binary
+*.py text eol=lf
+.gitattributes text eol=lf
