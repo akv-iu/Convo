@@ -1,30 +1,44 @@
 # Rules for agents working on Convo
 
-Read this before writing any code. The plan in `docs/Build-Plan.md` says what each workstream builds and when it is done.
+Read this before writing any code. `docs/Quality-Gates.md` explains how a change reaches `main`; `docs/Build-Plan.md` is the original plan.
 
-## Folder ownership
+## Who works where
 
-Edit only the folders your workstream owns. If you need a change elsewhere, stop and say so; do not make it.
+Both people work on screens and backend. Whoever opens a PR owns the whole change: screens, API, contract, backend, data, tests and docs. Name branches `a/<feature>` (Person A) or `b/<feature>` (Person B), and base every PR on `main`.
 
-| Workstream | Owns |
+| Area | Folders |
 | --- | --- |
-| A1 (first screens) | `src/app/(onboarding)/`, `src/app/(app)/ask/` |
-| A2 (match screens) | `src/app/(app)/matches/`, `src/app/(app)/inbox/` |
-| A1 and A2 | `src/components/ui/`, `tests/e2e/` |
-| B1 (engine) | `src/server/search/`, `src/server/ai/`, `src/server/pipeline/`, `scripts/`, `es/` |
-| B2 (app backend) | `src/server/profile/`, `src/server/requests/`, `src/server/schedule/`, `src/server/real.ts`, `src/server/auth.ts`, `src/app/api/`, `db/`, `src/instrumentation.ts` |
-| Both people, by PR | `src/contracts/`, `.github/`, `.gitar/`, `sonar-project.properties`, `vitest.config.mts`, this file |
+| Screens | `src/app/(onboarding)/`, `src/app/(app)/`, `src/components/ui/`, `tests/e2e/` |
+| API and app backend | `src/app/api/`, `src/server/profile/`, `src/server/requests/`, `src/server/schedule/`, `src/server/real.ts`, `src/server/auth.ts`, `db/`, `src/instrumentation.ts` |
+| Search and AI | `src/server/search/`, `src/server/ai/`, `src/server/pipeline/`, `scripts/`, `es/` |
+| The contract | `src/contracts/` |
+| The gates (both people approve changes) | `.github/`, `.gitar/`, `sonar-project.properties`, `vitest.config.mts`, this file |
+
+Shared services: either person applies migrations to Neon (`npm run db:migrate`) and rebuilds or seeds Elasticsearch. Only Person B can set environment variables in Vercel, so ask B before merging a PR that needs a new one.
+
+## Features and approvals
+
+- A new user-facing feature gets a feature file: copy `docs/features/TEMPLATE.md` to `docs/features/<feature>.md` in its first PR. Each PR of the feature ticks what it finished. Bug fixes, refactors, tests and docs don't need one.
+- A PR merges once the checks pass; its author merges it (auto-merge is fine). Fix or answer Gitar's findings first.
+- The other person must approve a PR only when:
+  1. it ticks the last box of a feature file (they try the feature on the preview first);
+  2. it makes a breaking contract change (removes or renames a route or field, makes a field required, or changes a status code or meaning);
+  3. it adds a migration that drops or rewrites data;
+  4. it changes sign-in, sessions, the GitHub token, source consent, or what other users can see about a person;
+  5. it is Person A's and needs a new environment variable (Person B sets it in Vercel);
+  6. it changes the gates (`.github/`, `.gitar/`, `sonar-project.properties`, `vitest.config.mts`, this file).
+- Gitar adds the `needs-approval` label for these. The `Feature sign-off` check waits for an approval from someone other than the author on PRs with that label and on PRs that complete a feature file.
 
 ## The contract rule
 
-`src/contracts/` is the line between the screens and the backend. `routes.ts` lists every API route with its request and response schema; `types.ts` holds the shared types; `fake/` is the in-memory implementation. These are frozen after checkpoint C0. A change needs a PR approved by both people and must update the fake and `contract.test.ts` in the same PR.
+`src/contracts/` is the line between the screens and the backend. `routes.ts` lists every API route with its request and response schema; `types.ts` holds the shared types; `fake/` is the in-memory implementation. A change updates the fake, `contract.test.ts`, the real handler and every screen that uses it, in the same PR. Additive changes (a new optional field, a new route) need no one else; breaking changes need the other person's approval.
 
 Screens call the API only through the routes in `routes.ts`. The backend implements `src/server/real.ts` so that the contract tests pass for the real handlers exactly as they pass for the fake.
 
 ## Switches
 
-- `FAKE_API=1`: every API route answers from the fake. A's default. No accounts needed.
-- `FAKES=search,ai`: the real routes use in-memory search and canned AI. B's default while the real parts are being built.
+- `FAKE_API=1`: every API route answers from the fake. No accounts needed; the default for screen work.
+- `FAKES=search,ai`: the real routes use in-memory search and canned AI. The default for backend work without live services.
 - Both are read in `src/server/config.ts` and nowhere else.
 
 ## Before you open a PR
@@ -37,19 +51,20 @@ Playwright (`npm run test:e2e`) for anything that changes a screen. Tests come w
 
 ## Quality gates
 
-`main` is protected: changes arrive by PR, and four checks must pass: `Lint, types, tests`, `Click-through (fake API)`, `SonarCloud Code Analysis` and `Gitar`.
+`main` is protected: changes arrive by PR, and five checks must pass: `Lint, types, tests`, `Click-through (fake API)`, `SonarCloud Code Analysis`, `Gitar` and `Feature sign-off`.
 
 - **SonarQube Cloud** applies the default "Sonar way" gate to new code: at least 80% test coverage, at most 3% duplication, no new bugs or vulnerabilities, a maintainability rating of A (fix-up effort under 5% of the new code), and every security hotspot reviewed. Coverage and duplication count once a PR has 20 or more new lines. Screens are excluded from coverage because Playwright tests them. When the gate fails, the `Why the quality gate failed` CI step lists the conditions, issues and files with untested lines.
-- **Gitar** reviews every PR against this file and `.gitar/review/`, runs the rules in `.gitar/rules/`, and explains CI failures. Fix blocking findings or reply to them with the reason. Comment `gitar auto-apply:on` to let it push fixes within `.gitar/config/apply.md`. Never use the `gitar-skip` label to get past a review.
+- **Gitar** reviews every PR against this file and `.gitar/review/`, runs the rules in `.gitar/rules/`, and explains CI failures. Its findings don't block the merge by themselves, so fix blocking findings or reply to them with the reason before merging. Comment `gitar auto-apply:on` to let it push fixes within `.gitar/config/apply.md`. Never use the `gitar-skip` label to get past a review.
+- **Feature sign-off** passes at once unless the PR completes a feature file or has the `needs-approval` label; then it waits for the other person's approval.
 - Never silence a gate to get a merge: see `.gitar/instructions/keep-the-gates-honest.md`.
-- Stacked PRs (based on another branch) get CI and Gitar but no Sonar scan. After one is retargeted to `main`, push a commit so the Sonar check runs.
+- Base every PR on `main`: PRs based on another branch get CI and Gitar but no Sonar scan.
 
 ## Review and handoff
 
-- When reviewing Person A's PR, inspect the code, contracts and feature behaviour. Use the contributor's checks and current CI results; do not rerun lint or build locally just for that review.
+- When the other person asks for your approval, inspect the code, contracts and feature behaviour, and try the feature on the preview. Use the author's checks and current CI results; do not rerun lint or build locally just for that review.
 - When making code changes, test and critically review them twice: fix findings from the first pass, then retest and check for regressions in the second. The checks above still apply to your own changes.
 - Supply the complete manual test checklist at once, including setup, expected results and cleanup. Ask before tests that contact live external services.
-- Clearly signal when work is ready for review or merge. A contract change still needs both people's approval before merge.
+- Clearly signal when work is ready for review or merge, and when it needs the other person's approval.
 
 ## Conventions
 
