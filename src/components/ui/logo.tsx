@@ -39,19 +39,18 @@ export function Wordmark({ className = "" }: { className?: string }) {
       <span aria-hidden="true" className="whitespace-nowrap">
         Lan
         <svg
-          viewBox="0 0 60 100"
+          viewBox="0 0 60 92"
           focusable="false"
-          className="mx-[0.01em] inline-block h-[0.98em] w-[0.6em] align-[-0.4em]"
+          className="mx-[0.01em] inline-block h-[0.9em] w-[0.6em] align-[-0.32em]"
         >
-          {/* The strap: the y's two arms, meeting at the clip. */}
-          <path d="M8 6 30 45 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-          <rect x="22" y="40" width="16" height="11" rx="3" fill="currentColor" />
-          {/* The badge: the y's tail. */}
-          <rect x="11" y="49" width="38" height="48" rx="7" fill="var(--accent)" />
-          <path d="M11 56a7 7 0 0 1 7-7h24a7 7 0 0 1 7 7v4H11z" fill="var(--logo-stripe)" />
-          <circle cx="23" cy="76" r="6" fill="var(--on-accent)" />
-          <rect x="33" y="71" width="11" height="4" rx="2" fill="var(--on-accent)" />
-          <rect x="33" y="79" width="8" height="4" rx="2" fill="var(--on-accent)" />
+          {/* The strap: the y's two arms, meeting just above the badge. */}
+          <path d="M8 6 30 43 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
+          {/* The badge: the y's tail, tucked up under the strap and a little narrower than the arms. */}
+          <rect x="15" y="40" width="30" height="47" rx="6" fill="var(--accent)" />
+          <path d="M15 46a6 6 0 0 1 6-6h18a6 6 0 0 1 6 6v4H15z" fill="var(--logo-stripe)" />
+          <circle cx="25" cy="66" r="5" fill="var(--on-accent)" />
+          <rect x="33" y="62" width="8" height="3.6" rx="1.8" fill="var(--on-accent)" />
+          <rect x="33" y="69" width="6" height="3.6" rx="1.8" fill="var(--on-accent)" />
         </svg>
         ard
       </span>
