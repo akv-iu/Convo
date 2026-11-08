@@ -325,6 +325,10 @@ test.describe("profile enrichment: details and sources", () => {
 
     // Turned off on page one: page two discards it.
     await page.getByRole("link", { name: "Back to About you" }).click();
+    // Page two has the same switches in the same states, so wait for page one before using them;
+    // otherwise the next tap can land on page two's switch just as it's hidden.
+    await expect(page).toHaveURL(/\/signin$/);
+    await expect(page.getByLabel("Your name")).toBeVisible();
     await expect(page.getByRole("switch", { name: "CV", exact: true })).toBeChecked();
     await expect(page.getByRole("switch", { name: "Research papers", exact: true })).not.toBeChecked();
     await toggle(page, "CV");

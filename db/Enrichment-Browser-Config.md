@@ -16,6 +16,22 @@ The flag-off check (`tests/e2e/enrichment-off.spec.ts`) sits outside `enrichment
 
 Note for local runs: free ports 3100 and 3101 first. Another session's harness uses 3240/3241, and reviewers use 3000/3001; neither collides.
 
-## Verification
+## The intermittent `sources.spec.ts:275` timeout
 
-See the report for the exact commits and the single full-matrix run made with this committed config.
+After "Back to About you", the test checked the CV and Research switches, then tapped CV. Page 2 has the same switches in the same states, so those checks could pass against page 2 before page 1 had rendered. The tap then targeted page 2's label, which was hidden a moment later, so the click waited until the 30 s timeout (see the central test results' phone trace).
+
+The test now waits for `/signin` and page 1's "Your name" field before using the switches. It's a test-only change: no forced click, timeout, retry or skip. The other Back step (line 215) already waited on "Your name".
+
+## Verification (one final run)
+
+The tree of the commit that adds this section, run with the committed config exactly as CI uses it: `CI=1 npx playwright test --workers=2 --retries=0`. It contains:
+- frontend `fd1800a`;
+- backend `5b3c680`;
+- config `77f65b5`;
+- the spec fix above.
+
+Result: **397 passed, 13 skipped, 0 failed**, 410 cases in 5.1 minutes:
+- `phone` and `laptop`: 170 cases each, flag off;
+- `enrichment-phone` and `enrichment-laptop`: 35 each, flag on.
+
+The 13 skips are the existing ones, the same count as the testing session's local harness. `sources.spec.ts:275` passed on both devices. Both servers stopped afterwards, and 3100/3101 were left free. No provider credentials, `.env.local` or live services were used. Backend unit suites weren't rerun: this change touches only the browser config and one spec.
