@@ -88,11 +88,13 @@ Two critical review/test rounds pass **824 tests in 59 files, 98.56% line covera
 
 Review fixes included returning the contracted job from cancellation, keeping upload-removal tombstones for idempotency, correcting cleanup deadlines, preventing old leases from writing, distinguishing fatal job failure from per-source reasons, and avoiding full document rewrites for unchanged status polls. The collector/AI runner, approval/version enforcement and operational cleanup schedule remain unimplemented; active imports return not_ready.
 
-A separate functional integration with current main `ccdffa7` (#47/#48/#49 merged) found **864/865 tests passing and two frontend type errors**. Backend tests pass; merging is blocked by these Claude-owned compatibility updates:
+An earlier functional integration with main `ccdffa7` (#47/#48/#49 merged) found **864/865 tests passing and two frontend type errors**. These findings were sent to Claude and subsequently fixed in `500352a`:
 
 1. `src/app/(app)/matches/match-card.tsx`: its EvidenceKind label map needs `profile_page` and `cv` entries for the foundation's new evidence kinds. Keep the map compatible with both type versions (for example, infer the seven-key object rather than annotating it with the old five-key union).
 2. `src/components/ui/person-badge.test.ts`: the nullable fixture passed to MatchDetails needs the `evidence` array added by #49 (an empty array fits this existing null-handle test). The missing field is also the one failing runtime test.
 
-No frontend/B1 code was changed to hide those findings. Once Claude updates the compatibility patch, repeat the combined checks. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005; #50 is still pending, and the foundation/auth/state migration chain must be regenerated against the final merged schema before PR/Neon application. The temporary integration kept unresolved migration metadata isolated for code testing; it is not a deployable or published merge.
+No frontend/B1 code was changed by Codex to hide those findings. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005; #50 is still pending, and the foundation/auth/state migration chain must be regenerated against the final merged schema before PR/Neon application. The temporary integration kept unresolved migration metadata isolated for code testing; it is not a deployable or published merge.
 
-This branch is ready for backend code review, not merge. It does not open a PR or imply Claude's contract ACK/user merge approval.
+Updated integration: main `ccdffa7` + Claude's pushed compatibility `500352a` + foundation/auth/state through `f8836f1` pass **865/865 unit tests in 61 files, 98.61% line coverage**. A second focused pass passes **522 tests in 34 files**, with lint and typecheck clean. Both previously reported frontend failures are resolved. Migration metadata was isolated for functional testing only; this is not a deployable migration chain. No live providers, browser journey or SQL execution was tested.
+
+Claude returned CONTRACT ACK on foundation `502bd6c` and confirmed auth `0a48eab` aligns. This branch is ready for backend code review, not merge; the ACK does not approve this later backend layer, migration execution or final feature acceptance. No PR was opened.
