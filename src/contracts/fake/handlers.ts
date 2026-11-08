@@ -12,8 +12,9 @@ import { runMatch } from "@/server/pipeline";
 import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
-import type { Request, RequestView } from "@/contracts/types";
+import { Person, type Request, type RequestView } from "@/contracts/types";
 import { visibleCard, visiblePerson } from "@/server/profile/visibility";
+import { enrichmentFake, noteProfileChange } from "./enrichment";
 
 const now = () => new Date().toISOString();
 
@@ -28,19 +29,24 @@ function withBadge(request: Request, otherId: string): RequestView {
 }
 
 export const fake: Api = {
+  ...enrichmentFake,
   async getMe({ userId }) {
     return store.person(userId);
   },
 
   async putMe({ userId, body }) {
-    const me = store.person(userId);
+    const me = store.profile(userId);
     const patch = routes.putMe.body.parse(body);
-    const updated = {
+    const updated = Person.parse({
       ...me, ...patch, id: me.id, synthetic: me.synthetic,
-      ...(patch.filters && patch.workplaceName === undefined && patch.filters.rorId !== me.filters.rorId ? { workplaceName: null } : {}),
-    };
+      ...(patch.filters && patch.workplaceName === undefined && patch.filters.rorId !== me.filters?.rorId ? { workplaceName: null } : {}),
+    });
     store.get().people.set(userId, updated);
-    await search.ingestPerson(updated, fixtures.evidence.filter((e) => e.personId === userId));
+    store.get().pendingPeople.delete(userId);
+    noteProfileChange(userId, patch.bio !== undefined && patch.bio !== me.bio);
+    const approved = store.get().enrichment.evidence.get(userId);
+    await search.ingestPerson(updated, approved === undefined ? fixtures.evidence.filter(e => e.personId === userId)
+      : approved.map(e => ({ ...e, text: e.excerpt })));
     return updated;
   },
 
@@ -51,12 +57,13 @@ export const fake: Api = {
   },
 
   async getAvailability({ userId }) {
-    return store.person(userId).freeTimes;
+    return store.profile(userId).freeTimes;
   },
 
   async putAvailability({ userId, body }) {
-    const me = store.person(userId);
+    const me = store.profile(userId);
     me.freeTimes = body;
+    noteProfileChange(userId);
     return me.freeTimes;
   },
 

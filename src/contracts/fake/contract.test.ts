@@ -21,6 +21,14 @@ function ctx<N extends RouteName>(userId: string, body?: unknown, params: Record
 describe.each(implementations)("$name API", ({ api, reset }) => {
   beforeEach(reset);
 
+  it("keeps GitHub identity server-owned and preserves omitted expertise", async () => {
+    const me = await api.getMe(ctx(DEMO_USER_A));
+    const body = routes.putMe.body.parse({ githubLogin: "another-person", badgeColour: "lilac" });
+    expect(body).not.toHaveProperty("githubLogin");
+    expect(body).not.toHaveProperty("expertise");
+    expect((await api.putMe(ctx(DEMO_USER_A, body))).githubLogin).toBe(me.githubLogin);
+  });
+
   it("hides card fields while retaining owner data and matching results", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const before = await api.match(ctx(DEMO_USER_A, { askId }));

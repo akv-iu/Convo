@@ -51,7 +51,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 export async function getUserId(req: Request): Promise<string | null> {
-  if (config.fakeApi) return req.headers.get("x-demo-user") ?? DEMO_USER_A;
+  if (config.fakeApi) {
+    const header = req.headers.get("x-demo-user");
+    if (header !== null) return header;
+    const cookie = req.headers.get("cookie")?.match(/(?:^|;\s*)convo_demo_user=([^;]+)/)?.[1];
+    try { return cookie ? decodeURIComponent(cookie) : DEMO_USER_A; } catch { return DEMO_USER_A; }
+  }
   const session = await auth();
   return session?.user?.id ?? null;
 }

@@ -83,6 +83,7 @@ export async function getProfile(userId: string): Promise<Person> {
 }
 
 export async function updateProfile(userId: string, changes: ProfilePatch): Promise<Person> {
+  changes = routes.putMe.body.parse(changes); // Server-owned identity fields never reach a write.
   if (changes.freeTimes) validateTimes(changes.freeTimes);
   const existing = await readUser(userId);
   toPerson({ ...existing, ...changes }); // Validate onboarding before writing any fields.

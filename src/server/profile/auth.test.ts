@@ -159,3 +159,13 @@ describe("GitHub sign-in integration", () => {
     expect(await getUserId(req)).toBe("github:101");
   });
 });
+
+it("selects a manual fake browser identity from a cookie, with header priority", async () => {
+  config.fakeApi = true;
+  const req = new Request("https://example.test/api/me", { headers: { cookie: "other=1; convo_demo_user=u_google_new_browser; tail=2" } });
+  expect(await getUserId(req)).toBe("u_google_new_browser");
+  expect(await getUserId(new Request(req, { headers: { cookie: "convo_demo_user=u_google_new_browser", "x-demo-user": DEMO_USER_A } }))).toBe(DEMO_USER_A);
+  expect(await getUserId(new Request(req, { headers: { cookie: "convo_demo_user=%broken" } }))).toBe(DEMO_USER_A);
+  config.fakeApi = false; auth.mockResolvedValue(null);
+  expect(await getUserId(req)).toBeNull();
+});
