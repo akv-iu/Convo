@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ScanRadar } from "@/components/ui/scan-radar";
 import { SharedContactCard } from "@/components/ui/shared-contact";
+import { MeetingBooked } from "@/components/ui/meeting-booked";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel } from "../ask/asks";
 import { PersonBadge } from "@/components/ui/person-badge";
@@ -247,7 +248,7 @@ function RequestCard({
         </p>
       )}
       {request.status === "scheduled" && request.slot && (
-        <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3 font-semibold">Meeting booked: {venueRange(request.slot)}</p>
+        <MeetingBooked when={venueRange(request.slot)} />
       )}
       {request.status === "declined" && <p className="mt-3 text-muted">You declined this one.</p>}
       {(request.status === "accepted" || request.status === "scheduled") && request.contact && (

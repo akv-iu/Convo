@@ -15,6 +15,8 @@
   --accent-hover: #9a3412;
   --on-accent: #ffffff;
   --accent-2: #0f766e; /* teal, for the other way forward (Ask something else); 5.4:1 on surface */
+  --success: #15803d; /* green: done, e.g. a request sent; 5.0:1 on surface, white text on it 5.0:1 */
+  --on-success: #ffffff;
   --badge: #ffd23f; /* badge stripe only */
   --logo-stripe: #ffd23f; /* the stripe on the Lanyard logo's badge */
   --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
@@ -39,6 +41,8 @@
     --accent-hover: #ffbb94;
     --on-accent: #141414;
     --accent-2: #5eead4; /* teal */
+    --success: #4ade80; /* green */
+    --on-success: #052e16;
     --skeleton: #2e2e2e;
     --danger: #fca5a5; /* error text: light red, distinct from the apricot accent */
     --danger-border: #f87171;

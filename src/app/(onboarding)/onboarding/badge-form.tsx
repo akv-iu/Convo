@@ -317,15 +317,17 @@ export function BadgeForm() {
           )}
         </div>
         {/*
-          Beside the badge, from the top of the card: what to show, then the colours. From 1024 px the
-          badge hangs from a strap (lg:mt-16), so the same margin here lines up with the card.
+          Beside the badge: one panel, what to show and then the colours, the same height as the badge
+          card so their tops and bottoms line up. From 1024 px the badge hangs from a strap (lg:mt-16),
+          so the same margin here starts the panel level with the card.
         */}
-        <div className="flex flex-col gap-5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start lg:mt-16">
+        <div className="flex w-full max-w-sm flex-col justify-between gap-3 rounded-2xl border-2 border-border bg-surface px-4 py-3 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-stretch lg:mt-16">
           <fieldset className="border-0 p-0">
             <legend className="sr-only">Show on your badge</legend>
-            <div className="flex max-w-sm flex-col gap-1.5">
+            <div className="flex flex-col divide-y-2 divide-border">
               {sections.map((v) => (
                 <Switch
+                  boxed={false}
                   key={v.id}
                   label={v.label}
                   aside={visibility[v.id] ? "Shown" : "Hidden"}
@@ -339,7 +341,7 @@ export function BadgeForm() {
             One colour panel for both: pick Badge or Picture, then a colour. Both groups stay in the
             form (the badge's colours the stripe through CSS); only the chosen one is in view.
           */}
-          <div className="w-full max-w-sm rounded-2xl border-2 border-border bg-surface p-4">
+          <div className="border-t-2 border-border pt-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">Colours</h2>
               <div role="group" aria-label="Colour for" className="flex rounded-full border-2 border-border p-0.5">
@@ -361,7 +363,7 @@ export function BadgeForm() {
                 ))}
               </div>
             </div>
-            <div className="mt-3">
+            <div className="mt-2.5">
               <ColourPicker defaultColour={colour} quiet hidden={colourFor !== "badge"} />
               <fieldset hidden={colourFor !== "picture"}>
                 <legend className="sr-only">Picture colour</legend>

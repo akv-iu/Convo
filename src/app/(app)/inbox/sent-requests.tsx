@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SharedContactCard } from "@/components/ui/shared-contact";
+import { MeetingBooked } from "@/components/ui/meeting-booked";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel } from "../ask/asks";
 import { groupByQuestion, groupSummary, inboxFailure, sentStatusLabel, venueRange, venueTime, type AskGroup, type Failure } from "./inbox";
@@ -227,7 +228,7 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
         </p>
       )}
       {request.status === "scheduled" && request.slot && (
-        <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3 font-semibold">Meeting booked: {venueRange(request.slot)}</p>
+        <MeetingBooked when={venueRange(request.slot)} />
       )}
       {request.status === "accepted" && !request.slot && <SlotPicker request={request} onBooked={onBooked} onReload={onReload} />}
     </article>

@@ -18,11 +18,11 @@ export function LogoMark({ className = "size-7" }: { className?: string }) {
 }
 
 /** Mark plus the name, for headers. The name is real text, so screen readers read "Lanyard". */
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({ className = "", nameClassName = "" }: { className?: string; nameClassName?: string }) {
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <LogoMark />
-      <span className="text-xl font-extrabold tracking-tight [font-stretch:85%]">Lanyard</span>
+      <span className={`text-xl font-extrabold tracking-tight [font-stretch:85%] ${nameClassName}`}>Lanyard</span>
     </span>
   );
 }

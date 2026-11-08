@@ -5,7 +5,7 @@ import { Logo } from "@/components/ui/logo";
 import { convoThemeClass } from "@/components/ui/theme";
 
 /**
- * Shell for the signed-in screens (ask, matches, inbox): the same look as
+ * Shell for the signed-in screens (ask, matches, requests, meetings): the same look as
  * onboarding, with a slim header. A skip link lets keyboard users jump
  * straight to the screen's content.
  */
@@ -24,23 +24,29 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             href="/ask"
             className="mr-auto rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            <Logo />
+            <Logo nameClassName="max-sm:sr-only" />
           </Link>
           <Link
             href="/ask"
-            className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
           >
             Ask
           </Link>
           <Link
             href="/inbox"
-            className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
           >
             Requests
           </Link>
           <Link
+            href="/meetings"
+            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
+          >
+            Meetings
+          </Link>
+          <Link
             href="/onboarding/profile"
-            className="flex min-h-11 items-center rounded-lg px-3 font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
           >
             Profile
           </Link>
