@@ -37,7 +37,8 @@ it.each([false,true])("decodes only the browser's authenticated cookie (secure=%
 
 it("creates a ten-minute owner/session-bound attempt with a private cookie and same-site path", async () => {
   mocks.query.mockResolvedValue({rows:[]});
-  expect(await beginGitHubConnection("google:900")).toEqual({status:"redirect",path:"/api/auth/connect/github"});
+  const result = await beginGitHubConnection("google:900");
+  expect(result).toEqual({status:"redirect",path:`/api/auth/connect/github?token=${mocks.set.mock.calls[0][1]}`});
   const [statement, params] = mocks.query.mock.calls[0];
   expect(statement).toContain("interval '10 minutes'");
   expect(params).toContain(attempt.sessionHash);
@@ -50,10 +51,24 @@ it("rejects another owner before creating any attempt", async () => {
   expect(mocks.query).not.toHaveBeenCalled();
 });
 
+it.each([null, "wrong-token"])("refuses a bare or forged entry token even with the pending cookie: %s", async token => {
+  const start = vi.fn();
+  await expect(authorizeGitHubConnection(start, token)).rejects.toMatchObject({code:"github_reconnect"});
+  expect(start).not.toHaveBeenCalled();
+  expect(mocks.query).not.toHaveBeenCalled();
+});
+
+it("does not start another authorization after the entry token was consumed", async () => {
+  mocks.query.mockResolvedValue({rows:[]});
+  const start = vi.fn();
+  await expect(authorizeGitHubConnection(start, attempt.id)).rejects.toMatchObject({code:"github_reconnect"});
+  expect(start).not.toHaveBeenCalled();
+});
+
 it("binds the authorization state to the existing attempt exactly once", async () => {
   mocks.query.mockResolvedValueOnce(stored({stateHash:null})).mockResolvedValueOnce({rows:[[attempt.id]]});
   const url = "https://github.com/login/oauth/authorize?state=oauth-state&scope=&code_challenge_method=S256&code_challenge=recorded";
-  expect(await authorizeGitHubConnection(async () => url)).toBe(url);
+  expect(await authorizeGitHubConnection(async () => url, attempt.id)).toBe(url);
   expect(mocks.query.mock.calls[1][1]).toContain(hash("oauth-state"));
 });
 
@@ -63,17 +78,17 @@ it.each([
   "https://github.com/login/oauth/authorize?state=oauth-state&scope=",
 ])("refuses an unexpected authorization redirect: %s", async url => {
   mocks.query.mockResolvedValueOnce(stored({stateHash:null}));
-  await expect(authorizeGitHubConnection(async () => url)).rejects.toMatchObject({code:"provider_down"});
+  await expect(authorizeGitHubConnection(async () => url, attempt.id)).rejects.toMatchObject({code:"provider_down"});
   expect(mocks.query).toHaveBeenCalledOnce();
 });
 
 it("refuses missing or superseded attempt cookies without starting OAuth", async () => {
   mocks.get.mockReturnValue(undefined);
   const start=vi.fn();
-  await expect(authorizeGitHubConnection(start)).rejects.toMatchObject({code:"github_reconnect"});
+  await expect(authorizeGitHubConnection(start, attempt.id)).rejects.toMatchObject({code:"github_reconnect"});
   expect(start).not.toHaveBeenCalled();
   mocks.get.mockReturnValue({value:attempt.id}); mocks.query.mockResolvedValue({rows:[]});
-  await expect(authorizeGitHubConnection(start)).rejects.toMatchObject({code:"github_reconnect"});
+  await expect(authorizeGitHubConnection(start, attempt.id)).rejects.toMatchObject({code:"github_reconnect"});
   expect(start).not.toHaveBeenCalled();
 });
 

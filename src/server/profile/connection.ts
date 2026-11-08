@@ -6,8 +6,6 @@ import { db } from "../../../db";
 import { authLinkAttempts } from "../../../db/schema";
 import { githubIdentity, providerSubject } from "./identities";
 
-// Claude's page-two URL can change here without accepting a client-controlled redirect.
-export const ENRICHMENT_RETURN = "/signin";
 export const LINK_COOKIE = "convo_github_link";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/api/", maxAge: 600 };
@@ -34,14 +32,14 @@ export async function beginGitHubConnection(userId: string) {
   ) insert into ${authLinkAttempts} (id, user_id, session_hash, expires_at)
     values (${id}, ${userId}, ${binding}, now() + interval '10 minutes')`);
   (await cookies()).set(LINK_COOKIE, id, cookieOptions);
-  return { status: "redirect" as const, path: "/api/auth/connect/github" };
+  return { status: "redirect" as const, path: `/api/auth/connect/github?token=${id}` };
 }
 
-export async function authorizeGitHubConnection(start: () => Promise<string>) {
+export async function authorizeGitHubConnection(start: () => Promise<string>, attemptToken: string | null) {
   const jar = await cookies();
   const id = jar.get(LINK_COOKIE)?.value;
   const token = await currentToken();
-  if (!id || !token?.sub) throw failure("github_reconnect");
+  if (!id || attemptToken !== id || !token?.sub) throw failure("github_reconnect");
   const binding = sessionHash(token, token.sub);
   const [attempt] = await db().select().from(authLinkAttempts).where(and(eq(authLinkAttempts.id, id),
     eq(authLinkAttempts.userId, token.sub), eq(authLinkAttempts.sessionHash, binding),

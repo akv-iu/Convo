@@ -13,10 +13,10 @@ One provider subject has one owner. Renaming a GitHub handle does not change own
 ## Frontend coordination
 
 - Import `signIn` from `@/server/auth` in the frontend's server actions. Normal authentication uses `signIn("google", {redirectTo: PAGE_TWO})` or GitHub, after safely preserving the page-one draft. Keep OAuth callback URLs at `/api/auth/callback/google` and `/api/auth/callback/github`.
-- Connecting GitHub to an authenticated account MUST use the contracted `connectGitHub` API, then navigate to the returned `path`; do not call normal GitHub sign-in for this button. The real response is `{status:"redirect",path:"/api/auth/connect/github"}`; fake mode still returns its recorded connection.
-- A ten-minute private attempt binds the current cookie session to the exact OAuth state. The database claims that attempt and GitHub subject together. Lost/stale/consumed attempts, changed sessions and identity conflicts cannot become a normal sign-in or switch the user. Used states remain for one day past expiry to detect lost cookies; old records are removed when a new attempt starts.
-- The return URL is centralized in `src/server/profile/connection.ts` as `ENRICHMENT_RETURN`. It is temporarily `/signin`, pending Claude's exact page-two URL. `/onboarding/*` has no shared authentication guard today, so the new page can show sign-in buttons while signed out. Discovery/upload APIs still require sign-in.
-- Read the fixed `enrichmentError` code on return: `sign_in_cancelled`, `github_connect_cancelled`, `github_linked_elsewhere`, `github_reconnect` or `provider_down`. Never display provider query/error text.
+- Connecting GitHub to an authenticated account MUST use the contracted `connectGitHub` API, then navigate to the returned `path`; do not call normal GitHub sign-in for this button. The real response is `{status:"redirect",path:"/api/auth/connect/github?token=<single-use attempt>"}`; fake mode still returns its recorded connection.
+- A token returned only by the origin-checked POST is required in that path, alongside its private cookie; bare GET cannot start linking. It is owner/session-bound, expires after ten minutes, and is consumed when the OAuth state is recorded. The redirect disables caching and referrers. A ten-minute private attempt binds the current cookie session to the exact OAuth state. The database claims that attempt and GitHub subject together. Lost/stale/consumed attempts, changed sessions and identity conflicts cannot become a normal sign-in or switch the user. Used states remain for one day past expiry to detect lost cookies; old records are removed when a new attempt starts.
+- The return URL is exported by `src/contracts/enrichment.ts` as `ENRICHMENT_RETURN_PATH = "/signin/sources"`, shared with Claude's sign-in actions. Success uses the bare path and re-reads state; cancel/deny/refusal use `?reason=` with the agreed codes. `/onboarding/*` has no shared authentication guard today, so the new page can show sign-in buttons while signed out. Discovery/upload APIs still require sign-in.
+- Read the fixed `reason` code on return: `sign_in_cancelled`, `github_connect_cancelled`, `github_linked_elsewhere`, `github_reconnect` or `provider_down`. Never display provider query/error text.
 - Real GET owner state and POST Connect GitHub are implemented here. Other real enrichment routes intentionally remain 501; page-one identity staging, discovery, uploads, jobs and approval are the next backend phase. Owner state currently has null identity/job/pendingCv until those services land.
 - This branch edits no screen, B1 search/AI/pipeline code, shared contract or new dependency. Its schema extends the foundation's provider-identity migration.
 
@@ -27,7 +27,9 @@ One provider subject has one owner. Renaming a GitHub handle does not change own
 3. The app requests only `openid profile`. Do not add Gmail, Drive, email or offline-access permissions for this feature. No Google API key or service account is used.
 4. Copy that client's Client ID and Client Secret privately into the matching environment as `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`. Keep the existing `AUTH_SECRET`, GitHub credentials and database/search configuration. Do not change or share the existing secret. A Google token must never be placed in a GitHub variable.
 5. Keep separate existing local/production GitHub OAuth apps. Their callback stays `/api/auth/callback/github`; the new internal connection URL is not a new OAuth callback. No new GitHub scopes are needed.
-6. Review outstanding migrations. Foundation migration 0005 makes handles nullable and backfills provider ownership; this branch adds 0006, the attempt table. Apply only to the intended approved Neon target, preserving shared data. From this worktree, the explicit command is:
+**Migration hold:** #47/#50 and the foundation currently collide at 0005. Do not apply them now. Each later branch must merge the schema/snapshot chain and regenerate its migration, retaining backfills; renaming files alone is not valid. Authentication's following attempt migration must be regenerated against that final chain too.
+
+6. Once that order is settled and the migrations are regenerated/reviewed, review outstanding migrations. Foundation migration 0005 makes handles nullable and backfills provider ownership; this branch adds 0006, the attempt table. Apply only to the intended approved Neon target, preserving shared data. From this worktree, the explicit command is:
 
 ~~~powershell
 node --env-file="D:\Projects\Convo\.env.local" .\node_modules\drizzle-kit\bin.cjs migrate
@@ -39,7 +41,7 @@ The callback/variable setup follows [Auth.js Google setup](https://authjs.dev/ge
 
 ## Complete manual acceptance checklist (live; not yet run)
 
-Prerequisites: Claude confirms the page-two return URL, nullable-screen/foundation/auth changes are integrated, the intended test Neon database has both migrations, and the local Google/GitHub callbacks/credentials above are configured. Use a dedicated pilot/test database and Google plus two GitHub accounts. A GitHub already used by an existing Lanyard user must be refused as a connection, so use an unused GitHub for the success case. Ask before any agent runs this against providers.
+Prerequisites: nullable-screen/foundation/auth changes are integrated, the intended test Neon database has both migrations, and the local Google/GitHub callbacks/credentials above are configured. Use a dedicated pilot/test database and Google plus two GitHub accounts. A GitHub already used by an existing Lanyard user must be refused as a connection, so use an unused GitHub for the success case. Ask before any agent runs this against providers.
 
 Start locally from this checkout, at the port registered in both clients:
 
@@ -50,7 +52,7 @@ $env:PROFILE_ENRICHMENT_ENABLED = "1"
 node --env-file="D:\Projects\Convo\.env.local" .\node_modules\next\dist\bin\next dev --port 3000 --webpack
 ~~~
 
-This uses live authentication/Postgres and recorded search/AI. Do not use fake `x-demo-user` headers to test real ownership. Until Claude's buttons land, the built-in `/api/auth/signin?callbackUrl=/signin` can start either normal provider sign-in; substitute the confirmed page-two path in the callbackUrl.
+This uses live authentication/Postgres and recorded search/AI. Do not use fake `x-demo-user` headers to test real ownership. Until Claude's buttons land, the built-in `/api/auth/signin?callbackUrl=/signin/sources` can start either normal provider sign-in.
 
 1. Signed out: GET `/api/profile-enrichment` returns 401/sign_in_required. Page two itself renders sign-in options. Directly opening `/api/auth/connect/github` does not authorize or connect anything.
 2. Google-only: authenticate with Google. GET owner state shows `signIn.provider="google"`, no connected GitHub and `onboarded=false`; the account has no invented handle. `/api/me` returns 409 until onboarding is completed. Check `/api/auth/session`: no provider credentials, email or picture.
@@ -85,4 +87,7 @@ Tests use recorded provider/Neon replies. One test drives the actual installed A
 
 A local Next HTTP smoke check confirms both configured providers appear, no test secret appears in provider metadata, anonymous real sessions remain null, the real connection entry point stays unavailable under FAKE_API, and the Google-only fake owner retains a null handle. No external provider, paid call, real database or Vercel setting was used. No new browser-screen acceptance or production build is claimed.
 
-The backend is ready for code review, not merge/deployment. Foundation/compatibility merges, Claude's contract ACK, the final page-two URL, current PR checks and explicit user PR approval remain outstanding. All source import/job/approval services remain the next implementation phase.
+The backend is ready for code review, not merge/deployment. Foundation/compatibility merges, Claude's contract ACK, current PR checks and explicit user PR approval remain outstanding. All source import/job/approval services remain the next implementation phase.
+## Coordination update
+
+The feature remains five pages and four independent import sources with Google/GitHub sign-in. Codex owns sign-in, linking, backend and contracts; Claude owns screens and B1. #47/#48 do not change this design. #49 makes neutral approved-evidence titles necessary; B1 search changes start after #49. #50 supplies the badge/avatar base for pages 3-4, whose nullable-handle checks must be retained. Nullable compatibility still lands before the foundation; prefer #47/#50 migrations first, then regenerate the foundation and authentication migrations. No database change has been applied.

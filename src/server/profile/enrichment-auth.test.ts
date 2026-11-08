@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({ resolve: vi.fn(), refresh: vi.fn(), complete: 
 vi.mock("@/server/config", () => ({ config: mocks.runtime }));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: mocks.cookieGet }) }));
 vi.mock("./identities", async original => ({ ...await original<typeof import("./identities")>(), resolveIdentity: mocks.resolve, refreshGitHubHandle: mocks.refresh }));
-vi.mock("./connection", () => ({ completeGitHubConnection: mocks.complete, clearConnection: mocks.clear, ENRICHMENT_RETURN: "/signin" }));
+vi.mock("./connection", () => ({ completeGitHubConnection: mocks.complete, clearConnection: mocks.clear,  }));
 vi.mock("next-auth", () => ({ default: () => ({ handlers: { GET: mocks.get, POST: mocks.get }, auth: vi.fn(), signIn: vi.fn(), signOut: vi.fn() }) }));
 import { authOptions, handlers } from "@/server/auth";
 
@@ -79,7 +79,7 @@ it("keeps the current owner, original sign-in provider and session binding durin
 it.each(["github_linked_elsewhere", "github_reconnect", "database-secret"])("rejects a failed connection without switching sessions: %s", async code => {
   mocks.complete.mockRejectedValue(Object.assign(new Error("secret-token"), { code }));
   const result = await options().callbacks!.signIn!({ user: { id: "github-provider-id" }, account: github, profile: ghProfile });
-  expect(result).toBe(`/signin?enrichmentError=${code === "database-secret" ? "provider_down" : code}`);
+  expect(result).toBe(`/signin/sources?reason=${code === "database-secret" ? "provider_down" : code}`);
   expect(mocks.resolve).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
   expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/secret-token|database-secret/);
@@ -87,8 +87,8 @@ it.each(["github_linked_elsewhere", "github_reconnect", "database-secret"])("rej
 
 it("rejects mismatched provider subjects before saving anything", async () => {
   const callbacks = options().callbacks!;
-  expect(await callbacks.signIn!({ user: { id: "random" }, account: google, profile: { sub: "901" } })).toBe("/signin?enrichmentError=provider_down");
-  expect(await callbacks.signIn!({ user: { id: "random" }, account: github, profile: { ...ghProfile, id: 102 } as unknown as Profile })).toBe("/signin?enrichmentError=provider_down");
+  expect(await callbacks.signIn!({ user: { id: "random" }, account: google, profile: { sub: "901" } })).toBe("/signin/sources?reason=provider_down");
+  expect(await callbacks.signIn!({ user: { id: "random" }, account: github, profile: { ...ghProfile, id: 102 } as unknown as Profile })).toBe("/signin/sources?reason=provider_down");
   expect(mocks.resolve).not.toHaveBeenCalled();
 });
 
@@ -102,8 +102,11 @@ it("ignores session-update client claims and keeps providers private on refresh"
 
 it("allows only same-origin return URLs", async () => {
   const redirect = options().callbacks!.redirect!;
-  expect(await redirect({ url: "/onboarding", baseUrl: "https://app.invalid" })).toBe("https://app.invalid/onboarding");
-  expect(await redirect({ url: "https://evil.invalid/", baseUrl: "https://app.invalid" })).toBe("https://app.invalid/signin");
+  expect(await redirect({ url: "/onboarding", baseUrl: "https://app.invalid" })).toBe("https://app.invalid/signin/sources");
+  expect(await redirect({ url: "https://evil.invalid/", baseUrl: "https://app.invalid" })).toBe("https://app.invalid/signin/sources");
+  expect(await redirect({ url: "/signin/sources?reason=github_linked_elsewhere&other=discarded", baseUrl: "https://app.invalid" }))
+    .toBe("https://app.invalid/signin/sources?reason=github_linked_elsewhere");
+  expect(await redirect({ url: "/signin/sources?reason=untrusted", baseUrl: "https://app.invalid" })).toBe("https://app.invalid/signin/sources");
 });
 
 it.each([false, true])("normalizes a denied provider callback after Auth.js processes it (connecting=%s)", async connecting => {
@@ -111,11 +114,12 @@ it.each([false, true])("normalizes a denied provider callback after Auth.js proc
   mocks.get.mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://app.invalid/api/auth/enrichment-error?error=OAuthCallbackError" } }));
   const result = await handlers.GET(new NextRequest("https://app.invalid/api/auth/callback/github?error=access_denied&state=opaque"));
   expect(mocks.get).toHaveBeenCalled();
-  expect(result.headers.get("location")).toBe(`https://app.invalid/signin?enrichmentError=${connecting ? "github_connect_cancelled" : "sign_in_cancelled"}`);
+  expect(result.headers.get("location")).toBe(`https://app.invalid/signin/sources?reason=${connecting ? "github_connect_cancelled" : "sign_in_cancelled"}`);
 });
 
-it("completes an actual Auth.js GitHub callback with recorded HTTP replies and a linked owner", async () => {
-  mocks.complete.mockResolvedValue(session);
+it.each([false, true])("completes an actual Auth.js callback and preserves refusal reasons (refused=%s)", async refused => {
+  if (refused) mocks.complete.mockRejectedValue(Object.assign(new Error("Private details"), { code: "github_linked_elsewhere" }));
+  else mocks.complete.mockResolvedValue(session);
   vi.stubGlobal("fetch", vi.fn<typeof fetch>(async input => {
     const url = String(input);
     if (url.includes("access_token")) return Response.json({ access_token: "github-private", token_type: "bearer", scope: "" });
@@ -133,7 +137,12 @@ it("completes an actual Auth.js GitHub callback with recorded HTTP replies and a
   const callbackUrl = `https://app.invalid/api/auth/callback/github?code=recorded-code&state=${encodeURIComponent(state)}`;
   const response = await Auth(new Request(callbackUrl, { headers: { cookie } }), { ...authOptions(new Request(callbackUrl)), ...base });
   expect(response.status).toBe(302);
-  expect(response.headers.get("location")).toBe("https://app.invalid/signin");
+  if (refused) {
+    expect(response.headers.get("location")).toBe("https://app.invalid/signin/sources?reason=github_linked_elsewhere");
+    expect(response.headers.getSetCookie().some(cookie => cookie.includes("authjs.session-token"))).toBe(false);
+    return;
+  }
+  expect(response.headers.get("location")).toBe("https://app.invalid/signin/sources");
   const sessionCookie = response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
   const token = await getToken({ req: { headers: { cookie: sessionCookie } }, secret: base.secret, secureCookie: true });
   expect(token).toMatchObject({ sub: "google:900", githubToken: "github-private", signInProvider: "google" });

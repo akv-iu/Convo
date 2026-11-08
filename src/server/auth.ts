@@ -7,12 +7,13 @@ import Google from "next-auth/providers/google";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { DEMO_USER_A } from "@/contracts/fixtures";
+import { ENRICHMENT_RETURN_PATH } from "@/contracts/enrichment";
 import { config } from "@/server/config";
 import { githubUserId, loadGitHubIdentity } from "@/server/profile/github";
 import { initializeGitHubProfile } from "@/server/profile/persistence";
 import { CONSENT_COOKIE, parseConsent } from "@/server/profile/consent";
 import { githubIdentity, resolveIdentity, refreshGitHubHandle, providerSubject } from "@/server/profile/identities";
-import { clearConnection, completeGitHubConnection, ENRICHMENT_RETURN } from "@/server/profile/connection";
+import { clearConnection, completeGitHubConnection } from "@/server/profile/connection";
 
 export function authOptions(request?: Request): NextAuthConfig {
   let linkedSession: JWT | null = null;
@@ -66,7 +67,7 @@ export function authOptions(request?: Request): NextAuthConfig {
           await clearConnection();
           const code = error && typeof error === "object" && "code" in error
             && ["github_linked_elsewhere", "github_reconnect"].includes(String(error.code)) ? String(error.code) : "provider_down";
-          return `${ENRICHMENT_RETURN}?enrichmentError=${code}`;
+          return `${ENRICHMENT_RETURN_PATH}?reason=${code}`;
         }
       },
       async jwt({ token, account, profile, user }) {
@@ -92,7 +93,12 @@ export function authOptions(request?: Request): NextAuthConfig {
       },
       async redirect({ url, baseUrl }) {
         const target = new URL(url, baseUrl);
-        return target.origin === new URL(baseUrl).origin ? target.toString() : new URL(ENRICHMENT_RETURN, baseUrl).toString();
+        if (config.profileEnrichmentEnabled) {
+          const reason = target.origin === new URL(baseUrl).origin && target.pathname === ENRICHMENT_RETURN_PATH ? target.searchParams.get("reason") : null;
+          const known = ["sign_in_cancelled", "github_connect_cancelled", "github_linked_elsewhere", "github_reconnect", "provider_down"];
+          return new URL(ENRICHMENT_RETURN_PATH + (reason && known.includes(reason) ? `?reason=${reason}` : ""), baseUrl).toString();
+        }
+        return target.origin === new URL(baseUrl).origin ? target.toString() : new URL("/signin", baseUrl).toString();
       },
     },
   };
@@ -113,7 +119,7 @@ function withCancellation(handler: (req: NextRequest) => Promise<Response>) {
       await clearConnection();
       const code = connecting ? "github_connect_cancelled" : "sign_in_cancelled";
       const result = new Response(response.body, response);
-      result.headers.set("location", new URL(`${ENRICHMENT_RETURN}?enrichmentError=${code}`, url).toString());
+      result.headers.set("location", new URL(`${ENRICHMENT_RETURN_PATH}?reason=${code}`, url).toString());
       return result;
     }
     return response;
