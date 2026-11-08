@@ -197,6 +197,7 @@ test.describe("profile enrichment: review and approve", () => {
     await expect(page.getByText("Your bio is ready to check. Save your badge first")).toBeVisible({ timeout: READY });
     await expect(page.getByRole("button", { name: "Approve and continue" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Go to your badge" })).toHaveAttribute("href", "/onboarding");
+    await scan(page, "badge first");
     await send(page, user, "PUT", "/api/me", { filters: { country: "GB", rorId: null, hiring: true }, workplaceName: "Analytical Engines" }); // as the badge page does
     await toReview(page);
     await page.getByRole("button", { name: "Approve and continue" }).click();
@@ -269,6 +270,14 @@ test.describe("profile enrichment: review and approve", () => {
     expect(body.evidenceIds.some((id: string) => id.endsWith("-public_profile") || id.endsWith("-research"))).toBe(false);
     await expect(page.getByRole("status").filter({ hasText: "Your bio is approved." })).toBeVisible();
     expect((await send(page, user, "GET", "/api/me")).bio).toBe("My edited bio.");
+    // Finishing onboarding forgets everything this tab remembered about the journey (pages one and two's, as they'd leave it).
+    await page.evaluate(() => {
+      sessionStorage.setItem("convo_onboarding_draft", "{}");
+      sessionStorage.setItem("convo_enrichment_started", "{}");
+    });
+    await page.getByRole("button", { name: "Yes, that's me" }).click();
+    await expect(page).toHaveURL(/\/ask$/);
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => /^convo_(onboarding|enrichment)_/.test(k)))).toEqual([]);
   });
 
   test("a new tab starts from the draft, not another tab's edits", async ({ page, context }) => {

@@ -6,6 +6,7 @@
 import type { AcceptEnrichment, EnrichmentErrorCode, EnrichmentJob } from "@/contracts/enrichment";
 import { countryName } from "@/components/ui/countries";
 import type { Person } from "@/contracts/types";
+import { ENRICHMENT_TAB_KEYS } from "../../_components/draft";
 import { SHOW_ALL } from "../answers";
 import { z } from "zod";
 
@@ -86,7 +87,7 @@ export function keepEdits(jobId: string, draft: Draft, edits: ReviewEdits, previ
   };
 }
 
-const KEPT_KEY = "convo_enrichment_review";
+const KEPT_KEY = ENRICHMENT_TAB_KEYS.review;
 
 /** This tab's kept edits for jobId, or null (none, another import's, unreadable or blocked storage). */
 export function readKept(jobId: string): KeptEdits | null {

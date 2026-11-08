@@ -13,6 +13,23 @@ import { RorMatch } from "@/contracts/types";
 import { SourceChoices } from "./enrichment";
 
 const KEY = "convo_onboarding_draft";
+/** What this tab also remembers during profile enrichment (pages two and five), cleared with the draft at the end. */
+export const ENRICHMENT_TAB_KEYS = {
+  ret: "convo_enrichment_return",
+  started: "convo_enrichment_started",
+  review: "convo_enrichment_review",
+} as const;
+
+/** Onboarding is finished: forget this tab's answers, so a later sign-in here starts clean. */
+export function clearOnboardingTab(): void {
+  for (const key of [KEY, ...Object.values(ENRICHMENT_TAB_KEYS)]) {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // nothing to clear
+    }
+  }
+}
 
 export const Workplace = z.union([
   z.object({ kind: z.literal("org"), org: RorMatch }),

@@ -12,7 +12,7 @@ import { SourceUrl } from "@/contracts/enrichment";
 import type { RouteResponse } from "@/contracts/routes";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { readDraft, saveDraft } from "../../_components/draft";
+import { clearOnboardingTab, ENRICHMENT_TAB_KEYS, readDraft, saveDraft } from "../../_components/draft";
 import {
   DEFAULT_SOURCES,
   identityFrom,
@@ -106,7 +106,7 @@ function resolved(reason: Reason, owner: Owner): boolean {
  * Read once on return and deleted; a changed identity or an expired search
  * isn't restored.
  */
-const RETURN_KEY = "convo_enrichment_return";
+const RETURN_KEY = ENRICHMENT_TAB_KEYS.ret;
 
 interface Kept {
   identity: Identity;
@@ -150,7 +150,7 @@ const unpickedRequest = (identity: Identity, sources: SourceChoices, cvUploadId:
  * The import this tab started and the (unpicked) request it was started with. Coming back with that
  * import still active and nothing changed, here or on page one, carries on with it; anything else starts again.
  */
-const STARTED_KEY = "convo_enrichment_started";
+const STARTED_KEY = ENRICHMENT_TAB_KEYS.started;
 const startRecord = (jobId: string, request: string) => JSON.stringify({ jobId, request });
 
 function rememberStart(record: string) {
@@ -486,7 +486,7 @@ export function SourcesForm({
             <p className="text-sm text-muted">
               Keep it as it is, or choose sources below to suggest a new bio. Nothing changes until you approve it.
             </p>
-            <Button href="/ask" variant="secondary" className="self-start">
+            <Button href="/ask" onClick={clearOnboardingTab} variant="secondary" className="self-start">
               Keep my profile
             </Button>
           </div>

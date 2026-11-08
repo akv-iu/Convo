@@ -421,4 +421,17 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(page.getByText("Choose at least one, or turn off GitHub.")).toBeVisible();
     await expect(page.getByLabel(/ORCID iD/)).toBeFocused();
   });
+
+  test("a returning account can keep its profile, and this tab forgets the journey", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    const saved = await page.request.put("/api/me", { headers: { "x-demo-user": user },
+      data: { filters: { country: "GB", rorId: null, hiring: true }, workplaceName: "Analytical Engines" } });
+    expect(saved.ok()).toBe(true); // already onboarded
+    await fillDetails(page);
+    await toSources(page);
+    await expect(page.getByText("You already have a profile")).toBeVisible();
+    await page.getByRole("link", { name: "Keep my profile" }).click();
+    await expect(page).toHaveURL(/\/ask$/);
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => /^convo_(onboarding|enrichment)_/.test(k)))).toEqual([]);
+  });
 });
