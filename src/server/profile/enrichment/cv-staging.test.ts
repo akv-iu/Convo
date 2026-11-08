@@ -125,3 +125,42 @@ it("keeps one owner's CV away from every other owner", async () => {
   await expect(createJob("google:202", startWithCv(cv.uploadId), null)).rejects.toMatchObject({ code: "cv_expired" });
   expect(saved().cv!.metadata).toEqual(cv);
 });
+
+/** A parse that finishes only when the test says so. */
+function heldParse(text: string) {
+  let release = () => {};
+  const done = new Promise<void>((resolve) => (release = resolve));
+  vi.mocked(extractCvText).mockImplementationOnce(async () => { await done; return { text, warnings: [] }; });
+  return release;
+}
+
+it("drops a CV that finishes reading after the sources were confirmed without it", async () => {
+  const release = heldParse("Late private CV text");
+  const late = stageCvText(owner, upload("text.pdf"));
+  await vi.waitFor(() => expect(extractCvText).toHaveBeenCalled());
+  await createJob(owner, { ...startWithCv("unused"), cv: null }, null); // page two continued with CV off
+  release();
+  await expect(late).rejects.toMatchObject({ code: "consent_changed", status: 409 });
+  expect(saved().cv).toBeNull();
+  expect(JSON.stringify(saved())).not.toContain("Late private CV text");
+});
+
+it("never lets an older upload that finishes last replace a newer one or cancel its work", async () => {
+  const release = heldParse("Older private CV text");
+  const older = stageCvText(owner, upload("text.pdf"));
+  await vi.waitFor(() => expect(extractCvText).toHaveBeenCalled());
+  const newer = await stageCvText(owner, { consent: true, text: "Skills\nNewer CV" });
+  release();
+  await expect(older).rejects.toMatchObject({ code: "consent_changed" });
+  expect(saved().cv).toEqual({ metadata: newer, text: "Skills\nNewer CV" });
+  expect(JSON.stringify(saved())).not.toContain("Older private CV text");
+  // And with work already started on the newer CV, a late older upload leaves it running.
+  const releaseAgain = heldParse("Another late CV");
+  const later = stageCvText(owner, upload("text.pdf"));
+  await vi.waitFor(() => expect(extractCvText).toHaveBeenCalledTimes(2));
+  const job = await createJob(owner, startWithCv(newer.uploadId), null);
+  releaseAgain();
+  await expect(later).rejects.toMatchObject({ code: "consent_changed" });
+  expect(saved().jobs.find(j => j.value.jobId === job.jobId)?.value.state).toBe("queued");
+  expect(saved().cv!.metadata).toEqual(newer);
+});

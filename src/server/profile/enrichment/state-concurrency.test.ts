@@ -75,13 +75,17 @@ it.each(["cancel first", "worker first"])("cancel racing a worker's write (%s) l
   expect(JSON.stringify(mocks.rows.get(owner)!.data)).not.toMatch(/Collected private excerpt|Private page input/);
 });
 
-it("two uploads at once retain one CV and a removal tombstone for the other", async () => {
-  const [a, b] = await Promise.all([stageCvText(owner, { consent: true, text: "First racing CV" }), stageCvText(owner, { consent: true, text: "Second racing CV" })]);
+it("two uploads at once keep exactly one CV: an older one either lands first and is replaced, or is refused", async () => {
+  const texts = ["First racing CV", "Second racing CV"];
+  const results = await Promise.allSettled(texts.map(text => stageCvText(owner, { consent: true, text })));
   expect(mocks.lost).toBeGreaterThan(0);
-  const saved = doc(); const kept = saved.cv!.metadata.uploadId; const loser = kept === a.uploadId ? b : a;
-  expect([a.uploadId, b.uploadId]).toContain(kept);
-  expect(JSON.stringify(saved)).not.toContain(loser === a ? "First racing CV" : "Second racing CV");
-  expect(saved.removedCvs.map(r => r.id)).toContain(loser.uploadId);
+  const saved = doc(); const kept = saved.cv!.metadata.uploadId;
+  const staged = results.flatMap(r => r.status === "fulfilled" ? [r.value.uploadId] : []);
+  expect(staged).toContain(kept);
+  for (const r of results) if (r.status === "rejected") expect(r.reason).toMatchObject({ code: "consent_changed" });
+  // Only the kept CV's text remains; one that landed and was replaced leaves a removal tombstone.
+  expect(texts.filter(t => JSON.stringify(saved).includes(t))).toHaveLength(1);
+  for (const id of staged.filter(id => id !== kept)) expect(saved.removedCvs.map(r => r.id)).toContain(id);
 });
 
 it("an expired worker cannot write after retry and a new claim (fencing by token)", async () => {

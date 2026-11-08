@@ -23,8 +23,20 @@ Their prerequisites arrive with them; nothing was cherry-picked again. That incl
 5. **Stale cleanup deadlines starved other owners.** `mutateOwner` skipped every write for an unchanged document, so a past `next_sweep_at` was selected first by every cleanup batch. It now rewrites the deadline, version-guarded, whenever the stored value differs from the computed one. A correctly scheduled, unchanged row is still not written.
 6. **Referee headings.** "Referees (available on request)" and similar headings didn't end a CV section, so a referee's name could reach synthesis. They now end it.
 7. **Execution config.** It now reads the OpenAlex key directly from config; a temporary typed shim is removed.
+8. **A late CV upload could restore input after newer choices** (boundary audit 1). An upload counted its attempt, then parsed, then staged its text with no check. So a slow parse finishing after page 2 continued with CV off, or after a newer upload, could put old CV text back or cancel work on the newer CV.
+   - Now the attempt reserves an owner-private `cvAttempt` (`uploadId` plus the consent generation) before parsing. The final write stages the text only if that attempt is still the current one and the generation hasn't changed; otherwise it answers 409 `consent_changed` and keeps nothing.
+   - A start, identity change or withdrawal bumps the generation. A newer upload replaces the attempt.
+   - `cvAttempt` is optional in the stored document, so existing rows still parse.
+9. **Manual jobs stored before fix 4 still held input** (fix-verification follow-up). `expire()` treats `manual` as finished, so those rows kept their input and a past cleanup deadline. `expire()` now clears input, collected excerpts and cache keys from any manual job; job history and the owner's pending CV are kept.
 
-Items 4–6 have failing-first regressions in `state.test.ts`, `storage.test.ts`, the cleanup route test and `professional-text.test.ts`.
+Items 4–6, 8 and 9 have failing-first regressions:
+- `state.test.ts`, including a stored manual row with input, cleaned alongside another owner;
+- `storage.test.ts`;
+- the cleanup route test;
+- `professional-text.test.ts`;
+- `cv-staging.test.ts`: a held parser finishing after a CV-off start, and after a newer upload, including work started on the newer CV.
+
+`state-concurrency.test.ts`'s two-uploads race now allows the older upload to be refused, and checks that only one CV's text remains.
 
 ## What was verified
 
@@ -34,7 +46,8 @@ Items 4–6 have failing-first regressions in `state.test.ts`, `storage.test.ts`
 | Feature gating | Enrichment routes return 404 `feature_disabled` while `PROFILE_ENRICHMENT_ENABLED` is off. The cleanup route doesn't check the flag, so it runs either way. |
 | Migrations | `0000`–`0006` are byte-identical to main. The journal only appends `0007`–`0010`. Each snapshot's `prevId` links back to main's `0006`. `drizzle-kit check` reports "Everything's fine", and `drizzle-kit generate` reports "No schema changes". `0007`'s numeric-ID backfill is intact. Nothing was applied to any database. |
 | Production build | `next build` succeeds with an explicitly fake, credential-free environment (`FAKE_API=1`, no `.env` files, no keys). Turbopack emits the CV worker as a `[worker thread]` chunk. Through `next start`, a temporary, uncommitted route that called the parser returned the expected result for 11 real fixtures: text, truncation, encrypted, scanned, expansion and miscount, heap, memory and unsupported. The server log held no document text. `/api/cron/enrichment-cleanup` built as dynamic and answered 503 `not_configured` with no secret. No provider was contacted. |
-| Final run (once, at the end) | Lint and typecheck clean; 1,230 unit tests in 84 files pass with 98.51% line coverage; `drizzle-kit check` reports "Everything's fine". |
+| Final run at `411e086` | Lint and typecheck clean; 1,230 unit tests in 84 files pass with 98.51% line coverage; `drizzle-kit check` reports "Everything's fine". |
+| Final run after fixes 8–9 | See "Final checkpoint" at the end of this file. The build and migration checks above are reused: fixes 8–9 change only the private JSON document and state logic, not the database schema or the worker's packaging. |
 
 ## Still open
 
@@ -46,7 +59,8 @@ Items 4–6 have failing-first regressions in `state.test.ts`, `storage.test.ts`
    - `CRON_SECRET`, in Production only;
    - the Node runtime set to 22.18 or newer (`package.json` engines);
    - `PROFILE_ENRICHMENT_ENABLED` left off until acceptance passes.
-3. **Retention decision.** On a daily cron, which is all Hobby allows, physical deletion of expired input takes up to about 49 hours from staging, against the proposed 48. Input is unreadable after 24 hours either way. The options are in `Enrichment-Cleanup.md`: accept about 49 hours and say "about two days", move to Pro with an hourly schedule, or add a second free trigger, which is a gated `.github/` change.
+3. **Retention decision.** On a daily cron, which is all Hobby allows, physical deletion of expired input takes up to about 49 hours from staging, against the proposed 48. A failed or partial run adds a day. Input is unreadable after 24 hours either way. The options, plus monitoring and recovery steps, are in `Enrichment-Cleanup.md`: accept about 49 hours and say "about two days", move to Pro with an hourly schedule, or add a second free trigger, which is a gated `.github/` change. Until you choose, nothing should promise deletion "within 48 hours".
+4. **Retire old evidence writers** (older deployments still writing evidence the previous way) before enabling imports.
 
 **Not verified live:**
 - Google and GitHub OAuth;
@@ -110,3 +124,19 @@ Items 4–6 have failing-first regressions in `state.test.ts`, `storage.test.ts`
 1. **This backend integration.** It needs the other person's approval, because it changes sign-in, consent and visibility (AGENTS.md rule 4) and needs new settings. Merge only once blocker 1 (migrations) is ready to apply right before the production deploy.
 2. **The frontend flow integration** (`b/enrichment-flow-integration`, Claude 2), rebased on `main` after PR 1. It completes the feature file, so it needs approval after a Preview try.
 3. **Settings, Preview live acceptance and the retention decision.** Then switch `PROFILE_ENRICHMENT_ENABLED` on, only with your approval.
+
+## Final checkpoint
+
+The last code commit is the one that contains this section; the report gives its hash.
+
+| Finding (source) | Status | Regression |
+| --- | --- | --- |
+| Late CV upload after consent change or newer upload (boundary 1) | Fixed (item 8) | `cv-staging.test.ts`: CV-off start during a held parse; an older upload finishing after a newer one, before and after work starts on the newer CV |
+| Manual jobs keeping private input (boundary 3 / release 1) | Fixed for new completions (item 4) and stored rows (item 9) | `state.test.ts`: all-empty completion; stored manual row with input cleaned alongside another owner |
+| Stale cleanup deadlines and starvation | Fixed (items 5 and 9) | `storage.test.ts`: stale vs correct deadline; the cleanup route's starvation test; the stored-manual-row test above checks the deadline moves into the future |
+| Runner discovery fixture (release 4) | Fixed (item 3), confirmed by fix verification | `runner.test.ts` |
+| Unqualified 48-hour promise (release 2) | Wording aligned; monitoring and recovery documented. **The schedule decision stays open (yours)** | Docs only; a schedule test can't prove deletion timing |
+| Deployment before migration (release 3) | Fixed: `Enrichment-Cleanup.md` setup now applies and verifies migrations first, and retires old writers before imports | Docs only |
+| Draft edits lost on retry or reload (boundary 2) | Frontend: fixed in `b/enrichment-flow-integration` 8e03503 (Claude 2) | `review.test.ts`, `review.spec.ts` there |
+
+Final run (once, after fixes 8–9): lint and typecheck clean; **1,233 unit tests in 84 files** pass, with 98.52% line coverage (2,791 of 2,833). Reused, unchanged by these fixes: the credential-free `next build` with the worker chunk, and `drizzle-kit check`/`generate`, both recorded above at `411e086`. No live service, secret, migration or deployment was used.
