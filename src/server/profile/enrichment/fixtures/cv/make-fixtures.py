@@ -74,17 +74,18 @@ def build_pdf(pages, password=None, extra_objects=()):
     objects[1] = b"<< /Type /Pages /Count %d /Kids [%s] >>" % (len(kids), b" ".join(b"%d 0 R" % k for k in kids))
     trailer_extra = b""
     if password:
-        file_id = hashlib.md5(b"ada-example-cv").digest()
+        # The PDF security handler being reproduced specifies MD5; it protects nothing here.
+        file_id = hashlib.md5(b"ada-example-cv", usedforsecurity=False).digest()
         p = -44
-        owner_key = hashlib.md5((b"owner" + PAD)[:32]).digest()[:5]
+        owner_key = hashlib.md5((b"owner" + PAD)[:32], usedforsecurity=False).digest()[:5]
         o = rc4(owner_key, (password + PAD)[:32])
-        key = hashlib.md5((password + PAD)[:32] + o + struct.pack("<i", p) + file_id).digest()[:5]
+        key = hashlib.md5((password + PAD)[:32] + o + struct.pack("<i", p) + file_id, usedforsecurity=False).digest()[:5]
         u = rc4(key, PAD)
         for number in streams:  # only the content streams carry text
             raw = objects[number - 1]
             head, rest = raw.split(b"stream\n", 1)
             data = rest[: -len(b"\nendstream")]
-            obj_key = hashlib.md5(key + struct.pack("<I", number)[:3] + b"\x00\x00").digest()[:10]
+            obj_key = hashlib.md5(key + struct.pack("<I", number)[:3] + b"\x00\x00", usedforsecurity=False).digest()[:10]
             objects[number - 1] = head + b"stream\n" + rc4(obj_key, data) + b"\nendstream"
         objects.append(b"<< /Filter /Standard /V 1 /R 2 /O <%s> /U <%s> /P %d >>" % (o.hex().encode(), u.hex().encode(), p))
         trailer_extra = b" /Encrypt %d 0 R /ID [<%s> <%s>]" % (len(objects), file_id.hex().encode(), file_id.hex().encode())
