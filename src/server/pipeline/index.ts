@@ -6,6 +6,7 @@ import { trace } from "@opentelemetry/api";
 import type { Ask, MatchResult, Person } from "@/contracts/types";
 import { ai } from "@/server/ai";
 import { search } from "@/server/search";
+import { narrowTo, readNarrowing } from "./narrow";
 
 const tracer = trace.getTracer("convo");
 
@@ -58,8 +59,10 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const refined = await step("understand", async () => input.ask.refined ?? ai.refineAsk(input.ask.rawText, input.requester));
 
   const hide = new Set(input.hideIds);
+  // The box can name a country or a place (see ./narrow); a country isn't a topic, so it isn't searched for.
+  const narrowing = readNarrowing(input.query ?? "");
   const candidates = await step("search", () =>
-    search.searchCandidates(input.query ? `${refined.text} ${input.query}` : refined.text, {
+    search.searchCandidates(narrowing.rest ? `${refined.text} ${narrowing.rest}` : refined.text, {
       excludeIds: [input.requester.id, ...input.excludeIds],
       freeTimes: input.requester.freeTimes,
     }, POOL),
@@ -73,9 +76,11 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
     .sort((a, b) => b.score - a.score);
   // Rank first, then hide, so ranks don't shift as people are passed on or sent a request.
   // Hidden results are never shown, so they are never explained (or paid for).
+  // A country or place in the search box narrows who's shown, after ranking, so ranks stay the same.
+  const fits = narrowTo(ranked.map((c) => c.person), narrowing);
   const shown = ranked
     .map((c, rank) => ({ ...c, rank }))
-    .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank))
+    .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank) && fits(c.person))
     .slice(0, SHOWN);
 
   // The model reads plain evidence lines only (not the evidence links), so its cache keys don't
