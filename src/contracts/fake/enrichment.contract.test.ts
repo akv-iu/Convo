@@ -234,3 +234,11 @@ it("reports recorded extracted-CV truncation without retaining or returning the 
   expect(JSON.stringify([...store.get().enrichment.uploads.values()])).not.toContain("private-body");
   expect((await fake.enrichmentState(ctx())).pendingCv).toEqual(cv);
 });
+
+it("keeps the pasted profile title neutral after approval exposes selected evidence to matches", async () => {
+  const input = enrichmentStart(); input.github.import = false; input.publicProfile = { kind: "text", text: "Private raw input" };
+  const job = await ready(input);
+  await fake.acceptEnrichment(ctx(acceptance(job), DEMO_USER_A, job.jobId));
+  expect(store.get().enrichment.evidence.get(DEMO_USER_A)?.[0]).toMatchObject({ source: "public_profile", title: "Profile text" });
+  expect((await fake.enrichmentSources(ctx()))[0].label).toBe("Profile text");
+});
