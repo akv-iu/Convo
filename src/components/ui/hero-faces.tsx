@@ -4,12 +4,15 @@
  * Each face is built from a few shared parts so they stay consistent with one another.
  */
 import type { ReactNode } from "react";
+import type { AvatarId } from "@/contracts/types";
 
 type Hair = "short" | "curly" | "afro" | "long" | "wavy" | "bob" | "bun" | "none";
 type Head = "hijab" | "turban" | "headwrap" | "toque" | "hardhat";
 type Outfit = "scrubs" | "chef" | "shirt" | "hivis" | "labcoat" | "top";
 
 export interface HeroPerson {
+  /** This face's ID as a badge picture (Person.avatar). */
+  avatar: AvatarId;
   name: string;
   role: string;
   /** Badge colour behind the face (one of the badge colours). */
@@ -28,16 +31,16 @@ export interface HeroPerson {
 }
 
 export const heroPeople: HeroPerson[] = [
-  { name: "Amara Okafor", role: "Nurse", badge: "#9fe3c4", skin: "#6b3e26", hair: "curly", hairColour: "#1b1410", outfit: "scrubs", outfitColour: "#1f9e8f" },
-  { name: "Hiroshi Tanaka", role: "Chef", badge: "#f6d365", skin: "#ecc9a3", hair: "short", hairColour: "#1a1a1a", head: "toque", outfit: "chef", outfitColour: "#ffffff" },
-  { name: "Fatima Haddad", role: "Software engineer", badge: "#c4b5fd", skin: "#c68c5a", hair: "none", hairColour: "#000", head: "hijab", headColour: "#1f6f6b", glasses: true, outfit: "top", outfitColour: "#2f3b59" },
-  { name: "Gurpreet Singh", role: "Architect", badge: "#a5d8ff", skin: "#a8693f", hair: "none", hairColour: "#1c1a19", head: "turban", headColour: "#d35400", beard: "#1c1a19", outfit: "shirt", outfitColour: "#3d6fb5" },
-  { name: "Sofía Ramírez", role: "Teacher", badge: "#ffa38a", skin: "#d9a066", hair: "wavy", hairColour: "#3b2219", earrings: true, outfit: "top", outfitColour: "#d35d84" },
-  { name: "Liam O'Brien", role: "Site engineer", badge: "#f6d365", skin: "#f3d2b5", hair: "short", hairColour: "#b5532a", head: "hardhat", freckles: true, outfit: "hivis", outfitColour: "#f39c12" },
-  { name: "Kwame Mensah", role: "Physicist", badge: "#a5d8ff", skin: "#4a2c1d", hair: "none", hairColour: "#000", beard: "#c9c9c9", glasses: true, outfit: "labcoat", outfitColour: "#2c3e50" },
-  { name: "Leilani Kahale", role: "Marine biologist", badge: "#9fe3c4", skin: "#b07850", hair: "long", hairColour: "#2b1a12", outfit: "top", outfitColour: "#1f8ea3" },
-  { name: "Mei Lin", role: "Product designer", badge: "#ffa38a", skin: "#f1d3b6", hair: "bob", hairColour: "#121212", outfit: "shirt", outfitColour: "#2d2d2d" },
-  { name: "Zawadi Mwangi", role: "Founder", badge: "#c4b5fd", skin: "#5a3420", hair: "none", hairColour: "#000", head: "headwrap", headColour: "#e67e22", earrings: true, outfit: "top", outfitColour: "#7d3c98" },
+  { avatar: "face-amara", name: "Amara Okafor", role: "Nurse", badge: "#9fe3c4", skin: "#6b3e26", hair: "curly", hairColour: "#1b1410", outfit: "scrubs", outfitColour: "#1f9e8f" },
+  { avatar: "face-hiroshi", name: "Hiroshi Tanaka", role: "Chef", badge: "#f6d365", skin: "#ecc9a3", hair: "short", hairColour: "#1a1a1a", head: "toque", outfit: "chef", outfitColour: "#ffffff" },
+  { avatar: "face-fatima", name: "Fatima Haddad", role: "Software engineer", badge: "#c4b5fd", skin: "#c68c5a", hair: "none", hairColour: "#000", head: "hijab", headColour: "#1f6f6b", glasses: true, outfit: "top", outfitColour: "#2f3b59" },
+  { avatar: "face-gurpreet", name: "Gurpreet Singh", role: "Architect", badge: "#a5d8ff", skin: "#a8693f", hair: "none", hairColour: "#1c1a19", head: "turban", headColour: "#d35400", beard: "#1c1a19", outfit: "shirt", outfitColour: "#3d6fb5" },
+  { avatar: "face-sofia", name: "Sofía Ramírez", role: "Teacher", badge: "#ffa38a", skin: "#d9a066", hair: "wavy", hairColour: "#3b2219", earrings: true, outfit: "top", outfitColour: "#d35d84" },
+  { avatar: "face-liam", name: "Liam O'Brien", role: "Site engineer", badge: "#f6d365", skin: "#f3d2b5", hair: "short", hairColour: "#b5532a", head: "hardhat", freckles: true, outfit: "hivis", outfitColour: "#f39c12" },
+  { avatar: "face-kwame", name: "Kwame Mensah", role: "Physicist", badge: "#a5d8ff", skin: "#4a2c1d", hair: "none", hairColour: "#000", beard: "#c9c9c9", glasses: true, outfit: "labcoat", outfitColour: "#2c3e50" },
+  { avatar: "face-leilani", name: "Leilani Kahale", role: "Marine biologist", badge: "#9fe3c4", skin: "#b07850", hair: "long", hairColour: "#2b1a12", outfit: "top", outfitColour: "#1f8ea3" },
+  { avatar: "face-mei", name: "Mei Lin", role: "Product designer", badge: "#ffa38a", skin: "#f1d3b6", hair: "bob", hairColour: "#121212", outfit: "shirt", outfitColour: "#2d2d2d" },
+  { avatar: "face-zawadi", name: "Zawadi Mwangi", role: "Founder", badge: "#c4b5fd", skin: "#5a3420", hair: "none", hairColour: "#000", head: "headwrap", headColour: "#e67e22", earrings: true, outfit: "top", outfitColour: "#7d3c98" },
 ];
 
 const EYE = "#2a1f1a";
@@ -233,47 +236,20 @@ function FaceLayers({ p, body }: { p: HeroPerson; body: ReactNode }) {
 }
 
 /** One attendee's face on their badge colour, in a circle filling its box. Decorative. */
-export function HeroFace({ person: p, className = "" }: { person: HeroPerson; className?: string }) {
+export function HeroFace({
+  person: p,
+  className = "",
+  background,
+}: {
+  person: HeroPerson;
+  className?: string;
+  /** The circle's colour; the person's own badge colour unless given (a badge picture uses its wearer's). */
+  background?: string;
+}) {
   return (
     <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" className={`overflow-hidden rounded-full ${className}`}>
-      <rect width="100" height="100" fill={p.badge} />
+      <rect width="100" height="100" fill={background ?? p.badge} />
       <FaceLayers p={p} body={outfit(p)} />
-    </svg>
-  );
-}
-
-/** The clothes' main colour (chef's whites and lab coats are white whatever the outfit colour). */
-function bodyColour(p: HeroPerson): string {
-  if (p.outfit === "chef") return "#ffffff";
-  if (p.outfit === "labcoat") return "#f4f6f8";
-  return p.outfitColour;
-}
-
-/**
- * An attendee from the chest up, wearing a lanyard: the strap round their neck and their badge
- * (in their badge colour) on their chest. Transparent background; 100 × 150. Decorative.
- */
-export function HeroWearer({ person: p, className = "" }: { person: HeroPerson; className?: string }) {
-  const body = (
-    <>
-      <path d="M6 150C6 98 24 71 50 71s44 27 44 79z" fill={bodyColour(p)} />
-      {outfit(p)}
-    </>
-  );
-  return (
-    <svg viewBox="0 0 100 150" aria-hidden="true" focusable="false" className={className}>
-      <FaceLayers p={p} body={body} />
-      {/* The lanyard: two strap sides from behind the neck to a clip, then the badge. It dangles. */}
-      <g className="hero-dangle">
-      <path d="M41 72 50 110 59 72" fill="none" stroke="var(--accent)" strokeWidth="3.4" strokeLinejoin="round" />
-      <rect x="46.5" y="107" width="7" height="5" rx="1.2" fill="#9aa5b1" />
-        <rect x="35" y="111" width="30" height="34" rx="4" fill="#ffffff" stroke="rgba(0,0,0,0.12)" />
-        <path d="M35 115a4 4 0 0 1 4-4h22a4 4 0 0 1 4 4v4H35z" fill={p.badge} />
-        <circle cx="42" cy="128" r="4" fill={p.badge} />
-        <rect x="48.5" y="125" width="12" height="2.4" rx="1.2" fill="#9aa5b1" />
-        <rect x="48.5" y="130" width="8" height="2.4" rx="1.2" fill="#c3cad3" />
-        <rect x="39" y="137" width="22" height="2.4" rx="1.2" fill="#e1e6eb" />
-      </g>
     </svg>
   );
 }

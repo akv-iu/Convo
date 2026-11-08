@@ -30,8 +30,14 @@ export type Slot = TimeBlock;
 export const BadgeColour = z.enum(["sunflower", "mint", "sky", "lilac", "coral"]);
 export type BadgeColour = z.infer<typeof BadgeColour>;
 
-/** The built-in pictures a person can choose for their badge (original art in src/components/ui/avatars.tsx). */
-export const AvatarId = z.enum(["star", "moon", "sun", "leaf", "wave", "peak", "bolt", "heart", "flower", "cloud", "gem", "spark"]);
+/**
+ * The built-in pictures a person can choose for their badge: twelve shapes and ten illustrated
+ * faces (the homepage's attendees). Original art in src/components/ui/avatars.tsx and hero-faces.tsx.
+ */
+export const AvatarId = z.enum([
+  "star", "moon", "sun", "leaf", "wave", "peak", "bolt", "heart", "flower", "cloud", "gem", "spark",
+  "face-amara", "face-hiroshi", "face-fatima", "face-gurpreet", "face-sofia", "face-liam", "face-kwame", "face-leilani", "face-mei", "face-zawadi",
+]);
 export type AvatarId = z.infer<typeof AvatarId>;
 
 export const ProfileVisibility = z.object({
