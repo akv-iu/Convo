@@ -1,6 +1,13 @@
 import { z } from "zod";
 import type { GitHubProfileInput } from "./index";
 import type { GitHubConsent } from "./consent";
+import { readProviderJson } from "./provider-json";
+
+export class GitHubRequestError extends Error {
+  constructor(readonly reason: "github_reconnect" | "rate_limited" | "timeout" | "provider_down", readonly status?: number, readonly retryAfterSeconds?: number) {
+    super(`GitHub profile request failed${status ? ` (${status})` : ""}`);
+  }
+}
 
 const login = z.string().regex(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i);
 const userSchema = z.object({
@@ -15,20 +22,30 @@ const repoSchema = z.object({
 const orgSchema = z.object({ login });
 
 async function githubGet(path: string, accessToken: string): Promise<unknown> {
-  let response: Response;
+  const signal = AbortSignal.timeout(10_000);
   try {
-    response = await fetch(`https://api.github.com/${path}`, {
+    const response = await fetch(`https://api.github.com/${path}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2026-03-10", "User-Agent": "convo",
       },
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
+      cache: "no-store", redirect: "error", signal,
     });
-  } catch {
-    throw new Error("GitHub profile request failed");
+    if (!response.ok) {
+      const retry = response.headers.get("retry-after");
+      const limited = response.status === 429 || (response.status === 403 && (response.headers.get("x-ratelimit-remaining") === "0" || retry !== null));
+      if (limited) {
+        const seconds = retry !== null ? Number(retry) || (Date.parse(retry) - Date.now()) / 1000
+          : Number(response.headers.get("x-ratelimit-reset")) - Date.now() / 1000;
+        throw new GitHubRequestError("rate_limited", response.status, Number.isFinite(seconds) && seconds > 0 ? Math.min(86400, Math.max(1, Math.ceil(seconds))) : 60);
+      }
+      throw new GitHubRequestError(response.status === 401 ? "github_reconnect" : "provider_down", response.status);
+    }
+    return await readProviderJson(response);
+  } catch (error) {
+    if (error instanceof GitHubRequestError) throw error;
+    throw new GitHubRequestError(signal.aborted || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) ? "timeout" : "provider_down");
   }
-  if (!response.ok) throw new Error(`GitHub profile request failed (${response.status})`);
-  return response.json();
 }
 
 export async function loadGitHubIdentity(accessToken: string | undefined) {
@@ -54,12 +71,12 @@ export async function loadGitHubProfile(accountId: string, profile: unknown, acc
     consent.includes("repos") ? githubGet(`users/${user.login}/repos?type=owner&sort=updated&direction=desc&per_page=100`, accessToken) : [],
     consent.includes("orgs") ? githubGet(`users/${user.login}/orgs?per_page=100`, accessToken) : [],
   ]);
-  const repos = z.array(repoSchema).parse(repoData).filter((repo) => !repo.private);
+  const repos = z.array(repoSchema).max(100).parse(repoData).filter((repo) => !repo.private);
   return {
     login: user.login, name: user.name, bio,
     repos: repos.map(({ name, description, language, html_url, stargazers_count }) => ({
       name, description, language, html_url, stargazers_count,
     })),
-    orgs: z.array(orgSchema).parse(orgData),
+    orgs: z.array(orgSchema).max(100).parse(orgData),
   };
 }

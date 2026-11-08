@@ -2,9 +2,9 @@ import { z } from "zod";
 import type { RouteBody, RouteResponse } from "@/contracts/routes";
 import { DiscoverEnrichment, EnrichmentEvidence } from "@/contracts/enrichment";
 import { enrichmentError, StateError } from "./model";
+import { readProviderJson } from "../provider-json";
 
 type Candidates = Extract<RouteResponse<"discoverEnrichment">, { source: "research" }>["candidates"];
-const MAX_BYTES = 1024 * 1024;
 const authorId = z.string().max(100).regex(/^https:\/\/openalex\.org\/A[1-9]\d*$/);
 const workId = z.string().max(100).regex(/^https:\/\/openalex\.org\/W[1-9]\d*$/);
 const rawAuthor = z.object({
@@ -60,29 +60,6 @@ function paperLink(work: z.infer<typeof rawWork>): { url: string; doi: string | 
   return { url: work.id, doi: null };
 }
 
-async function readJson(response: Response): Promise<unknown> {
-  if (Number(response.headers.get("Content-Length")) > MAX_BYTES || !response.headers.get("Content-Type")?.includes("application/json")) {
-    enrichmentError("provider_down", 503);
-  }
-  const reader = response.body?.getReader();
-  if (!reader) enrichmentError("provider_down", 503);
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      length += value.byteLength;
-      if (length > MAX_BYTES) { await reader.cancel(); enrichmentError("provider_down", 503); }
-      chunks.push(value);
-    }
-  } finally { reader.releaseLock(); }
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-}
-
 async function request(resource: string, params: Record<string, string>, apiKey: string, signal: AbortSignal): Promise<unknown> {
   if (!apiKey.trim()) enrichmentError("provider_down", 503);
   const url = new URL(`https://api.openalex.org/${resource}`);
@@ -95,7 +72,7 @@ async function request(resource: string, params: Record<string, string>, apiKey:
       enrichmentError("rate_limited", 429, Number.isFinite(hint) && hint > 0 ? Math.min(86400, Math.max(1, Math.ceil(hint))) : 60);
     }
     if (!response.ok) enrichmentError("provider_down", 503);
-    return await readJson(response);
+    return await readProviderJson(response);
   } catch (error) {
     if (error instanceof StateError) throw error;
     enrichmentError(signal.aborted || (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) ? "timeout" : "provider_down", 503);
