@@ -135,6 +135,41 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(page).toHaveURL(/\/onboarding$/);
   });
 
+  test("coming back from GitHub keeps page two's choices", async ({ page }) => {
+    await asNewGoogleUser(page);
+    await fillDetails(page);
+    await toSources(page);
+    const research = region(page, "Research papers");
+    await research.getByRole("radio", { name: /Ada Lovelace \(demo 2\)/ }).check();
+    const profile = region(page, "Public profile page");
+    await profile.getByRole("radio", { name: "Paste text instead" }).check();
+    await profile.getByRole("textbox", { name: "Text about your professional work" }).fill("Designs engines.");
+
+    // The real connection leaves for GitHub; here it comes straight back, cancelled.
+    await page.route("**/api/profile-enrichment/github/connect", (route) =>
+      route.fulfill({ json: { status: "redirect", path: "/api/auth/connect/github?token=test" } }),
+    );
+    await page.route(
+      (url) => url.pathname === "/api/auth/connect/github",
+      (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: "<script>location.replace('/signin/sources?reason=github_connect_cancelled')</script>",
+        }),
+    );
+    const searches: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().endsWith("/api/profile-enrichment/discover")) searches.push(r.url());
+    });
+    await page.getByRole("button", { name: "Connect GitHub" }).click();
+    await expect(page).toHaveURL(/reason=github_connect_cancelled/);
+    await expect(page.getByText("GitHub wasn't connected")).toBeVisible();
+    await expect(research.getByRole("radio", { name: /Ada Lovelace \(demo 2\)/ })).toBeChecked();
+    await expect(profile.getByRole("textbox", { name: "Text about your professional work" })).toHaveValue("Designs engines.");
+    expect(searches).toEqual([]); // the kept suggestions, not new ones with different IDs
+    expect(await page.evaluate(() => sessionStorage.getItem("convo_enrichment_return"))).toBeNull();
+  });
+
   test("a GitHub that belongs to another account is refused with help", async ({ page }) => {
     await asNewGoogleUser(page);
     await fillDetails(page, "Ada [demo:linked_elsewhere]");

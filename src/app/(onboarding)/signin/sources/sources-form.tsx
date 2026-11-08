@@ -93,6 +93,49 @@ function resolved(reason: Reason, owner: Owner): boolean {
   return owner.github.connected && (reason === "github_connect_cancelled" || reason === "github_linked_elsewhere");
 }
 
+/**
+ * Page two's choices, kept in this tab while Connect GitHub goes to GitHub and
+ * back, so returning (connected, cancelled or refused) discards nothing. The
+ * discoveries are kept too: a fresh search would give new candidate IDs.
+ * Read once on return and deleted; a changed identity or an expired search
+ * isn't restored.
+ */
+const RETURN_KEY = "convo_enrichment_return";
+
+interface Kept {
+  identity: Identity;
+  research: Found<Discovery>;
+  pages: Found<Discovery>;
+  author: string | null;
+  profileMode: ProfileMode;
+  profileUrl: string;
+  profileText: string;
+}
+
+function keepForReturn(kept: Kept) {
+  try {
+    sessionStorage.setItem(RETURN_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage off: the choices are made again after returning.
+  }
+}
+
+function takeKept(identity: Identity): Kept | null {
+  try {
+    const raw = sessionStorage.getItem(RETURN_KEY);
+    sessionStorage.removeItem(RETURN_KEY);
+    const kept = raw ? (JSON.parse(raw) as Kept) : null;
+    return kept && sameIdentity(kept.identity, identity) ? kept : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A kept search that's still usable, or null to search again. */
+function stillValid(found: Found<Discovery> | undefined): Found<Discovery> {
+  return found?.state === "done" && Date.parse(found.value.expiresAt) > Date.now() ? found : null;
+}
+
 function githubStatus(github: Owner["github"]): string {
   if (!github.connected) return "Not connected to this account.";
   return github.login ? `Connected as @${github.login}.` : "Connected.";
@@ -144,8 +187,19 @@ export function SourcesForm({
       setLoad(next);
       if (next.state !== "ready") return;
       setCvUpload(next.owner.pendingCv);
-      if (chosen.research) void discover("research", next.identity);
-      if (chosen.publicProfile) void discover("public_profile", next.identity);
+      const kept = takeKept(next.identity);
+      const keptResearch = stillValid(kept?.research);
+      const keptPages = stillValid(kept?.pages);
+      if (kept) {
+        setAuthor(keptResearch ? kept.author : null);
+        setProfileMode(kept.profileMode && typeof kept.profileMode === "object" && !keptPages ? null : kept.profileMode);
+        setProfileUrl(kept.profileUrl);
+        setProfileText(kept.profileText);
+      }
+      if (keptResearch) setResearch(keptResearch);
+      else if (chosen.research) void discover("research", next.identity);
+      if (keptPages) setPages(keptPages);
+      else if (chosen.publicProfile) void discover("public_profile", next.identity);
     },
     [discover],
   );
@@ -213,7 +267,8 @@ export function SourcesForm({
     }
     const connected = result.data;
     if (connected.status === "redirect") {
-      // The real flow continues at GitHub and comes back to this page.
+      // The real flow continues at GitHub and comes back to this page with the choices kept.
+      if (load.state === "ready") keepForReturn({ identity: load.identity, research, pages, author, profileMode, profileUrl, profileText });
       window.location.assign(connected.path);
       return;
     }
