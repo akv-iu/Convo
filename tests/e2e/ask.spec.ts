@@ -223,7 +223,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(page.getByRole("link", { name: "Set up your badge" })).toHaveAttribute("href", "/signin");
   });
 
-  test("Ask something else, from the question read back, starts from its text", async ({ page }) => {
+  test("Ask something else, from the question read back, starts with an empty box", async ({ page }) => {
     await open(page);
     await box(page).fill("how does Raft do the voting thing");
     await send(page).click();
@@ -232,7 +232,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(page).toHaveURL(/\/ask\?ask=/); // the address points at the saved question
     await page.getByRole("button", { name: "Ask something else" }).click();
     await expect(box(page)).toBeFocused();
-    await expect(box(page)).toHaveValue("how does Raft do the voting thing");
+    await expect(box(page)).toHaveValue("");
     await expect(page).toHaveURL(/\/ask$/); // and stops pointing at it
   });
 

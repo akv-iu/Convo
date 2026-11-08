@@ -207,11 +207,10 @@ export function AskForm() {
     }
   }
 
-  /** Back to the box with the sent text kept, as the asker's own words to start a new question from. */
+  /** Back to an empty box for a new question; the one shown stays saved. */
   function askAgain() {
     readGen.current++; // drop a read-back reply still on its way, before the address changes
-    // Start from the question shown, if the box is empty (e.g. it was read back from a link).
-    if (!text.trim() && result) setText(result.refined.text);
+    setText("");
     setResult(null);
     setTried(false);
     setOriginal(null);
