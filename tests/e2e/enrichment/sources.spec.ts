@@ -438,4 +438,17 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(page).toHaveURL(/\/ask$/);
     expect(await page.evaluate(() => Object.keys(sessionStorage).filter((k) => /^convo_(onboarding|enrichment)_/.test(k)))).toEqual([]);
   });
+
+  test("an onboarded account signing in on a fresh tab can keep its profile without page one", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    const saved = await page.request.put("/api/me", { headers: { "x-demo-user": user },
+      data: { filters: { country: "GB", rorId: null, hiring: true }, workplaceName: "Analytical Engines" } });
+    expect(saved.ok()).toBe(true); // onboarded before enrichment: no saved details, no tab draft
+    await page.goto("/signin/sources"); // where every sign-in lands with the switch on
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("You already have a profile");
+    await expect(page.getByRole("link", { name: "Add your details" })).toHaveAttribute("href", "/signin");
+    await scan(page, "returning account without details");
+    await page.getByRole("link", { name: "Keep my profile" }).click();
+    await expect(page).toHaveURL(/\/ask$/);
+  });
 });
