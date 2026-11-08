@@ -59,3 +59,22 @@
  * up), so a fresh page load never flashes the default colour.
  */
 .onb[data-badge-pending] [data-badge-stripe] { background-color: transparent; }
+
+/*
+ * The homepage badge (hero-badge.tsx): it sways on its strap while faces flick past, each face
+ * drops in, and the badge settles once it lands on a match. Used only through motion-safe:.
+ */
+@keyframes hero-sway {
+  0%, 100% { transform: rotate(-2.5deg); }
+  50% { transform: rotate(2.5deg); }
+}
+@keyframes hero-settle {
+  0% { transform: rotate(2.5deg); }
+  35% { transform: rotate(-1.6deg); }
+  65% { transform: rotate(0.7deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes hero-tick {
+  from { transform: translateY(-12%); opacity: 0.35; }
+  to { transform: none; opacity: 1; }
+}
