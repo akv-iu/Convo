@@ -1,6 +1,24 @@
 # Profile enrichment: shared delivery brief
 
-Status: Google/GitHub authentication and four independent imports confirmed; Claude returned CONTRACT ACK on foundation `502bd6c`; migrations and feature acceptance remain pending. Real enrichment is not implemented. Owner: Person B. Updated: 7 November 2026, America/Denver.
+Status: Google/GitHub authentication and four independent imports confirmed; Claude returned CONTRACT ACK on foundation `502bd6c`. Main `576692d` includes #51. Foundation/auth/state migrations are regenerated and locally verified, but remain unapplied; end-to-end real enrichment is unfinished. Owner: Person B. Updated: 7 November 2026, America/Denver.
+
+## Current implementation and session handoff
+
+This update supersedes the older migration holds and development-branch names below; the agreed product behavior and contract stay unchanged.
+
+| Layer | Pushed branch/commit |
+| --- | --- |
+| Foundation on main after #51 | b2/profile-enrichment-contract, 87ae076 |
+| Authentication/linking | b/google-github-auth, 56e4602 |
+| Durable private staging/jobs | b/enrichment-state, 2133285 |
+| OpenAlex provider | b/enrichment-research, 19e80d4 |
+| Combined development base with GitHub provider | b/enrichment-github, 9b143a4 |
+
+The final chain is 0007_provider-identities, 0008_auth-link-attempts, 0009_enrichment_state, regenerated after main's unchanged 0005 ask defaults and 0006 avatars. No live migrations were run. Each layer passed two full lint/typecheck/test rounds; the combined base passed 944 tests with 98.59% line coverage. Read db/Enrichment-Integration.md and db/Enrichment-Migrations.md on the combined branch for verification, dependency/PR order and the complete future live migration checklist.
+
+The user has now assigned Claude an isolated B2 exception: new public-profile provider/helper/tests/fixtures under src/server/profile/enrichment/ and db/Enrichment-Public-Profile.md, on b/enrichment-public-profile. Start from the combined development base and merge its latest push into the session's own branch; do not touch another worktree. The provider accepts explicit credentials and stays unwired. Codex retains routes, configuration/shared dependencies, state, migrations, approval/storage/removal, runner and synthesis. Coordinate shared dependency changes before editing their files. CV parsing is Claude's next task after this provider, with an explicit file handoff; B1 rebuild recovery follows the approved-evidence storage interface.
+
+Frontend completion was reported by the user; this backend integration did not independently rerun that final frontend handoff. Keep real imports unavailable until the missing runtime parts are connected. No PR creation, live application, production enablement or final feature sign-off is implied by these checks.
 
 This is the shared context for the user's separate Codex and Claude sessions. Read it together with `AGENTS.md`, `docs/Build-Plan.md` and `docs/Quality-Gates.md`. The user requested frontend and backend delivery of the complete bounded feature below. Existing folder ownership and approval rules still apply. This document proposes the API; it does not freeze or approve a contract change by itself.
 
@@ -25,8 +43,8 @@ Scanned PDFs requiring OCR, encrypted documents, old `.doc` files, private/login
 
 ## 2. Current code and coordination baseline
 
-- Latest main at this revision: `1f763c7`; #44, #45 and #46 are merged. Initial planning used `dde538d`; do not use the stale local main in D:/Projects/Convo as a branch base.
-- Claude's `a1/nullable-handle` commit `ad0c26f` is prepared on #44's head and remains a foundation dependency. Review/push/merge it separately; Codex changes no screen files. Validate against the current merged main, not the old branch snapshot.
+- Current integration baseline: main `576692d`, including #47 ask defaults, #50 avatars and #51 nullable-handle compatibility. Initial planning used `dde538d`; do not use the stale local main in D:/Projects/Convo as a branch base.
+- Claude's nullable-handle compatibility is merged through #51. Codex changes no screen files. Validate against the combined development base above; the earlier ad0c26f/500352a compatibility holds are historical.
 - Main now has five quality checks, including Feature sign-off, and a feature-checklist requirement. User instructions still require approval before opening this feature's PR or merging it. No feature is marked complete while real OAuth/imports/UI/live acceptance are pending.
 - `src/server/profile/github.ts` imports the consented public metadata. `buildProfile()` currently copies the existing GitHub bio; it does not write one with AI.
 - `initializeGitHubProfile()` currently imports and saves GitHub evidence in the sign-in callback, preserving edits on repeated sign-in. With the feature enabled, separate minimal identity persistence from optional imports: authenticate and return to page two first, then collect GitHub source data only after the user's final Continue. Optional import failure must not deny authentication. Keep the legacy flow when the feature is off. Do not put discovery, CV parsing or AI synthesis into the authentication callback.
@@ -136,7 +154,7 @@ The operational expired-input cleanup is authenticated, outside the screen contr
 | --- | --- | --- |
 | Existing #44/#45 | Review their latest pushed changes; no competing screen edits | Verify #44's latest fixes and #45's dependent changes with the existing frontend owner, finish remaining findings/regressions, and signal READY FOR PERSON B REVIEW |
 | Shared foundation | Sole writer of schemas, route definitions, fake/fixtures/contract tests; proposed config, dependency and deployment files | Review request/response semantics and UI feasibility; do not edit the same shared files |
-| Backend | B2: `src/server/profile/`, auth, requests' pending filters, `src/server/real.ts`, `src/app/api/`, `db/`; profile synthesis stays in this B2 service | Consume the agreed endpoints; no B2 edits |
+| Backend | B2: auth, contracts, routes, migrations/state, approved storage/removal, runner/synthesis and configuration | Own the isolated public-profile provider files under the user-approved exception above; other B2 files remain Codex's |
 | Frontend | Review behavior/contracts; no competing screen changes | A1/A2 folders and `src/components/ui/`, `tests/e2e/`: page-one details/permissions; page-two Google/GitHub authentication and optional GitHub connection, candidate previews/selection, source toggles, help blocks and CV; badge, availability, progress, review/editor and expertise display |
 | Search compatibility | Provide the accepted full Person/evidence snapshot via the existing ingest interface | B1: add expertise to Elastic/in-memory profile matching and synthetic defaults where necessary, and prove seed/rebuild restores all accepted sources. Keep this a separate small B1 PR; coordinate schema assumptions with Codex |
 
@@ -148,7 +166,7 @@ Keep Person A's other agent from editing these same screen files while the assig
 
 ## 7. PR and release order
 
-1. **Review this brief and settle nullable-handle compatibility.** #44/#45 are merged; the compatibility patch remains separate. Codex can prepare the contract/fake while Claude coordinates the existing frontend PRs and reviews the proposal. Record any agreed change to this document before either implements against a different shape. Do not run two frontend sessions against the same files.
+1. **Review this brief and settle nullable-handle compatibility.** #44/#45/#51 are now merged. The contract is ACKed and its dependency integration is locally verified. Record any agreed change before implementing a different shape. Do not run two sessions against the same files.
 2. **Foundation PR:** `b2/profile-enrichment-contract`. Prepare the shared schemas/fake/tests, explicit multipart behavior, feature flag/capability handling and agreed dependencies/setup locally. Signal ready and obtain the user's permission to open the PR, as previously requested. Both people approve and the user merges. Keep production behavior unchanged with the new feature disabled.
 3. From that exact updated main commit, work in parallel: Codex `b2/profile-enrichment-backend`; Claude `a1/profile-enrichment`. Claude uses the fake immediately. Backend services have recorded-provider tests. No agent edits the other's files to work around an API problem; raise a concrete contract proposal.
 4. Claude's separate B1 compatibility PR, `b1/profile-enrichment-search`, uses the agreed types and existing `syncProfile` entry point. Backend and B1 maintain compatibility while the new feature flag is off. Confirm actual dependencies before choosing the merge order; no import may point at a function available only in an unmerged branch.
@@ -206,12 +224,12 @@ Do not merge a PR yourself unless the user explicitly authorizes that merge. Do 
 ### Claude
 Fetch origin/main, origin/b2/profile-enrichment-plan and origin/b2/profile-enrichment-contract. Read this brief, the revised contract handoff, AGENTS.md and the build plan. Google or GitHub authenticates; four optional imports populate Lanyard. No ORCID sign-in. Confirm the nullable, server-owned githubLogin shape, staged private identity, independent discovery, owner-only pasted text, idempotency-conflict behavior and structured synchronization outcome. Return CONTRACT ACK or precise remaining changes.
 
-You own UI/e2e and the separate B1 compatibility PR. Settle #44 and your nullable-handle patch before the foundation's nullable type merges; coordinate other frontend branches before touching overlapping files. B1 work includes shared memory-search state across route modules, expertise matching, the reserved evidence-ID guard and complete-evidence seed/rebuild recovery. Do not edit B2 or shared contract/fake files.
+You own UI/e2e and the separate B1 compatibility PR, plus the isolated public-profile provider under the user's newer exception above. #44 and nullable compatibility #51 are merged; coordinate other frontend branches before touching overlapping files. B1 work includes shared memory-search state across route modules, expertise matching, the reserved evidence-ID guard and complete-evidence seed/rebuild recovery. Do not edit other B2 or shared contract/fake files.
 
 No new onboarding screens until contract ACK and a common merged foundation commit. Flag-on browser configuration/specs require the agreed config writer and owner approval. Ask before live providers; supply one full manual checklist; no PR creation or merge without the user's applicable approval.
 
 ### Codex
-You own B2 and shared-foundation writing. Keep real endpoints honestly unavailable until implementation. Migration 0005 makes the GitHub handle nullable and adds provider/account-ID ownership with a numeric-ID backfill; do not apply it without user authorization. Real Google/linking must use atomic identity ownership and preserve existing user IDs. Do not infer account ownership from handles, matching emails, names, CVs or selected authors. Keep Google tokens separate from the private GitHub credential path.
+You own B2 and shared-foundation writing except Claude's explicitly assigned isolated provider files. Keep real endpoints honestly unavailable until implementation. Regenerated migration 0007 makes the GitHub handle nullable and adds provider/account-ID ownership with a numeric-ID backfill; 0008 adds linking attempts and 0009 private job state. Do not apply them without user authorization. Real Google/linking must use atomic identity ownership and preserve existing user IDs. Do not infer account ownership from handles, matching emails, names, CVs or selected authors. Keep Google tokens separate from the private GitHub credential path.
 
 Update all approved-evidence persistence/indexing readers in the real backend, preserve edits and use separate text/consent versions. No B1/screen edits as a workaround. Test/review twice; ask before live providers. Keep the feature off and wait for contract approvals and user PR authorization.
 
@@ -242,6 +260,6 @@ Claude's four additive review requests are included in the revised foundation: `
 
 Approved evidence titles/excerpts may be visible to matches (#49); raw temporary CV/public-profile text remains owner-private and disposable. B1 search edits start after #49 merges. Claude builds badge/availability on #50's avatar-compatible badge, preserving nullable handles. #47 and #48 do not alter the enrichment design.
 
-Nullable-handle compatibility (`500352a`, including `6924256` and replacing local `ad0c26f`) must merge before the foundation. Prefer #47/#50 before the foundation; all three currently propose migration 0005. Each later branch must merge the actual schema/snapshot chain and regenerate with drizzle-kit, retaining provider backfills; renaming files is not enough. Regenerate the subsequent authentication migration too. Do not apply any competing 0005 to Neon until this order is settled. Preserve #48's ai_cache.kind moderate when adding synthesis caching. No migrations or production changes are authorized by this note.
+Nullable-handle compatibility is merged in #51, after #47/#50. The foundation/auth/state chain has now been regenerated as 0007-0009 against main 576692d, retaining provider backfills; the old competing 0005 proposals are not active migrations. Preserve #48's ai_cache.kind moderate when adding synthesis caching. No live migrations or production changes are authorized by this note.
 
 Full flag-on Playwright remains Claude's responsibility with the user's configuration approval. Claude returned CONTRACT ACK on foundation `502bd6c` and confirmed auth `0a48eab` aligns. This does not approve unfinished backend code, migration application or feature acceptance.
