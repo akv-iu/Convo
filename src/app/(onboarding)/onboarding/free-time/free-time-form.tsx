@@ -12,8 +12,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { AvatarId, Person, TimeBlock } from "@/contracts/types";
+import type { Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
+import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
+import { readDraft } from "../../_components/draft";
+import { badgeDetails, type BadgeDetails } from "./badge-details";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { countryName } from "@/components/ui/countries";
 import { loadProblem } from "../profile/edits";
@@ -35,6 +38,8 @@ import {
 } from "./blocks";
 
 export const NEXT_STEP = "/onboarding/profile";
+
+
 
 const blocks = blocksForDay();
 const hours = Array.from(new Set(blocks.map((b) => Math.floor(b.from / 60))));
@@ -70,19 +75,22 @@ export function FreeTimeForm() {
   const [mustResend, setMustResend] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [who, setWho] = useState<{ name: string; handle: string; country: string; avatar: AvatarId | null } | null>(null);
+  const [who, setWho] = useState<BadgeDetails | null>(null);
 
-  // The badge shows the real name when the profile loads; it's not needed for this step, so failures are ignored.
+  // The badge shows the same details as step 2: what was entered on step 1 if it isn't saved yet,
+  // otherwise the saved profile, with the same lines hidden. Not needed for this step, so failures
+  // only leave the placeholder badge.
   useEffect(() => {
     let live = true;
     fetch("/api/me", { cache: "no-store" })
       .then((r) => (r.ok ? (r.json() as Promise<Person>) : null))
+      .catch(() => null)
       .then((p) => {
-        if (!live || !p) return;
-        showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
-        setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country, avatar: p.avatar ?? null });
-      })
-      .catch(() => {});
+        if (!live) return;
+        if (p) showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
+        const details = badgeDetails(p, readDraft());
+        if (details) setWho(details);
+      });
     return () => {
       live = false;
     };
@@ -190,7 +198,13 @@ export function FreeTimeForm() {
 
   const labels = runLabels(blocks, picked);
   const badge = (
-    <Badge name={who?.name} handle={who?.handle} avatar={who?.avatar} label={who ? countryName(who.country) : undefined}>
+    <Badge
+      name={who?.name}
+      handle={who?.handle ?? undefined}
+      avatar={who?.avatar}
+      label={who ? <BadgeCountry country={countryName(who.country)} shown={who.visibility.country} /> : undefined}
+    >
+      {who && <BadgeLines workplace={who.workplace} hiring={who.hiring} visibility={who.visibility} />}
       <span className="mt-4 block">
         <span className="block text-xs text-muted">Free to meet</span>
         <span className="flex flex-wrap gap-1.5 pt-1.5">

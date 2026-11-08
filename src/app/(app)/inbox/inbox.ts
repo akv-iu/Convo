@@ -5,7 +5,7 @@
  * be changed later; a failed write may still have committed, so nothing is
  * retried automatically and the screen reloads the inbox to check.
  */
-import type { Request, RequestStatus } from "@/contracts/types";
+import type { AskType, Request, RequestStatus, RequestView } from "@/contracts/types";
 
 export const REPLY_MAX = 500;
 
@@ -96,4 +96,52 @@ export function bookFailure(status: number, body: unknown): Failure {
     message: serverMessage(body) ?? "The booking may have been saved. Reload your requests to check before booking again.",
     action: null,
   };
+}
+
+/** One question the asker sent, with everyone they sent it to (for "You asked"). */
+export type AskGroup = {
+  askId: string;
+  question: string;
+  type: AskType | null;
+  minutes: number;
+  /** When the newest request for it was sent. */
+  latest: string;
+  requests: RequestView[];
+};
+
+/**
+ * "You asked", organised by question: one group per ask, newest question first, each with the
+ * people it went to in the order the API sent them.
+ */
+export function groupByQuestion(requests: RequestView[]): AskGroup[] {
+  const groups = new Map<string, AskGroup>();
+  for (const r of requests) {
+    const group = groups.get(r.askId);
+    if (group) {
+      group.requests.push(r);
+      if (r.createdAt > group.latest) group.latest = r.createdAt;
+    } else {
+      groups.set(r.askId, { askId: r.askId, question: r.question, type: r.type, minutes: r.minutes, latest: r.createdAt, requests: [r] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => (a.latest < b.latest ? 1 : a.latest > b.latest ? -1 : 0));
+}
+
+const summaryWord: Record<RequestStatus, string> = {
+  sent: "waiting",
+  accepted: "accepted",
+  declined: "declined",
+  answered: "replied",
+  scheduled: "meeting booked",
+};
+
+/** "3 people · 1 replied · 2 waiting": who it went to and where each stands, in a fixed order. */
+export function groupSummary(requests: Pick<Request, "status">[]): string {
+  const people = `${requests.length} ${requests.length === 1 ? "person" : "people"}`;
+  const order: RequestStatus[] = ["scheduled", "accepted", "answered", "declined", "sent"];
+  const counts = order.flatMap((status) => {
+    const n = requests.filter((r) => r.status === status).length;
+    return n ? [`${n} ${summaryWord[status]}`] : [];
+  });
+  return [people, ...counts].join(" · ");
 }

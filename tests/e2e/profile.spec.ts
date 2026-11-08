@@ -77,6 +77,30 @@ test.describe("your details (step 4)", () => {
     }
   });
 
+  test("step 4's badge keeps the hiding rules: hidden lines aren't there, and an eraser hides one and saves", async ({ page }) => {
+    // The save is answered here, so no shared fake person changes.
+    await page.route("**/api/me", async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      const me = await (await page.request.get("/api/me", { headers: { "x-demo-user": "u_demo_b" } })).json();
+      return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
+    });
+    // u_demo_b: no test changes its show/hide choices, so the badge starts showing everything.
+    const saved = await stored(page, "u_demo_b");
+    await open(page, "u_demo_b");
+    const badge = visibleBadge(page);
+    await expect(badge.locator("[data-eraser]")).not.toHaveCount(0);
+    const stripeCountry = badge.locator("[data-badge-stripe] [data-line-text]");
+    const countryName = (await stripeCountry.textContent())!;
+    const country = page.getByRole("group", { name: "Show in your row" }).getByRole("switch", { name: "Country" });
+    await expect(country).toBeChecked();
+    const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
+    await stripeCountry.click(); // tap the country on the badge
+    expect((await saving).postDataJSON()).toEqual({ visibility: { ...saved.visibility, country: false } });
+    await expect(country).not.toBeChecked(); // the switch below follows
+    // Hidden means gone from the badge, as on step 2.
+    await expect(badge.locator("[data-badge-stripe]")).not.toContainText(countryName);
+  });
+
   test("Yes finishes without saving anything", async ({ page }) => {
     await open(page, "p_006");
     let saved = false;

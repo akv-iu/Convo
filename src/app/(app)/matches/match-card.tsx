@@ -6,8 +6,7 @@
 import type { CSSProperties } from "react";
 import type { EvidenceDoc, MatchResult } from "@/contracts/types";
 import { personColour } from "@/components/ui/badge-colours";
-import { Avatar } from "@/components/ui/avatars";
-import { badgeFacts, githubProfile } from "@/components/ui/person-badge";
+import { githubProfile } from "@/components/ui/person-badge";
 export { MatchSummary } from "@/components/ui/match-summary";
 import { highlightParts } from "./matches";
 
@@ -25,38 +24,22 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
   const p = match.person;
   return (
     <div style={{ "--badge": personColour(p) } as CSSProperties} className="flex flex-col gap-4">
-      <div className="flex gap-3 rounded-xl border-l-8 border-[var(--badge)] bg-background px-3 py-2.5">
-        <Avatar avatar={p.avatar} name={p.name} className="mt-1 size-12 text-base" />
-        <div className="min-w-0 flex-1">
-          <h2 id={nameId} className="text-2xl font-bold leading-snug tracking-tight break-words">
-            {p.name}
-          </h2>
-          <a
-            href={githubProfile(p.githubLogin)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            @{p.githubLogin} on GitHub<span className="sr-only"> (opens in a new tab)</span>
-          </a>
-          {badgeFacts(p).length > 0 && <p className="text-sm text-muted">{badgeFacts(p).join(" · ")}</p>}
-        </div>
-      </div>
-
-      {(match.mutual || p.synthetic) && (
-        <div className="flex flex-wrap gap-2">
-          {match.mutual && (
-            <span className="rounded-full bg-accent px-3 py-0.5 text-sm font-semibold text-on-accent">
-              Looking for someone like you too
-            </span>
-          )}
-          {p.synthetic && (
-            <span className="rounded-full border-2 border-dashed border-border px-3 py-0.5 text-sm font-semibold">
-              Synthetic profile<span className="sr-only">: a made-up demo attendee</span>
-            </span>
-          )}
-        </div>
-      )}
+      {/*
+        The row above already shows their picture, name, handle, facts and labels; the open part
+        adds the rest. The name stays as a hidden heading, so the panel is still named for screen
+        readers.
+      */}
+      <h2 id={nameId} className="sr-only">
+        {p.name}
+      </h2>
+      <a
+        href={githubProfile(p.githubLogin)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-fit text-sm font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        Their GitHub profile<span className="sr-only"> (@{p.githubLogin}, opens in a new tab)</span>
+      </a>
 
       {p.bio && (
         <div>
@@ -91,34 +74,6 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
         </div>
       )}
 
-      {match.evidence.length > 0 && (
-        <div>
-          <h3 className="text-xs font-semibold text-muted">Projects and papers</h3>
-          <ul className="mt-1 flex flex-col gap-1.5" aria-label={`${p.name}'s projects and papers`}>
-            {match.evidence.map((e, i) => (
-              <li key={`${e.kind}-${e.title}-${i}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm leading-snug">
-                <span className="shrink-0 rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-semibold">
-                  {evidenceKindLabel[e.kind]}
-                </span>
-                {e.url ? (
-                  <a
-                    href={e.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="min-w-0 font-medium break-words underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    {e.title}
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                ) : (
-                  <span className="min-w-0 font-medium break-words">{e.title}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {(p.languages.length > 0 || p.organisations.length > 0) && (
         <div className="grid gap-3 sm:grid-cols-2">
           {p.languages.length > 0 && (
@@ -145,6 +100,34 @@ export function MatchDetails({ match, nameId }: { match: MatchResult; nameId: st
               </ul>
             </div>
           )}
+        </div>
+      )}
+      {/* Last, so links to their work sit just above Pass and Send. */}
+      {match.evidence.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted">Articles, projects and papers</h3>
+          <ul className="mt-1 flex flex-col gap-1.5" aria-label={`${p.name}'s articles, projects and papers`}>
+            {match.evidence.map((e, i) => (
+              <li key={`${e.kind}-${e.title}-${i}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm leading-snug">
+                <span className="shrink-0 rounded-md bg-[var(--skeleton)] px-2 py-0.5 text-xs font-semibold">
+                  {evidenceKindLabel[e.kind]}
+                </span>
+                {e.url ? (
+                  <a
+                    href={e.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="min-w-0 font-medium break-words underline underline-offset-4 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  >
+                    {e.title}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                ) : (
+                  <span className="min-w-0 font-medium break-words">{e.title}</span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

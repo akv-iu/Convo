@@ -10,15 +10,16 @@
   --foreground: #14213d; /* ink */
   --muted: #4f5a72;
   --border: #cfd6e4;
-  --accent: #2b59ff; /* lanyard cobalt */
-  --accent-hover: #1f45d6;
+  /* Warm accents against the cool blues, so actions stand out. */
+  --accent: #c2410c; /* burnt orange, 5.2:1 on surface; white text on it is 5.2:1 */
+  --accent-hover: #9a3412;
   --on-accent: #ffffff;
   --badge: #ffd23f; /* badge stripe only */
   --logo-stripe: #ffd23f; /* the stripe on the Lanyard logo's badge */
   --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
   --skeleton: #dfe4ee;
-  --danger: #c2410c; /* error text, 5.2:1 on surface */
-  --danger-border: #c2410c;
+  --danger: #b91c1c; /* error text: red, so it never reads as an action; 6.5:1 on surface */
+  --danger-border: #b91c1c;
   --popover-shadow: 0 18px 40px -18px rgb(20 33 61 / 0.45); /* badge and pop-ups */
 
   background: var(--background);
@@ -33,12 +34,12 @@
     --foreground: #eef2ff;
     --muted: #b6c0d8;
     --border: #2d3b5f;
-    --accent: #7c9bff;
-    --accent-hover: #a3b9ff;
+    --accent: #ff9e6d; /* apricot on navy, 8.6:1 on the background */
+    --accent-hover: #ffbb94;
     --on-accent: #0d1630;
     --skeleton: #2a3756;
-    --danger: #fdba74;
-    --danger-border: #fb923c;
+    --danger: #fca5a5; /* error text: light red, distinct from the apricot accent */
+    --danger-border: #f87171;
     --popover-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.7);
   }
 }

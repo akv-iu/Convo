@@ -15,8 +15,11 @@ import type { Person, ProfileVisibility } from "@/contracts/types";
 import { saveErrorMessage, SHOW_ALL, VISIBILITY_SECTIONS } from "../answers";
 import { asSeenByOthers } from "./edits";
 
-export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p: Person) => void }) {
-  const visibility = person.visibility ?? SHOW_ALL;
+/**
+ * Saving the show/hide choices at once (PUT /api/me { visibility }), shared by the switches
+ * here and the erasers on step 4's badge, so both save, wait and fail the same way.
+ */
+export function useVisibilitySave(onSaved: (p: Person) => void) {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -39,6 +42,13 @@ export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p:
       setSaving(false);
     }
   }
+
+  return { save, saving, failure };
+}
+
+export function SeenByOthers({ person, saver }: { person: Person; saver: ReturnType<typeof useVisibilitySave> }) {
+  const visibility = person.visibility ?? SHOW_ALL;
+  const { save, saving, failure } = saver;
 
   return (
     <section aria-labelledby="seen-heading" className="mt-10 border-t-2 border-border pt-8">

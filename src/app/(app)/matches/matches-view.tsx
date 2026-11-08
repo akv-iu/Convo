@@ -617,8 +617,23 @@ function AskMatches({ askId }: { askId: string }) {
                       className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                     >
                       <MatchSummary match={m} sent={isSent} passed={isPassed} />
-                      <span aria-hidden="true" className={`mt-2 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}>
-                        ▾
+                      <span
+                        aria-hidden="true"
+                        className={`mt-1 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors motion-reduce:transition-none ${
+                          open ? "border-accent bg-accent text-on-accent" : "border-border bg-background text-foreground"
+                        }`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className={`size-6 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.75"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
                       </span>
                     </button>
                     {open && (

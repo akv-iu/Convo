@@ -31,6 +31,12 @@ test.describe("about you (step 1)", () => {
 
   test("home page leads to step 1", async ({ page }) => {
     await page.goto("/");
+    await expect(page.getByText("Ask questions about new technologies or jobs in order to meet the people who can help.")).toBeVisible();
+    // The lanyard sits beside the name, on the same line.
+    const mark = await page.locator("main svg").first().boundingBox();
+    const name = await page.getByRole("heading", { level: 1, name: "Lanyard" }).boundingBox();
+    expect(Math.abs(mark!.y + mark!.height / 2 - (name!.y + name!.height / 2))).toBeLessThan(12);
+    expect(mark!.x + mark!.width).toBeLessThanOrEqual(name!.x);
     await page.getByRole("link", { name: "Get started" }).click();
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make your badge");

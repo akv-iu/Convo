@@ -21,8 +21,11 @@ async function sendTo(page: Page, to: string, text = "how does the Kubernetes sc
   const { askId, refined } = await refine.json();
   const sent = await page.request.post("/api/requests", { headers: { "x-demo-user": SENDER }, data: { askId, toPersonId: to } });
   expect(sent.ok()).toBe(true);
-  return { id: (await sent.json()).id as string, question: refined.text as string };
+  return { id: (await sent.json()).id as string, question: refined.text as string, askId: askId as string };
 }
+
+/** "You asked" groups requests by question; this is one question's row, found by its ask ID. */
+const askedGroup = (page: Page, askId: string) => page.locator(`section[aria-labelledby="asked-${askId}-q"]`);
 
 async function stored(page: Page, person: string, id: string) {
   const res = await page.request.get("/api/inbox", { headers: { "x-demo-user": person } });
@@ -63,7 +66,7 @@ test.describe("requests and inbox (A2 step 4)", () => {
   test("the receiver sees who is asking, and the asker sees the answer under You asked", async ({ page, browser }) => {
     const me = async (id: string) => (await (await page.request.get("/api/me", { headers: { "x-demo-user": id } })).json()) as { name: string; githubLogin: string };
     const [asker, receiverProfile] = [await me(SENDER), await me("p_001")];
-    const { id } = await sendTo(page, "p_001", "how do I get started contributing to OpenTelemetry");
+    const { id, askId } = await sendTo(page, "p_001", "how do I get started contributing to OpenTelemetry");
 
     const receiver = await asPerson(browser, "p_001");
     await receiver.goto("/inbox");
@@ -84,11 +87,38 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await sender.goto("/inbox");
     const mine = sender.locator(`article[aria-labelledby="sent-${id}-q"]`);
     await expect(sender.getByRole("heading", { name: "You asked" })).toBeVisible();
+    await askedGroup(sender, askId).getByRole("button", { expanded: false }).click(); // open the question to see who it went to
     await expect(mine).toContainText("Sent to");
     await expect(mine).toContainText(receiverProfile.name);
     await expect(mine).toContainText(`${receiverProfile.name} replied`);
     await expect(mine).toContainText("Start with the collector's good first issues.");
     await receiver.context().close();
+    await sender.context().close();
+  });
+
+  test("You asked is organised by question: one row per question, opening to everyone it went to", async ({ page, browser }) => {
+    const refine = await page.request.post("/api/refine", { headers: { "x-demo-user": SENDER }, data: { text: "how do teams run chaos experiments safely" } });
+    const { askId, refined } = await refine.json();
+    for (const to of ["p_001", "p_002"]) {
+      const sent = await page.request.post("/api/requests", { headers: { "x-demo-user": SENDER }, data: { askId, toPersonId: to } });
+      expect(sent.ok()).toBe(true);
+    }
+    const sender = await asPerson(browser, SENDER);
+    await sender.goto("/inbox");
+    const group = askedGroup(sender, askId);
+    await expect(group).toContainText(refined.text);
+    await expect(group).toContainText("2 people · 2 waiting");
+    // Closed at first: the question, not a card per person.
+    const toggle = group.getByRole("button", { expanded: false });
+    await expect(group.locator("article")).toHaveCount(0);
+    await toggle.click();
+    await expect(group.getByRole("button", { expanded: true })).toBeVisible();
+    await expect(group.locator("article")).toHaveCount(2);
+    await expect(group.locator("article").nth(0)).toContainText("Sent to");
+    // The question isn't repeated on each person's card.
+    await expect(group.getByText(refined.text, { exact: true })).toHaveCount(1);
+    await group.getByRole("button", { expanded: true }).click();
+    await expect(group.locator("article")).toHaveCount(0);
     await sender.context().close();
   });
 
