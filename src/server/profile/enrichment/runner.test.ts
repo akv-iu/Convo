@@ -7,7 +7,7 @@ vi.mock("./github",()=>({collectGitHubEvidence:mocks.github}));
 vi.mock("./openalex",()=>({collectResearchPapers:mocks.research}));
 vi.mock("./public-profile",()=>({collectPublicProfile:mocks.page}));
 vi.mock("./synthesis",()=>({synthesize:mocks.synthesis}));
-import { createJob, getJob, stageCvText, recordDiscovery, cancelJob, retryJob } from "./state";
+import { createJob, getJob, stageCvText, recordDiscovery, reserveDiscovery, saveIdentity, cancelJob, retryJob } from "./state";
 import { runEnrichment } from "./runner";
 const owner="google:101";
 const doc=(source:"github"|"research"|"public_profile")=>({id:`${owner}:${source==="github"?"repo":source==="research"?"paper":"profile_page"}:one`,personId:owner,sourceId:`${owner}:${source}`,source,kind:source==="github"?"repo" as const:source==="research"?"paper" as const:"profile_page" as const,title:source==="public_profile"?"Profile text":"Professional work",excerpt:"Compiler research",...(source!=="public_profile"?{url:"https://example.org"}:{}),retrievedAt:new Date().toISOString()});
@@ -16,7 +16,9 @@ beforeEach(()=>{mocks.data=emptyOwnerData();mocks.github.mockReset().mockResolve
 it("collects every selected source, passes only professional excerpts to one synthesis call, and leaves a private draft",async()=>{
   const body=input();const cv=await stageCvText(owner,{consent:true,text:"Ada\nEmail ada@example.org\nSkills\nRust and compilers"});
   const lookup={source:"research" as const,name:body.identity.name,workplaceName:body.identity.workplaceName,rorId:body.identity.rorId,orcid:body.identity.orcid};
-  await recordDiscovery(owner,lookup,{discoveryId:"lookup",source:"research",status:"ok",expiresAt:new Date(Date.now()+60_000).toISOString(),candidates:[{id:"A1",name:"Ada",url:"https://openalex.org/A1",orcid:null,affiliations:[],worksCount:1,samplePapers:[]}]});
+  // As the discovery API does: confirmed identity first, then the reservation's generation binds the result.
+  await saveIdentity(owner,body.identity);const generation=await reserveDiscovery(owner,lookup);
+  await recordDiscovery(owner,lookup,{discoveryId:"lookup",source:"research",status:"ok",expiresAt:new Date(Date.now()+60_000).toISOString(),candidates:[{id:"A1",name:"Ada",url:"https://openalex.org/A1",orcid:null,affiliations:[],worksCount:1,samplePapers:[]}]},generation);
   const job=await createJob(owner,{...body,github:{import:true,bio:false,repos:true,orgs:false},research:{discoveryId:"lookup",candidateId:"A1"},cv:{uploadId:cv.uploadId}},"ada",7);
   await runEnrichment(owner,job.jobId,{github:{accountId:"101",accessToken:"private-token"},openAlexApiKey:"private-key"});
   const result=await getJob(owner,job.jobId);expect(result).toMatchObject({state:"ready",draft:{baseTextVersion:7}});
