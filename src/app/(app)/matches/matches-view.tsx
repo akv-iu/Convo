@@ -442,7 +442,7 @@ function AskMatches({ askId }: { askId: string }) {
           </section>
         )}
         <div className="mt-8">
-          <Button href="/ask">Ask something else</Button>
+          <Button href="/ask" variant="alternate">Ask something else</Button>
         </div>
       </div>
     );
@@ -640,14 +640,14 @@ function AskMatches({ askId }: { askId: string }) {
               </>
             )}
             <div className="mt-5">
-              <Button href="/ask" variant="secondary">
+              <Button href="/ask" variant="alternate">
                 Ask something else
               </Button>
             </div>
           </div>
         ) : (
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <Button href="/ask">Ask something else</Button>
+            <Button href="/ask" variant="alternate">Ask something else</Button>
             {canSeeAgain && (
               <Button variant="secondary" onClick={refresh}>
                 See them again

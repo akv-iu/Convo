@@ -5,22 +5,23 @@
  * to the global stylesheet.
  */
 .onb {
-  --background: #eef1f7; /* mist */
+  /* Neutral paper and ink, so the badge colours and the two accents carry the colour. */
+  --background: #f6f4f0; /* warm paper */
   --surface: #ffffff;
-  --foreground: #14213d; /* ink */
-  --muted: #4f5a72;
-  --border: #cfd6e4;
-  /* Warm accents against the cool blues, so actions stand out. */
+  --foreground: #1c1917; /* ink */
+  --muted: #57534e;
+  --border: #d9d4cc;
   --accent: #c2410c; /* burnt orange, 5.2:1 on surface; white text on it is 5.2:1 */
   --accent-hover: #9a3412;
   --on-accent: #ffffff;
+  --accent-2: #0f766e; /* teal, for the other way forward (Ask something else); 5.4:1 on surface */
   --badge: #ffd23f; /* badge stripe only */
   --logo-stripe: #ffd23f; /* the stripe on the Lanyard logo's badge */
   --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
-  --skeleton: #dfe4ee;
+  --skeleton: #e7e2da;
   --danger: #b91c1c; /* error text: red, so it never reads as an action; 6.5:1 on surface */
   --danger-border: #b91c1c;
-  --popover-shadow: 0 18px 40px -18px rgb(20 33 61 / 0.45); /* badge and pop-ups */
+  --popover-shadow: 0 18px 40px -18px rgb(28 25 23 / 0.4); /* badge and pop-ups */
 
   background: var(--background);
   color: var(--foreground);
@@ -29,15 +30,16 @@
 
 @media (prefers-color-scheme: dark) {
   .onb {
-    --background: #0d1630;
-    --surface: #17223f;
-    --foreground: #eef2ff;
-    --muted: #b6c0d8;
-    --border: #2d3b5f;
-    --accent: #ff9e6d; /* apricot on navy, 8.6:1 on the background */
+    --background: #141414; /* charcoal, no blue cast */
+    --surface: #212121;
+    --foreground: #f5f5f4;
+    --muted: #c2bfba;
+    --border: #3a3a3a;
+    --accent: #ff9e6d; /* apricot, 9.6:1 on the background */
     --accent-hover: #ffbb94;
-    --on-accent: #0d1630;
-    --skeleton: #2a3756;
+    --on-accent: #141414;
+    --accent-2: #5eead4; /* teal */
+    --skeleton: #2e2e2e;
     --danger: #fca5a5; /* error text: light red, distinct from the apricot accent */
     --danger-border: #f87171;
     --popover-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.7);

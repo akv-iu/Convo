@@ -191,7 +191,7 @@ export function AskForm() {
           <Button href={`/matches?ask=${encodeURIComponent(result.askId)}`} className="text-lg sm:px-8">
             Find people
           </Button>
-          <Button variant="secondary" onClick={askAgain} className="text-lg">
+          <Button variant="alternate" onClick={askAgain} className="text-lg">
             Ask something else
           </Button>
         </div>

@@ -74,6 +74,8 @@ export function BadgeForm() {
   const [avatarColour, setAvatarColour] = useState<BadgeColour | null>(null);
   const pictureHex = avatarColour ? colourHex(avatarColour) : undefined;
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Which the colour swatches change: the badge stripe or the picture circle. */
+  const [colourFor, setColourFor] = useState<"badge" | "picture">("badge");
   const plusRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLFieldSetElement>(null);
   const [tried, setTried] = useState(false);
@@ -268,11 +270,11 @@ export function BadgeForm() {
       {/* The badge, with what changes it right beside it (rendered once). */}
       <section
         aria-label="Your badge's look"
-        className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] sm:items-center lg:gap-14"
+        className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
         <div className="w-full sm:col-start-1 sm:row-start-1">{badge}</div>
-        {/* Under the badge: the picture picker (when open) and the colours. */}
-        <div className="flex w-full flex-col items-center gap-6 sm:col-start-1 sm:row-start-2">
+        {/* Under the badge: the picture picker, when open. */}
+        <div className="flex w-full flex-col items-center gap-6 empty:hidden sm:col-start-1 sm:row-start-2">
           {pickerOpen && (
             <fieldset
               id="avatar-picker"
@@ -313,53 +315,12 @@ export function BadgeForm() {
               </div>
             </fieldset>
           )}
-          <ColourPicker defaultColour={colour} centred />
-          {/* The picture circle's own colour; "Same as badge" follows the badge colour above. */}
-          <fieldset className="text-center">
-            <legend className="mx-auto mb-2 text-sm font-semibold">Picture colour</legend>
-            <div className="flex flex-col items-center gap-2">
-              {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
-              <label className="cursor-pointer">
-                <input
-                  type="radio"
-                  name="avatarColour"
-                  value=""
-                  checked={avatarColour === null}
-                  onChange={() => setAvatarColour(null)}
-                  className="peer sr-only"
-                />
-                <span className="flex h-8 items-center rounded-full border-2 border-border px-3 text-xs font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
-                  Same as badge
-                </span>
-              </label>
-              <div className="flex flex-wrap justify-center gap-2">
-                {badgeColours.map((c) => (
-                  <label key={c.id} title={c.name} className="relative cursor-pointer">
-                    <input
-                      type="radio"
-                      name="avatarColour"
-                      value={c.id}
-                      checked={avatarColour === c.id}
-                      onChange={() => setAvatarColour(c.id)}
-                      className="peer sr-only"
-                    />
-                    <span
-                      aria-hidden="true"
-                      style={{ backgroundColor: c.hex }}
-                      className="block size-7 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent motion-reduce:transition-none"
-                    />
-                    <span className="sr-only">{c.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </fieldset>
         </div>
         {/*
-          Beside the badge, centred on it. From 1024 px the badge hangs from a strap (lg:mt-16), so the
-          same margin here centres on the card, not on the strap.
+          Beside the badge, from the top of the card: what to show, then the colours. From 1024 px the
+          badge hangs from a strap (lg:mt-16), so the same margin here lines up with the card.
         */}
-        <div className="flex flex-col gap-6 sm:col-start-2 sm:row-start-1 sm:self-center lg:mt-16">
+        <div className="flex flex-col gap-5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start lg:mt-16">
           <fieldset className="border-0 p-0">
             <legend className="sr-only">Show on your badge</legend>
             <div className="flex max-w-sm flex-col gap-1.5">
@@ -374,10 +335,73 @@ export function BadgeForm() {
               ))}
             </div>
           </fieldset>
+          {/*
+            One colour panel for both: pick Badge or Picture, then a colour. Both groups stay in the
+            form (the badge's colours the stripe through CSS); only the chosen one is in view.
+          */}
+          <div className="w-full max-w-sm rounded-2xl border-2 border-border bg-surface p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">Colours</h2>
+              <div role="group" aria-label="Colour for" className="flex rounded-full border-2 border-border p-0.5">
+                {(["badge", "picture"] as const).map((target) => (
+                  <button
+                    key={target}
+                    type="button"
+                    aria-pressed={colourFor === target}
+                    onClick={() => setColourFor(target)}
+                    className="flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors aria-pressed:bg-foreground aria-pressed:text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-3 rounded-full ring-1 ring-black/15"
+                      style={{ backgroundColor: target === "badge" ? "var(--badge)" : (pictureHex ?? "var(--badge)") }}
+                    />
+                    {target === "badge" ? "Badge" : "Picture"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3">
+              <ColourPicker defaultColour={colour} quiet hidden={colourFor !== "badge"} />
+              <fieldset hidden={colourFor !== "picture"}>
+                <legend className="sr-only">Picture colour</legend>
+                <div className="flex flex-wrap items-center gap-2">
+                  {badgeColours.map((c) => (
+                    <label key={c.id} title={c.name} className="relative cursor-pointer">
+                      <input
+                        type="radio"
+                        name="avatarColour"
+                        value={c.id}
+                        checked={avatarColour === c.id}
+                        onChange={() => setAvatarColour(c.id)}
+                        className="peer sr-only"
+                      />
+                      <span aria-hidden="true" style={{ backgroundColor: c.hex }} className="block size-7 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent motion-reduce:transition-none" />
+                      <span className="sr-only">{c.name}</span>
+                    </label>
+                  ))}
+                  {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
+                  <label className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="avatarColour"
+                      value=""
+                      checked={avatarColour === null}
+                      onChange={() => setAvatarColour(null)}
+                      className="peer sr-only"
+                    />
+                    <span className="flex h-8 items-center rounded-full border-2 border-border px-3 text-xs font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
+                      Same as badge
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="sticky bottom-0 -mx-4 mt-10 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+      <div className="sticky bottom-0 -mx-4 mt-10 bg-background/95 px-4 pb-4 pt-3 text-center backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         {tried && step1Missing.length > 0 && (
           <p role="alert" className={`mb-3 ${errorClass}`}>
             {missingMessage[step1Missing[0]]}{" "}

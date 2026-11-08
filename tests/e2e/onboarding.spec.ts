@@ -305,6 +305,7 @@ test.describe("your badge (step 2)", () => {
       return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
     });
     // The picture can have its own colour; the stripe keeps the badge colour.
+    await page.getByRole("button", { name: "Picture", exact: true }).click();
     const pictureColours = page.getByRole("group", { name: "Picture colour" });
     await expect(pictureColours.getByRole("radio", { name: "Same as badge" })).toBeChecked();
     await pictureColours.locator("label").filter({ has: page.getByRole("radio", { name: "Lilac" }) }).click();

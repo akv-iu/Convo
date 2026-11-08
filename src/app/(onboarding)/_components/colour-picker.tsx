@@ -8,14 +8,20 @@ import { badgeColours, DEFAULT_COLOUR, type BadgeColour } from "./badge-prefs";
 export function ColourPicker({
   defaultColour = DEFAULT_COLOUR,
   centred = false,
+  quiet = false,
+  hidden = false,
 }: {
   defaultColour?: BadgeColour;
   /** Centre the label and swatches, e.g. under the badge. */
   centred?: boolean;
+  /** Name the group for screen readers only, when a visible control already says what it colours. */
+  quiet?: boolean;
+  /** Out of view but still in the form (and still colouring the badge). */
+  hidden?: boolean;
 }) {
   return (
-    <fieldset className={centred ? "text-center" : undefined}>
-      <legend className={`mb-2 text-sm font-semibold ${centred ? "mx-auto" : ""}`}>Badge colour</legend>
+    <fieldset className={centred ? "text-center" : undefined} hidden={hidden}>
+      <legend className={quiet ? "sr-only" : `mb-2 text-sm font-semibold ${centred ? "mx-auto" : ""}`}>Badge colour</legend>
       <div className={`flex flex-wrap gap-2 ${centred ? "justify-center" : ""}`}>
         {badgeColours.map((c) => (
           <label key={c.id} className="relative cursor-pointer" title={c.name}>

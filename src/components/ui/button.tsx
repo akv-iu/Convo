@@ -6,7 +6,7 @@ import type { ComponentProps, ReactNode } from "react";
  * inherits it. Renders a link when given `href`, so it stays keyboard and
  * screen-reader friendly either way.
  */
-type Common = { children: ReactNode; variant?: "primary" | "secondary"; className?: string };
+type Common = { children: ReactNode; variant?: "primary" | "secondary" | "alternate"; className?: string };
 type AsLink = Common & { href: string } & Omit<ComponentProps<typeof Link>, "href" | "className" | "children">;
 type AsButton = Common & { href?: undefined } & Omit<ComponentProps<"button">, "className" | "children">;
 
@@ -15,6 +15,8 @@ const base =
 const variants = {
   primary: "bg-accent text-on-accent hover:bg-accent-hover",
   secondary: "border border-border bg-background text-foreground hover:bg-surface",
+  /** The other way forward, e.g. Ask something else: teal, so it never reads as the main action. */
+  alternate: "border-2 border-accent-2 text-accent-2 hover:bg-accent-2/10",
 };
 
 export function Button(props: AsLink | AsButton) {
