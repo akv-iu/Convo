@@ -90,7 +90,7 @@ Review fixes included returning the contracted job from cancellation, keeping up
 
 A separate functional integration with current main `ccdffa7` (#47/#48/#49 merged) found **864/865 tests passing and two frontend type errors**. Backend tests pass; merging is blocked by these Claude-owned compatibility updates:
 
-1. `src/app/(app)/matches/match-card.tsx`: its EvidenceKind label map needs `profile_page` and `cv` entries for the foundation's new evidence kinds.
+1. `src/app/(app)/matches/match-card.tsx`: its EvidenceKind label map needs `profile_page` and `cv` entries for the foundation's new evidence kinds. Keep the map compatible with both type versions (for example, infer the seven-key object rather than annotating it with the old five-key union).
 2. `src/components/ui/person-badge.test.ts`: the nullable fixture passed to MatchDetails needs the `evidence` array added by #49 (an empty array fits this existing null-handle test). The missing field is also the one failing runtime test.
 
 No frontend/B1 code was changed to hide those findings. Once Claude updates the compatibility patch, repeat the combined checks. #49 is now merged, so the agreed B1 dependency is clear. #47 owns main's migration 0005; #50 is still pending, and the foundation/auth/state migration chain must be regenerated against the final merged schema before PR/Neon application. The temporary integration kept unresolved migration metadata isolated for code testing; it is not a deployable or published merge.
