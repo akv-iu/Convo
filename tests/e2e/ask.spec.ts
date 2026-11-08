@@ -23,6 +23,13 @@ async function open(page: Page, person = "p_003") {
   await expect(box(page)).toBeVisible();
 }
 
+/** A question saved on the server for `person`, as the ask screen saves it; returns its ID. */
+async function savedAsk(page: Page, text: string, person = "p_003") {
+  const res = await page.request.post("/api/asks", { headers: { "x-demo-user": person }, data: { text } });
+  expect(res.ok()).toBe(true);
+  return ((await res.json()) as { askId: string }).askId;
+}
+
 /** Every request the ask box makes, so tests can check what was (and wasn't) sent. */
 function watch(page: Page) {
   const seen: Request[] = [];
@@ -97,7 +104,9 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
   test("you can pick the kind of question before sending", async ({ page }) => {
     await open(page);
     await box(page).fill("anyone want to build a Raft visualiser with me");
-    await page.getByRole("radio", { name: "Build together" }).check({ force: true });
+    // Tap the visible chip (the radio itself is visually hidden), so the tap is hit-tested like a person's.
+    await page.locator("label").filter({ has: page.getByRole("radio", { name: "Build together" }) }).click();
+    await expect(page.getByRole("radio", { name: "Build together" })).toBeChecked();
     const saving = page.waitForRequest(isSave);
     await send(page).click();
     expect((await saving).postDataJSON()).toEqual({ text: "anyone want to build a Raft visualiser with me", type: "collaboration" });
@@ -175,9 +184,11 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await open(page);
     await box(page).fill("how does Raft do the voting thing");
     await send(page).click();
+    await expect(page).toHaveURL(/\/ask\?ask=/); // the address points at the saved question
     await page.getByRole("button", { name: "Ask something else" }).click();
     await expect(box(page)).toBeFocused();
     await expect(box(page)).toHaveValue("how does Raft do the voting thing");
+    await expect(page).toHaveURL(/\/ask$/); // and stops pointing at it
   });
 
   test("works with the keyboard alone: Ctrl+Enter sends as written", async ({ page, isMobile }) => {
@@ -235,6 +246,18 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(page).toHaveURL(/\/onboarding\/profile$/);
   });
 
+  test("a resolved question read back says it's answered, and offers no Find people", async ({ page }) => {
+    const askId = await savedAsk(page, "how do you size etcd for 500 nodes");
+    const resolved = await page.request.post(`/api/asks/${askId}/resolve`, { headers: { "x-demo-user": "p_003" } });
+    expect(resolved.ok()).toBe(true);
+    await page.setExtraHTTPHeaders({ "x-demo-user": "p_003" });
+    await page.goto(`/ask?ask=${askId}`);
+    await expect(page.locator("blockquote")).toHaveText("how do you size etcd for 500 nodes", { timeout: AFTER_SUBMIT });
+    await expect(page.getByText("You marked this question as answered")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Find people" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Ask something else" })).toBeVisible();
+  });
+
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
@@ -254,4 +277,56 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
       await scan("sent");
     });
   }
+});
+
+test.describe("reading a saved question back (/ask?ask=<id>)", () => {
+  test("Back to your question from the matches shows that question, and a reload reads it from the server", async ({ page }) => {
+    await open(page);
+    await box(page).fill("how does the scheduler do preemption");
+    await send(page).click();
+    await expect(page).toHaveURL(/\/ask\?ask=/, { timeout: AFTER_SUBMIT });
+    const askId = new URL(page.url()).searchParams.get("ask")!;
+
+    await page.getByRole("link", { name: "Find people" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
+    const back = page.getByRole("link", { name: "Back to your question" });
+    await expect(back).toHaveAttribute("href", `/ask?ask=${askId}`);
+    await back.click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
+    await expect(page.locator("blockquote")).toHaveText("how does the scheduler do preemption");
+
+    // Without this tab's copy, the question still comes back: the server is read.
+    await page.evaluate(() => sessionStorage.clear());
+    const reading = page.waitForRequest((r) => r.url().endsWith(`/api/asks/${askId}`) && r.method() === "GET");
+    await page.reload();
+    await reading;
+    await expect(page.locator("blockquote")).toHaveText("how does the scheduler do preemption");
+    await expect(page.getByRole("link", { name: "Find people" })).toHaveAttribute("href", `/matches?ask=${askId}`);
+  });
+
+  test("someone else's or an unknown question says so, and offers an empty box", async ({ page }) => {
+    const theirs = await savedAsk(page, "a question only p_004 asked", "p_004");
+    for (const askId of [theirs, "no-such-ask"]) {
+      await page.setExtraHTTPHeaders({ "x-demo-user": "p_003" });
+      await page.goto(`/ask?ask=${askId}`);
+      await expect(alertWithText(page)).toContainText("That question isn't one of yours, or it no longer exists.");
+      await expect(box(page)).toHaveValue("");
+      await expect(page.getByText("a question only p_004 asked")).toHaveCount(0);
+    }
+  });
+
+  test("a failed load offers Try again, which then loads the question", async ({ page }) => {
+    const askId = await savedAsk(page, "how does etcd store keys");
+    let calls = 0;
+    await page.route(`**/api/asks/${askId}`, (route) => {
+      calls++;
+      return calls === 1 ? route.fulfill({ status: 503, json: { error: "Ask storage is unavailable. Try again." } }) : route.fallback();
+    });
+    await page.setExtraHTTPHeaders({ "x-demo-user": "p_003" });
+    await page.goto(`/ask?ask=${askId}`);
+    await expect(alertWithText(page)).toContainText("Your question didn't load.");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("blockquote")).toHaveText("how does etcd store keys", { timeout: AFTER_SUBMIT });
+    expect(calls).toBe(2);
+  });
 });

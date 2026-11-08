@@ -23,6 +23,7 @@
  */
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { BackLink } from "@/components/ui/back-link";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { githubProfile } from "@/components/ui/person-badge";
@@ -59,7 +60,19 @@ function doneNote(name: string, sent: boolean, passed: boolean): string | null {
 /** Keyed by the ask, so nothing from one ask (its switch setting, deck or answers) shows on another. */
 export function MatchesView() {
   const askId = useSearchParams().get("ask") ?? "";
-  return <AskMatches key={askId} askId={askId} />;
+  return (
+    <>
+      <div className="mx-auto flex max-w-xl flex-col">
+        {/* Back to this question on the ask screen (it reads the saved ask back), not an empty box. */}
+        {askId ? (
+          <BackLink href={`/ask?ask=${encodeURIComponent(askId)}`} label="Back to your question" />
+        ) : (
+          <BackLink href="/ask" label="Back to Ask" />
+        )}
+      </div>
+      <AskMatches key={askId} askId={askId} />
+    </>
+  );
 }
 
 function AskMatches({ askId }: { askId: string }) {

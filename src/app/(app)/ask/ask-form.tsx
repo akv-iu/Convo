@@ -13,9 +13,11 @@
  * (a new ask). A blocked ask (422) shows the server's message and nothing is
  * saved. Only one request is in flight at a time.
  */
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { AskType, type Ask, type RefinedAsk } from "@/contracts/types";
+import { loadAsk } from "../matches/matches";
 import {
   ASK_MAX,
   askProblem,
@@ -25,15 +27,33 @@ import {
   sharpenFailure,
   typeLabel,
   type RefineFailure,
+  recallAsk,
 } from "./asks";
 
 const headingClass =
   "text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
-type Result = { askId: string; rawText: string; refined: RefinedAsk };
+type Result = { askId: string; rawText: string; refined: RefinedAsk; resolved?: boolean };
+
+/** A saved ask as the result screen shows it; an unrefined one shows its raw text. */
+function asResult(ask: Ask): Result {
+  return {
+    askId: ask.id,
+    rawText: ask.rawText,
+    refined: ask.refined ?? { text: ask.rawText, type: "knowledge", minutes: 5 },
+    resolved: ask.status === "resolved",
+  };
+}
 
 export function AskForm() {
+  const router = useRouter();
+  /** /ask?ask=<id>: show that saved question (from matches' Back link, a reload or a shared link). */
+  const askParam = useSearchParams().get("ask");
+  const [readBack, setReadBack] = useState<"loading" | "missing" | "failed" | null>(askParam ? "loading" : null);
+  const [readAttempt, setReadAttempt] = useState(0);
+  /** The ask this screen just sent; the address then points at it, and it needs no loading. */
+  const sentRef = useRef<string | null>(null);
   const [text, setText] = useState("");
   /** The asker's own words while the box holds an AI suggestion; null when it holds their own. */
   const [original, setOriginal] = useState<string | null>(null);
@@ -48,6 +68,31 @@ export function AskForm() {
   const resultRef = useRef<HTMLHeadingElement>(null);
 
   const problem = tried ? askProblem(text) : null;
+
+  // Read the saved question back: this tab's copy at once, then the server's (the truth).
+  useEffect(() => {
+    if (!askParam || sentRef.current === askParam) return; // nothing to show, or just sent here
+    let live = true;
+    void (async () => {
+      const kept = recallAsk(askParam);
+      if (kept) setResult(kept);
+      else setReadBack("loading");
+      const ask = await loadAsk(askParam);
+      if (!live) return;
+      if (typeof ask === "number") {
+        // Someone else's ask, or one that's gone, is a 404 (401 when signed out): start fresh.
+        const missing = ask === 404 || ask === 401;
+        setReadBack(missing ? "missing" : "failed");
+        if (missing) setResult(null);
+        return;
+      }
+      setReadBack(null);
+      setResult(asResult(ask));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [askParam, readAttempt]);
 
   // Move focus to the result's heading once it's on screen, so screen readers announce it.
   useEffect(() => {
@@ -93,6 +138,9 @@ export function AskForm() {
       const done = { askId: saved.askId, rawText: original ?? question, refined: saved.ask.refined ?? { text: question, type, minutes: 5 } };
       rememberAsk(done);
       setResult(done);
+      sentRef.current = done.askId;
+      // Keep it in the address, so a reload or the matches' Back link comes back to it.
+      router.replace(`/ask?ask=${encodeURIComponent(done.askId)}`, { scroll: false });
     } catch {
       setFailure(sendFailure(0, null));
     } finally {
@@ -151,10 +199,15 @@ export function AskForm() {
 
   /** Back to the box with the sent text kept, as the asker's own words to start a new question from. */
   function askAgain() {
+    // Start from the question shown, if the box is empty (e.g. it was read back from a link).
+    if (!text.trim() && result) setText(result.refined.text);
     setResult(null);
     setTried(false);
     setOriginal(null);
     setAnnounce("");
+    setReadBack(null);
+    sentRef.current = null;
+    if (askParam) router.replace("/ask", { scroll: false });
     setTimeout(() => boxRef.current?.focus(), 0);
   }
 
@@ -187,10 +240,18 @@ export function AskForm() {
           </p>
         )}
 
+        {result.resolved && (
+          <p className="mt-4 rounded-xl border-2 border-border px-4 py-3 font-medium">
+            You marked this question as answered, so Lanyard no longer matches it with anyone new.
+          </p>
+        )}
+
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button href={`/matches?ask=${encodeURIComponent(result.askId)}`} className="text-lg sm:px-8">
-            Find people
-          </Button>
+          {!result.resolved && (
+            <Button href={`/matches?ask=${encodeURIComponent(result.askId)}`} className="text-lg sm:px-8">
+              Find people
+            </Button>
+          )}
           <Button variant="secondary" onClick={askAgain} className="text-lg">
             Ask something else
           </Button>
@@ -200,9 +261,34 @@ export function AskForm() {
     );
   }
 
+  if (readBack === "loading") {
+    return (
+      <p role="status" className="mx-auto max-w-2xl text-lg">
+        Loading your question…
+      </p>
+    );
+  }
+
   const sharpened = original !== null;
   return (
     <form onSubmit={onSubmit} noValidate className="mx-auto flex max-w-2xl flex-col" aria-busy={busy !== null}>
+      {readBack === "missing" && (
+        <p role="alert" className={`mb-4 ${errorClass}`}>
+          That question isn&apos;t one of yours, or it no longer exists. Ask a new one below.
+        </p>
+      )}
+      {readBack === "failed" && (
+        <p role="alert" className={`mb-4 ${errorClass}`}>
+          Your question didn&apos;t load.{" "}
+          <button
+            type="button"
+            onClick={() => setReadAttempt((n) => n + 1)}
+            className="underline underline-offset-4"
+          >
+            Try again
+          </button>
+        </p>
+      )}
       {/* One prompt: the heading is the box's label. */}
       <h1 className={headingClass}>
         <label htmlFor="ask-text">What do you want to ask?</label>
