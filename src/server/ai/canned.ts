@@ -13,8 +13,7 @@ function classify(text: string): AskType {
 /** Deterministic stand-in for the model; tests and the fake API rely on it costing nothing. */
 export const cannedAi: AiService = {
   async refineAsk(rawText) {
-    // Stands in for moderation, so the blocked-ask screen can be built with the fake API.
-    if (/\bidiot\b/i.test(rawText)) throw new AskBlockedError();
+    await cannedAi.moderate(rawText);
     const type = classify(rawText);
     const trimmed = rawText.trim().replace(/[.?!]+$/, "");
     const text =
@@ -22,6 +21,11 @@ export const cannedAi: AiService = {
         ? `${trimmed}: what does the hiring loop look like, and what would make my application stand out?`
         : `${trimmed}: can you walk me through the mechanism and the one thing people usually get wrong?`;
     return { text, type, minutes: type === "knowledge" ? 10 : 15 };
+  },
+
+  async moderate(text) {
+    // Stands in for moderation, so the blocked-ask screen can be built with the fake API.
+    if (/\bidiot\b/i.test(text)) throw new AskBlockedError();
   },
 
   async explain(ask, candidates) {

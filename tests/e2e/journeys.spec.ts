@@ -122,7 +122,7 @@ test.describe("done when (A1 and A2)", () => {
     // A asks and sends to the expert.
     await a.goto("/ask");
     await a.getByRole("textbox", { name: "What do you want to ask?" }).fill(QUESTION);
-    await a.getByRole("button", { name: "Sharpen my question" }).click();
+    await a.getByRole("button", { name: "Send", exact: true }).click();
     const question = (await a.locator("blockquote").textContent())!.trim();
     await a.getByRole("link", { name: "Find people" }).click();
     const firstRow = a.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
