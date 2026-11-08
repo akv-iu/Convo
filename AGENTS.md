@@ -62,7 +62,7 @@ Playwright (`npm run test:e2e`) for anything that changes a screen. Tests come w
 ## Review and handoff
 
 - When the other person asks for your approval, inspect the code, contracts and feature behaviour, and try the feature on the preview. Use the author's checks and current CI results; do not rerun lint or build locally just for that review.
-- When making code changes, test and critically review them twice: fix findings from the first pass, then retest and check for regressions in the second. The checks above still apply to your own changes.
+- When making code changes, include the necessary tests and perform one critical review and final verification pass when the implementation task is complete. Run the full required checks at that point, rather than after every intermediate step. During implementation, use focused checks only when needed to investigate failures or verify risky changes. If the final pass finds a problem, fix it and rerun the affected checks; repeat a full suite only when the fix warrants broader regression testing. There is no mandatory second round. This supersedes older handoffs requesting two rounds; the required checks above remain unchanged.
 - Supply the complete manual test checklist at once, including setup, expected results and cleanup. Ask before tests that contact live external services.
 - Clearly signal when work is ready for review or merge, and when it needs the other person's approval.
 

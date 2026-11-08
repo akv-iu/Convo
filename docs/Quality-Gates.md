@@ -75,7 +75,9 @@ An AI reviewer that knows our rules.
 
 ### Tests
 
-Unchanged: lint, types and unit tests with coverage, then the Playwright click-through with an axe scan on the fake API.
+Required checks remain lint, types and unit tests with coverage, then the Playwright click-through with an axe scan on the fake API.
+
+For local implementation work, use one critical review and final verification pass after the task is complete. Write the necessary tests with the code, but save full-suite runs for that final pass. Use focused checks during implementation only when needed to investigate failures or verify risky changes. Fix any findings and rerun the affected checks; repeat a full suite only when the fix warrants broader regression testing. A second complete review/test round is no longer required, including when an older handoff asks for it. The pre-PR requirements and all CI gates still apply.
 
 ## Your routine
 
