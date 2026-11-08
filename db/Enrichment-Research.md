@@ -24,8 +24,8 @@ All requests use the fixed HTTPS OpenAlex API host, reject redirects, bound each
 - [x] Write recorded-response tests before the provider; verify missing implementation fails, then implement it.
 - [x] Add red-to-green regressions for workplace fallback and keeping credentials out of request URLs.
 - [x] Independent review: fix valid null titles and truncated-author membership with failing regressions first. Also reject incomplete abstracts instead of changing their wording by omission.
-- [ ] Run both full review/test rounds with coverage, lint and typecheck against the compatible integration; report newer-main conflicts separately.
-- [ ] Push the isolated branch and wait for approval before opening a PR.
+- [x] Run both full review/test rounds with coverage, lint and typecheck against the compatible integration; report newer-main conflicts separately.
+- [x] Prepare the isolated branch for review; PR creation and merging still require the user's approval.
 
 Focused check (no accounts, credentials or external services):
 
@@ -39,7 +39,15 @@ Recorded fixtures cover ORCID/ROR/name matching, changed workplaces, preview/evi
 
 The user chose **provider-only; wire configuration later**. There is no new environment read or `.env.example` entry. A later approved integration will supply OPENALEX_API_KEY privately, reserve the durable discovery rate limit **before** a provider call, bind previews to owner/input/generation, reject stale completions, and connect the authenticated discovery route. Failed attempts must count against the limit. Active research jobs must stay not_ready until the lease-checked collector/synthesis runner can actually execute them.
 
-No live manual test is requested now. At configuration/integration time, provide the complete setup, positive/empty/failure/owner-isolation test and cleanup checklist together, and ask before any real author lookup. This phase does not establish live provider compatibility, a complete import journey or production readiness. Main's avatar/nullable conflicts and migration regeneration remain separate dependencies.
+No live manual test is requested now. At configuration/integration time, provide the complete setup, positive/empty/failure/owner-isolation test and cleanup checklist together, and ask before any real author lookup. This phase does not establish live provider compatibility, a complete import journey or production readiness. Claude's compatibility `8ee0b3a` now incorporates main's avatars; its merge and B2 migration regeneration remain dependencies.
+
+## Verification results
+
+The provider has **31 recorded-response tests**. An independent final review found two real-data cases, both fixed with failing regressions before retesting: legitimate null work titles and truncated author lists. Sparse abstract positions also have a red-to-green regression. No minor findings were deferred by that review.
+
+First full provider-only round: **910 tests in 63 files**, lint/typecheck passing, **98.60% line coverage**, on source `d939b8c` + compatibility `def5d74` + main `ccdffa7`.
+
+Second full round: **915 tests in 64 files**, lint/typecheck passing, **98.61% line coverage**, on source `d939b8c` + compatibility `8ee0b3a` (including current main `d139e82` and #50). For this functional check only, the B2 schema import conflict retained both primaryKey and AvatarId; conflicting migration metadata stayed isolated. No screen conflicts remained. This is not a regenerated/deployable migration chain, and the temporary merge was not published.
 
 ## Official references checked on 7 November 2026
 
