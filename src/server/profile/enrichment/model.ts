@@ -7,7 +7,7 @@ export const JOB_HISTORY_MS = 2 * INPUT_TTL_MS;
 const lease = z.object({ token: z.uuid(), expiresAt: z.number() });
 export const PrivateJob = z.strictObject({
   fingerprint: z.string(), key: z.uuid(), input: StartEnrichment.nullable(), value: EnrichmentJob,
-  lease: lease.nullable(), collected: z.array(EnrichmentEvidence).max(36),
+  lease: lease.nullable(), queuedAt: z.number().int().nonnegative().optional(), collected: z.array(EnrichmentEvidence).max(36),
 });
 export type PrivateJob = z.infer<typeof PrivateJob>;
 export const OwnerData = z.strictObject({

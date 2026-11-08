@@ -41,3 +41,11 @@ export async function ownersDueForCleanup(limit = 25): Promise<string[]> {
     return rows.map(row => row.userId);
   } catch { enrichmentError("provider_down", 503); }
 }
+
+/** Delay failed due rows without reading or overwriting their private document or a repaired deadline. */
+export async function deferCleanup(userId: string): Promise<void> {
+  try {
+    await db().update(profileEnrichmentStates).set({ nextSweepAt: new Date(Date.now() + 600_000) })
+      .where(and(eq(profileEnrichmentStates.userId, userId), sql`${profileEnrichmentStates.nextSweepAt} <= now()`));
+  } catch { enrichmentError("provider_down", 503); }
+}

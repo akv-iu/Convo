@@ -2,11 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import type { RouteBody, RouteResponse } from "@/contracts/routes";
 import { DiscoverEnrichment, EnrichmentDiscovery, EnrichmentEvidence, EnrichmentIdentity, SourceProgress, StartEnrichment, UploadCv, type EnrichmentJob } from "@/contracts/enrichment";
 import { INPUT_TTL_MS, JOB_HISTORY_MS, LEASE_MS, enrichmentError, type OwnerData, type PrivateJob } from "./model";
-import { mutateOwner, ownersDueForCleanup } from "./storage";
+import { deferCleanup, mutateOwner, ownersDueForCleanup } from "./storage";
 
 const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input, (_key, value) =>
   value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)).digest("hex");
 const terminal = (job: PrivateJob) => ["accepted", "cancelled", "superseded", "manual"].includes(job.value.state);
+// Older queued rows have no timestamp; their fixed input lifetime identifies the original enqueue time.
+const queuedUntil = (job: PrivateJob) => (job.queuedAt ?? Date.parse(job.value.expiresAt) - INPUT_TTL_MS) + LEASE_MS;
 function clearCv(data: OwnerData) {
   if (data.cv) data.removedCvs.push({ id: data.cv.metadata.uploadId, expiresAt: Date.now()+INPUT_TTL_MS });
   data.cv = null;
@@ -20,12 +22,14 @@ function expire(data: OwnerData) {
   const expiredCv = data.cv && Date.parse(data.cv.metadata.expiresAt) <= now ? data.cv.metadata.uploadId : null;
   if (expiredCv) clearCv(data);
   for (const job of data.jobs) {
+    if (job.value.state === "failed" && job.input === null) continue;
     if (!terminal(job) && (Date.parse(job.value.expiresAt) <= now || (expiredCv && job.input?.cv?.uploadId === expiredCv))) {
       discard(data, job, "failed");
       job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed", reason: s.source === "cv" && expiredCv ? "cv_expired" : "timeout" });
-    } else if (job.value.state === "running" && job.lease && job.lease.expiresAt <= now) {
+    } else if ((job.value.state === "queued" && queuedUntil(job) <= now)
+      || (job.value.state === "running" && job.lease && job.lease.expiresAt <= now)) {
       job.value.state = "stalled"; job.lease = null;
-      job.value.sources = job.value.sources.map(s => s.status === "running" ? { ...s, status: "failed", reason: "timeout" } : s);
+      job.value.sources = job.value.sources.map(s => ["waiting", "running"].includes(s.status) ? { ...s, status: "failed", reason: "timeout" } : s);
     }
   }
   data.jobs = data.jobs.filter(j => Date.parse(j.value.expiresAt) + (JOB_HISTORY_MS - INPUT_TTL_MS) > now);
@@ -145,7 +149,8 @@ export function createJob(owner: string, body: RouteBody<"startEnrichment">, git
     const active = sources.some(s => s.status === "waiting");
     const value: EnrichmentJob = { jobId, selectionGeneration: ++data.generation, sources, state: active ? "queued" : "manual",
       phase: active ? "collecting" : "done", draft: null, expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };
-    data.identity = input.identity; data.jobs.push({ key: input.idempotencyKey, fingerprint: keyHash, input: active ? input : null, collected: [], value, lease: null });
+    data.identity = input.identity; data.jobs.push({ key: input.idempotencyKey, fingerprint: keyHash, input: active ? input : null,
+      collected: [], value, lease: null, queuedAt: active ? Date.now() : undefined });
     return value;
   });
 }
@@ -159,13 +164,16 @@ export function cancelJob(owner: string, id: string) {
 export function retryJob(owner: string, id: string) {
   return mutate(owner, data => {
     const job = find(data, id);
-    if (["queued", "running"].includes(job.value.state)) enrichmentError("running", 409, Math.max(1, Math.ceil(((job.lease?.expiresAt ?? Date.now()+30_000)-Date.now())/1000)));
+    if (["queued", "running"].includes(job.value.state)) {
+      const deadline = job.value.state === "queued" ? queuedUntil(job) : job.lease?.expiresAt ?? Date.now()+30_000;
+      enrichmentError("running", 409, Math.max(1, Math.ceil((deadline-Date.now())/1000)));
+    }
     if (!["stalled", "failed", "partial"].includes(job.value.state) || !job.input || job.value.selectionGeneration !== data.generation) enrichmentError("draft_superseded");
     rate(data, "retry", 6);
     job.value.sources = job.value.sources.map(s => ["not_selected", "done", "empty"].includes(s.status) ? s : { ...s, status: "waiting", items: 0, reason: undefined, retryAfterSeconds: undefined });
     job.value.state = "queued"; job.value.draft = null;
     job.value.phase = job.value.sources.some(s => s.status === "waiting") ? "collecting" : "writing";
-    job.lease = null; return job.value;
+    job.lease = null; job.queuedAt = Date.now(); return job.value;
   });
 }
 export function claimJob(owner: string, id: string) {
@@ -211,6 +219,14 @@ export function failJob(owner: string, id: string, token: string, reason: "timeo
 }
 export async function cleanupExpired() {
   const owners = await ownersDueForCleanup();
-  for (const owner of owners) await mutate(owner, () => undefined);
-  return { processed: owners.length };
+  let failed = 0;
+  for (const owner of owners) {
+    try { await mutate(owner, () => undefined); }
+    catch {
+      failed++;
+      // A failed deferral remains due; the failure count reports incomplete cleanup without private data.
+      await deferCleanup(owner).catch(() => undefined);
+    }
+  }
+  return { processed: owners.length - failed, failed };
 }

@@ -5,13 +5,14 @@ import { enrichmentIdentity, enrichmentStart } from "@/contracts/fixtures/enrich
 import { fake } from "@/contracts/fake/handlers";
 import type { EnrichmentJob } from "@/contracts/enrichment";
 
-const mocks = vi.hoisted(() => ({ data: new Map<string, OwnerData>(), due: vi.fn() }));
+const mocks = vi.hoisted(() => ({ data: new Map<string, OwnerData>(), due: vi.fn(), defer: vi.fn() }));
 vi.mock("./storage", () => ({
   mutateOwner: async <T>(owner: string, change: (data: OwnerData) => T): Promise<T> => {
     const data = structuredClone(mocks.data.get(owner) ?? emptyOwnerData());
     const result = change(data); mocks.data.set(owner, OwnerData.parse(data)); return structuredClone(result);
   },
   ownersDueForCleanup: mocks.due,
+  deferCleanup: mocks.defer,
 }));
 import { cancelJob, claimJob, cleanupExpired, createJob, failJob, getJob, readPrivateState, recordCollection, recordDiscovery, removeCv, retryJob, saveIdentity, stageCvText } from "./state";
 const owner = "google:101";
@@ -102,6 +103,19 @@ it("allows one lease, reports stalled after expiry, and requires a deliberate re
   expect((await getJob(owner, job.jobId)).state).toBe("stalled");
   expect((await retryJob(owner, job.jobId)).state).toBe("queued");
 });
+it.each(["new", "legacy"])("recovers an unclaimed %s job and gives a retry a fresh claim deadline", async version => {
+  const job = await createJob(owner, activeInput(), null);
+  if (version === "legacy") delete mocks.data.get(owner)!.jobs[0].queuedAt;
+  vi.advanceTimersByTime(LEASE_MS - 1);
+  expect((await getJob(owner, job.jobId)).state).toBe("queued");
+  vi.advanceTimersByTime(1);
+  expect((await getJob(owner, job.jobId)).state).toBe("stalled");
+  expect((await retryJob(owner, job.jobId)).state).toBe("queued");
+  await expect(retryJob(owner, job.jobId)).rejects.toMatchObject({ code: "running", retryAfterSeconds: 90 });
+  vi.advanceTimersByTime(LEASE_MS - 1);
+  expect((await getJob(owner, job.jobId)).state).toBe("queued");
+  expect((await claimJob(owner, job.jobId)).value.state).toBe("running");
+});
 it("preserves successful source evidence across failure and retry, rejecting an old lease", async () => {
   const cv = await stageCvText(owner, { consent: true, text: "Private CV" });
   const job = await createJob(owner, { ...activeInput(), cv: { uploadId: cv.uploadId } }, null);
@@ -136,6 +150,11 @@ it("purges expired CV/pasted input and draft material before returning status", 
   expect(expired).toMatchObject({ state: "failed", draft: null });
   expect(expired.sources.find(s => s.source === "cv")?.reason).toBe("cv_expired");
   expect(JSON.stringify(mocks.data.get(owner))).not.toMatch(/Secret expiry CV|Private page input/);
+  vi.advanceTimersByTime(3600_000);
+  expect(await getJob(owner, job.jobId)).toEqual(expired);
+  const unchanged = structuredClone(mocks.data.get(owner));
+  await getJob(owner, job.jobId);
+  expect(mocks.data.get(owner)).toEqual(unchanged);
   await expect(retryJob(owner, job.jobId)).rejects.toMatchObject({ code: "draft_superseded" });
 });
 it("keeps foreign jobs hidden and cancellation idempotent", async () => {
@@ -161,7 +180,7 @@ it("binds discovery candidates to their owner and input and refuses changed inpu
 it("runs bounded physical cleanup without loading inputs into a public response", async () => {
   await stageCvText(owner, { consent: true, text: "Private cleanup text" });
   mocks.due.mockResolvedValue([owner]); vi.advanceTimersByTime(INPUT_TTL_MS+1);
-  expect(await cleanupExpired()).toEqual({ processed: 1 });
+  expect(await cleanupExpired()).toEqual({ processed: 1, failed: 0 });
   expect(mocks.data.get(owner)?.cv).toBeNull();
 });
 
