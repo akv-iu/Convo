@@ -11,8 +11,16 @@ Owner: Person A · PRs: #52
     - **An answered question** gets a note and no Find people.
   - **Send goes straight to the matches** (Aaron's round-5 feedback): the asker chose the wording in the box, sharpened or not, so there's no "Current request" step after sending. That screen is now reached only by reading a question back.
   - The "Press Ctrl+Enter…" hint is gone; the character count stays, and so does the shortcut.
-  - "Ask something else" on a question read back takes `?ask=` out of the address, and starts from that question's text.
-- [x] **Tests:** Playwright covers the round trip from the matches and back, a reload with this tab's copy cleared (so the server is read), someone else's and unknown questions, a failed load then Try again, an answered question, and the address while sending and asking again. `back-links.spec.ts` has the new targets.
+  - "Ask something else" on a question read back takes `?ask=` out of the address, and starts from that question's text. It drops a read-back reply still on its way at once, so that reply can't bring the old question back over a new draft.
+  - **No kind-of-question picker** (Aaron): Send carries only the text, and the server gives the default kind. The read-back screen shows the length chip, not a kind chip.
+  - After Send, the buttons stay unavailable only while the matches open. Browser Back brings the box back usable.
+- [x] **Tests:** Playwright covers:
+  - **The round trip:** Send opens `/matches?ask=<id>`, then **Back to your question** shows that question (`/ask?ask=<id>`).
+  - **Reading back:** a reload with this tab's copy cleared (so the server is read), someone else's and unknown questions, a failed load then Try again, and an answered question.
+  - **Starting again:** after a read-back, **Ask something else** leaves `/ask?ask=` for `/ask`. A late read-back reply doesn't bring the old question back (it fails with the fix removed).
+  - **Browser Back after Send** comes back unlocked (it fails on the old lock).
+  - **The box:** no kind picker or shortcut hint, and Send carries only the text.
+  - **Back links:** `back-links.spec.ts` has the new targets.
 - [x] **Docs:** this file.
 
 ## How to try it

@@ -53,7 +53,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await box(page).fill("how does Raft do the voting thing");
     const saving = page.waitForRequest(isSave);
     await send(page).click();
-    expect((await saving).postDataJSON()).toEqual({ text: "how does Raft do the voting thing", type: "knowledge" });
+    expect((await saving).postDataJSON()).toEqual({ text: "how does Raft do the voting thing" }); // no kind: the server defaults it
 
     // No "Current request" step in between: the matches open, with the question as written.
     const askId = await onMatches(page);
@@ -73,7 +73,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
     await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     await expect(page.locator("blockquote")).toHaveText("how does Raft do the voting thing");
-    await expect(page.getByText("Learn something")).toBeVisible();
+    await expect(page.getByText("Learn something")).toHaveCount(0); // no kind chip; the length stays
     await expect(page.getByText("5-minute chat")).toBeVisible();
     await expect(page.getByText("You first wrote:")).toHaveCount(0);
   });
@@ -94,13 +94,12 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     expect((await previewing).postDataJSON()).toEqual({ text: "I want a job at Stripe" });
     await expect(box(page)).toHaveValue(/^I want a job at Stripe: /);
     await expect(page.getByText("Sharpened with AI.")).toBeVisible();
-    await expect(page.getByRole("radio", { name: "Career move" })).toBeChecked(); // the suggestion's type
     expect(seen.filter(isSave)).toHaveLength(0); // a preview saves nothing
 
     await box(page).fill("I want a job at Stripe. What did you do before joining?");
     const saving = page.waitForRequest(isSave);
     await send(page).click();
-    expect((await saving).postDataJSON()).toEqual({ text: "I want a job at Stripe. What did you do before joining?", type: "career" });
+    expect((await saving).postDataJSON()).toEqual({ text: "I want a job at Stripe. What did you do before joining?" });
     await onMatches(page); // the asker chose in the box, so Send goes straight on
     await expect(page.getByText(/Your question: .I want a job at Stripe\. What did you do before joining\?./)).toBeVisible();
     expect(seen.filter(isSave)).toHaveLength(1);
@@ -121,15 +120,39 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await onMatches(page);
   });
 
-  test("you can pick the kind of question before sending", async ({ page }) => {
+  test("there's no kind-of-question picker: Send carries only the text", async ({ page }) => {
     await open(page);
+    await expect(page.getByText("What kind of question is it?")).toHaveCount(0);
+    await expect(page.getByRole("radio")).toHaveCount(0);
     await box(page).fill("anyone want to build a Raft visualiser with me");
-    // Tap the visible chip (the radio itself is visually hidden), so the tap is hit-tested like a person's.
-    await page.locator("label").filter({ has: page.getByRole("radio", { name: "Build together" }) }).click();
-    await expect(page.getByRole("radio", { name: "Build together" })).toBeChecked();
     const saving = page.waitForRequest(isSave);
     await send(page).click();
-    expect((await saving).postDataJSON()).toEqual({ text: "anyone want to build a Raft visualiser with me", type: "collaboration" });
+    expect((await saving).postDataJSON()).toEqual({ text: "anyone want to build a Raft visualiser with me" });
+    const askId = await onMatches(page);
+    // The server gives it the default kind.
+    const saved = await (await page.request.get(`/api/asks/${askId}`, { headers: { "x-demo-user": "p_003" } })).json();
+    expect(saved.refined).toMatchObject({ type: "knowledge", minutes: 5 });
+  });
+
+  test("browser Back after Send brings the box back unlocked, ready for another question", async ({ page, isMobile }) => {
+    await open(page);
+    await box(page).fill("how does etcd store keys");
+    await send(page).click();
+    await onMatches(page);
+    await page.goBack();
+    await expect(box(page)).toBeVisible({ timeout: AFTER_SUBMIT });
+    // Not stuck on "Sending…": both buttons are available again.
+    await expect(send(page)).toBeVisible();
+    await expect(send(page)).not.toHaveAttribute("aria-disabled", "true");
+    await expect(sharpen(page)).not.toHaveAttribute("aria-disabled", "true");
+    await box(page).fill("how does Raft pick a leader");
+    const saving = page.waitForRequest(isSave);
+    if (isMobile) await send(page).click();
+    else {
+      await box(page).focus();
+      await page.keyboard.press("Control+Enter");
+    }
+    expect((await saving).postDataJSON()).toEqual({ text: "how does Raft pick a leader" });
     await onMatches(page);
   });
 
@@ -302,6 +325,42 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
 });
 
 test.describe("reading a saved question back (/ask?ask=<id>)", () => {
+  test("Ask something else wins over a read-back reply that arrives late: the new draft stays", async ({ page }) => {
+    const askId = await savedAsk(page, "how does etcd store keys");
+    // This tab already has the question, so it shows at once while the server's copy is on its way.
+    await page.addInitScript((id) => {
+      const copy = [{ askId: id, rawText: "how does etcd store keys", refined: { text: "how does etcd store keys", type: "knowledge", minutes: 5 } }];
+      sessionStorage.setItem("convo_asks", JSON.stringify(copy));
+    }, askId);
+    // Hold the server's copy until the asker has moved on, and make the move back to plain /ask
+    // slow: Next fetches /ask's page data (prefetched from the header link) before the address changes.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let landed: () => void = () => {};
+    const replied = new Promise<void>((resolve) => (landed = resolve));
+    await page.route(`**/api/asks/${askId}`, async (route) => {
+      await gate;
+      await route.fallback();
+      landed();
+    });
+    await page.route((url) => url.pathname === "/ask", async (route) => {
+      if (route.request().headers()["rsc"]) await new Promise((r) => setTimeout(r, 4000));
+      await route.fallback();
+    });
+    await page.setExtraHTTPHeaders({ "x-demo-user": "p_003" });
+    await page.goto(`/ask?ask=${askId}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
+    await page.getByRole("button", { name: "Ask something else" }).click();
+    await box(page).fill("a brand new draft");
+    release();
+    await replied; // the old question's reply lands while the address still says ?ask=
+    await page.waitForTimeout(300);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("What do you want to ask?");
+    await expect(box(page)).toHaveValue("a brand new draft");
+    await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
+    await expect(box(page)).toHaveValue("a brand new draft");
+  });
+
   test("Back to your question from the matches shows that question, and a reload reads it from the server", async ({ page }) => {
     await open(page);
     await box(page).fill("how does the scheduler do preemption");
