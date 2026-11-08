@@ -14,7 +14,7 @@ vi.mock("./storage", () => ({
   ownersDueForCleanup: mocks.due,
   deferCleanup: mocks.defer,
 }));
-import { cancelJob, claimJob, cleanupExpired, createJob, failJob, finishDraft, getJob, readPrivateState, recordCollection, recordDiscovery, removeCv, retryJob, saveIdentity, stageCvText } from "./state";
+import { cancelJob, claimJob, cleanupExpired, createJob, DISCOVERY_TTL_MS, failJob, finishDraft, getJob, readPrivateState, recordCollection, recordDiscovery, removeCv, reserveDiscovery, retryJob, saveIdentity, stageCvText } from "./state";
 const owner = "google:101";
 const activeInput = (): RouteBody<"startEnrichment"> => ({ ...enrichmentStart(), github: { import: false, bio: false, repos: false, orgs: false }, publicProfile: { kind: "text", text: "Private page input" } });
 function evidence(source: "cv" | "public_profile" = "public_profile") {
@@ -189,8 +189,10 @@ it("limits uploads durably and allows another window after its cooldown", async 
 });
 it("binds discovery candidates to their owner and input and refuses changed inputs", async () => {
   const input = { source: "research" as const, name: enrichmentIdentity.name, workplaceName: enrichmentIdentity.workplaceName, rorId: null, orcid: null };
-  const preview = await fake.discoverEnrichment({ userId: "u_demo_a", params: {}, query: new URLSearchParams(), body: input });
-  await recordDiscovery(owner, input, preview);
+  const preview = { ...await fake.discoverEnrichment({ userId: "u_demo_a", params: {}, query: new URLSearchParams(), body: input }),
+    expiresAt: new Date(Date.now() + DISCOVERY_TTL_MS).toISOString() };
+  await saveIdentity(owner, enrichmentIdentity);
+  await recordDiscovery(owner, input, preview, await reserveDiscovery(owner, input));
   const body = { ...activeInput(), research: { discoveryId: preview.discoveryId, candidateId: preview.candidates[0].id } };
   expect((await createJob(owner, body, null)).sources[1].selection?.url).toBe(preview.candidates[0].url);
   await expect(createJob("other", body, null)).rejects.toMatchObject({ code: "selection_stale" });

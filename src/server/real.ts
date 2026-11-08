@@ -14,17 +14,16 @@ import { beginGitHubConnection } from "@/server/profile/connection";
 import { enrichmentState, saveEnrichmentIdentity, startEnrichment, getEnrichment, retryEnrichment } from "@/server/profile/enrichment/service";
 import { cancelJob, removeCv, stageCvText } from "@/server/profile/enrichment/state";
 import { acceptEnrichment, enrichmentSources, removeEnrichmentSource } from "@/server/profile/enrichment/approval";
-
-// Foundation only: do not advertise real imports before the backend release.
-const enrichmentUnavailable = async (): Promise<never> => {
-  throw Object.assign(new Error("Real profile enrichment is not available yet."), { status: 501 });
-};
+import { discoverEnrichment } from "@/server/profile/enrichment/discovery";
+import { config } from "@/server/config";
 
 export const real: Api = {
   enrichmentState: ({ userId }) => enrichmentState(userId),
   saveEnrichmentIdentity: ({ userId, body }) => saveEnrichmentIdentity(userId, body),
   connectGitHub: ({ userId }) => beginGitHubConnection(userId),
-  discoverEnrichment: enrichmentUnavailable,
+  discoverEnrichment: ({ userId, body }) => discoverEnrichment(userId, body, {
+    openAlexApiKey: config.openAlexApiKey, braveSearchApiKey: config.braveSearchApiKey,
+  }),
   uploadCv: ({ userId, body }) => stageCvText(userId, body),
   removeCv: ({ userId, params }) => removeCv(userId, params.id),
   startEnrichment: ({ userId, body }) => startEnrichment(userId, body),
