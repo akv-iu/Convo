@@ -8,9 +8,10 @@ export async function GET(req: Request) {
   if (!config.profileEnrichmentEnabled || config.fakeApi) return new Response(null, { status: 404 });
   try {
     const url = await authorizeGitHubConnection(() => signIn("github", { redirect: false, redirectTo: ENRICHMENT_RETURN }));
-    return Response.redirect(url, 303);
-  } catch {
+    return new Response(null, { status: 303, headers: { Location: url, "Cache-Control": "no-store" } });
+  } catch (error) {
     await clearConnection();
-    return Response.redirect(new URL(`${ENRICHMENT_RETURN}?enrichmentError=github_reconnect`, req.url), 303);
+    const code = error && typeof error === "object" && "code" in error && error.code === "github_reconnect" ? "github_reconnect" : "provider_down";
+    return new Response(null, { status: 303, headers: { Location: new URL(`${ENRICHMENT_RETURN}?enrichmentError=${code}`, req.url).toString(), "Cache-Control": "no-store" } });
   }
 }

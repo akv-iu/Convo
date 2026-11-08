@@ -10,5 +10,5 @@ export async function GET(req: Request) {
   await clearConnection();
   const cancelled = new URL(req.url).searchParams.get("error") === "AccessDenied";
   const code = cancelled ? connecting ? "github_connect_cancelled" : "sign_in_cancelled" : "provider_down";
-  return Response.redirect(new URL(`${ENRICHMENT_RETURN}?enrichmentError=${code}`, req.url), 303);
+  return new Response(null, { status: 303, headers: { Location: new URL(`${ENRICHMENT_RETURN}?enrichmentError=${code}`, req.url).toString(), "Cache-Control": "no-store" } });
 }

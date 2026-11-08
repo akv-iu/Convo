@@ -17,10 +17,15 @@ it("starts GitHub linking only through its protected server-side authorization f
   expect(mocks.signIn).toHaveBeenCalledWith("github",{redirect:false,redirectTo:"/signin"});
 });
 it("returns a failed attempt to page two without leaking a raw error",async()=>{
-  mocks.authorize.mockRejectedValue(new Error("secret-error"));
+  mocks.authorize.mockRejectedValue(Object.assign(new Error("secret-error"), { code: "github_reconnect" }));
   const response=await connect(new Request("https://app.invalid/api/auth/connect/github"));
   expect(response.headers.get("location")).toBe("https://app.invalid/signin?enrichmentError=github_reconnect");
   expect(mocks.clear).toHaveBeenCalled();
+});
+it("does not mislabel a provider failure as an expired connection",async()=>{
+  mocks.authorize.mockRejectedValue(new Error("secret-provider-error"));
+  const response=await connect(new Request("https://app.invalid/api/auth/connect/github"));
+  expect(response.headers.get("location")).toBe("https://app.invalid/signin?enrichmentError=provider_down");
 });
 it.each([{fakeApi:true,profileEnrichmentEnabled:true},{fakeApi:false,profileEnrichmentEnabled:false}])("keeps real linking unavailable outside the enabled real backend",async settings=>{
   Object.assign(mocks.runtime,settings);
