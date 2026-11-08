@@ -1,23 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { RouteBody, RouteResponse } from "@/contracts/routes";
-import { DiscoverEnrichment, EnrichmentDiscovery, EnrichmentEvidence, EnrichmentIdentity, SourceProgress, StartEnrichment, UploadCv, type EnrichmentJob } from "@/contracts/enrichment";
+import { DiscoverEnrichment, EnrichmentDiscovery, EnrichmentDraft, EnrichmentEvidence, EnrichmentIdentity, SourceProgress, StartEnrichment, UploadCv, type EnrichmentJob } from "@/contracts/enrichment";
 import { INPUT_TTL_MS, JOB_HISTORY_MS, LEASE_MS, enrichmentError, type OwnerData, type PrivateJob } from "./model";
 import { deferCleanup, mutateOwner, ownersDueForCleanup } from "./storage";
 
-const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input, (_key, value) =>
+export const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input, (_key, value) =>
   value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)).digest("hex");
 const terminal = (job: PrivateJob) => ["accepted", "cancelled", "superseded", "manual"].includes(job.value.state);
 // Older queued rows have no timestamp; their fixed input lifetime identifies the original enqueue time.
 const queuedUntil = (job: PrivateJob) => (job.queuedAt ?? Date.parse(job.value.expiresAt) - INPUT_TTL_MS) + LEASE_MS;
-function clearCv(data: OwnerData) {
+export function clearCv(data: OwnerData) {
   if (data.cv) data.removedCvs.push({ id: data.cv.metadata.uploadId, expiresAt: Date.now()+INPUT_TTL_MS });
   data.cv = null;
 }
-function discard(data: OwnerData, job: PrivateJob, state: "cancelled" | "superseded" | "failed", keepUpload?: string) {
+export function discard(data: OwnerData, job: PrivateJob, state: "cancelled" | "superseded" | "failed", keepUpload?: string) {
   if (job.input?.cv?.uploadId === data.cv?.metadata.uploadId && data.cv?.metadata.uploadId !== keepUpload) clearCv(data);
   job.input = null; job.collected = []; job.lease = null; job.value.draft = null; job.value.state = state; job.value.phase = "done";
 }
-function expire(data: OwnerData) {
+export function expire(data: OwnerData) {
   const now = Date.now();
   const expiredCv = data.cv && Date.parse(data.cv.metadata.expiresAt) <= now ? data.cv.metadata.uploadId : null;
   if (expiredCv) clearCv(data);
@@ -122,7 +122,7 @@ function selected(data: OwnerData, input: RouteBody<"startEnrichment">, source: 
   if (!candidate) enrichmentError("selection_stale");
   return { label: "name" in candidate ? candidate.name : candidate.title, url: candidate.url };
 }
-export function createJob(owner: string, body: RouteBody<"startEnrichment">, githubLogin: string | null) {
+export function createJob(owner: string, body: RouteBody<"startEnrichment">, githubLogin: string | null, baseTextVersion = 0) {
   const input = StartEnrichment.parse(body); validateIdentity(input.identity);
   const jobId = randomUUID(); const keyHash = fingerprint(input);
   return mutate(owner, data => {
@@ -150,18 +150,23 @@ export function createJob(owner: string, body: RouteBody<"startEnrichment">, git
     const value: EnrichmentJob = { jobId, selectionGeneration: ++data.generation, sources, state: active ? "queued" : "manual",
       phase: active ? "collecting" : "done", draft: null, expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };
     data.identity = input.identity; data.jobs.push({ key: input.idempotencyKey, fingerprint: keyHash, input: active ? input : null,
-      collected: [], value, lease: null, queuedAt: active ? Date.now() : undefined });
+      collected: [], value, lease: null, queuedAt: active ? Date.now() : undefined, baseTextVersion });
     return value;
   });
 }
-export const getJob = (owner: string, id: string) => mutate(owner, data => find(data, id).value);
+export const getJob = (owner: string, id: string, textVersion?: number) => mutate(owner, data => {
+  const job = find(data, id);
+  if (job.value.draft && job.value.state !== "accepted" && textVersion !== undefined)
+    job.value.draft.needsReview = job.value.draft.baseTextVersion !== textVersion;
+  return job.value;
+});
 export function cancelJob(owner: string, id: string) {
   return mutate(owner, data => {
     const job = find(data, id); if (job.value.state === "accepted") enrichmentError("draft_superseded");
     discard(data, job, "cancelled"); return job.value;
   });
 }
-export function retryJob(owner: string, id: string) {
+export function retryJob(owner: string, id: string, textVersion?: number) {
   return mutate(owner, data => {
     const job = find(data, id);
     if (["queued", "running"].includes(job.value.state)) {
@@ -173,7 +178,9 @@ export function retryJob(owner: string, id: string) {
     job.value.sources = job.value.sources.map(s => ["not_selected", "done", "empty"].includes(s.status) ? s : { ...s, status: "waiting", items: 0, reason: undefined, retryAfterSeconds: undefined });
     job.value.state = "queued"; job.value.draft = null;
     job.value.phase = job.value.sources.some(s => s.status === "waiting") ? "collecting" : "writing";
-    job.lease = null; job.queuedAt = Date.now(); return job.value;
+    job.lease = null; job.queuedAt = Date.now();
+    if (textVersion !== undefined) job.baseTextVersion = textVersion;
+    return job.value;
   });
 }
 export function claimJob(owner: string, id: string) {
@@ -214,6 +221,25 @@ export function failJob(owner: string, id: string, token: string, reason: "timeo
     const job = withLease(data, id, token);
     job.value.state = "failed"; job.lease = null;
     job.value.sources = job.value.sources.map(s => s.status === "running" ? { ...s, status: "failed", reason: safeReason } : s);
+    return job.value;
+  });
+}
+/** Internal worker completion: only collected evidence from the current lease may support a draft. */
+export function finishDraft(owner: string, id: string, token: string,
+  proposal: Pick<NonNullable<EnrichmentJob["draft"]>, "bio" | "bioEvidenceIds" | "expertise">) {
+  return mutate(owner, data => {
+    const job = withLease(data, id, token);
+    const parsed = EnrichmentDraft.safeParse({ ...proposal, draftVersion: (job.draftVersion ?? 0) + 1,
+      baseTextVersion: job.baseTextVersion ?? 0, evidence: job.collected, needsReview: false });
+    if (!parsed.success || job.value.phase !== "writing" || job.value.sources.some(s => ["waiting", "running"].includes(s.status))) enrichmentError("invalid_input", 400);
+    const draft = parsed.data;
+    const references = [...draft.bioEvidenceIds, ...draft.expertise.flatMap(e => e.evidenceIds)];
+    if (references.some(id => !job.collected.some(e => e.id === id)) || (draft.bio.trim() && !draft.bioEvidenceIds.length)
+      || draft.expertise.some(e => !e.evidenceIds.length)) enrichmentError("invalid_input", 400);
+    job.draftVersion = draft.draftVersion; job.value.draft = job.collected.length ? draft : null;
+    const failed = job.value.sources.some(s => s.status === "failed");
+    job.value.state = job.collected.length ? failed ? "partial" : "ready" : failed ? "failed" : "manual";
+    job.value.phase = "done"; job.lease = null;
     return job.value;
   });
 }

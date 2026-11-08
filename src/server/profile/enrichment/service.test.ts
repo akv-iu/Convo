@@ -1,10 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { enrichmentIdentity, enrichmentStart } from "@/contracts/fixtures/enrichment";
-const mocks = vi.hoisted(() => ({ currentProvider: vi.fn(), account: vi.fn(), staged: vi.fn(), save: vi.fn(), create: vi.fn() }));
+const mocks = vi.hoisted(() => ({ currentProvider: vi.fn(), account: vi.fn(), staged: vi.fn(), save: vi.fn(), create: vi.fn(), user: vi.fn(), job: vi.fn(), retry: vi.fn() }));
 vi.mock("../connection",()=>({ accountState:mocks.currentProvider }));
 vi.mock("../identities",()=>({ readAccountState:mocks.account }));
-vi.mock("./state",()=>({ readPrivateState:mocks.staged, saveIdentity:mocks.save, createJob:mocks.create }));
-import { enrichmentState, saveEnrichmentIdentity, startEnrichment } from "./service";
+vi.mock("../service",()=>({ readUser:mocks.user }));
+vi.mock("./state",()=>({ readPrivateState:mocks.staged, saveIdentity:mocks.save, createJob:mocks.create, getJob:mocks.job, retryJob:mocks.retry }));
+import { enrichmentState, saveEnrichmentIdentity, startEnrichment, getEnrichment, retryEnrichment } from "./service";
+it("uses the current text revision when polling or deliberately retrying a draft",async()=>{
+  mocks.user.mockResolvedValue({textVersion:7});
+  await getEnrichment("owner","job"); await retryEnrichment("owner","job");
+  expect(mocks.job).toHaveBeenCalledWith("owner","job",7); expect(mocks.retry).toHaveBeenCalledWith("owner","job",7);
+});
 beforeEach(()=>{vi.clearAllMocks();mocks.currentProvider.mockResolvedValue("google");mocks.account.mockResolvedValue({signIn:{provider:"google"},github:{connected:false,login:null},onboarded:false,identity:null,job:null,pendingCv:null});
   mocks.staged.mockResolvedValue({identity:enrichmentIdentity,job:{jobId:"saved-job",state:"manual"},pendingCv:null});mocks.save.mockResolvedValue({identity:enrichmentIdentity,job:null,pendingCv:null});mocks.create.mockResolvedValue({state:"manual"});});
 it("composes authenticated owner state with only safe staging metadata",async()=>{

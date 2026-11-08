@@ -2,7 +2,15 @@ import type { RouteBody } from "@/contracts/routes";
 import { accountState } from "../connection";
 import { readAccountState } from "../identities";
 import { enrichmentError } from "./model";
-import { createJob, readPrivateState, saveIdentity } from "./state";
+import { createJob, getJob, readPrivateState, retryJob, saveIdentity } from "./state";
+import { readUser } from "../service";
+
+export async function getEnrichment(owner: string, id: string) {
+  return getJob(owner, id, (await readUser(owner)).textVersion);
+}
+export async function retryEnrichment(owner: string, id: string) {
+  return retryJob(owner, id, (await readUser(owner)).textVersion);
+}
 
 export async function enrichmentState(owner: string) {
   const [account, staged] = await Promise.all([readAccountState(owner, await accountState(owner)), readPrivateState(owner)]);

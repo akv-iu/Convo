@@ -11,8 +11,9 @@ import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/serv
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
 import { beginGitHubConnection } from "@/server/profile/connection";
-import { enrichmentState, saveEnrichmentIdentity, startEnrichment } from "@/server/profile/enrichment/service";
-import { cancelJob, getJob, removeCv, retryJob, stageCvText } from "@/server/profile/enrichment/state";
+import { enrichmentState, saveEnrichmentIdentity, startEnrichment, getEnrichment, retryEnrichment } from "@/server/profile/enrichment/service";
+import { cancelJob, removeCv, stageCvText } from "@/server/profile/enrichment/state";
+import { acceptEnrichment, enrichmentSources, removeEnrichmentSource } from "@/server/profile/enrichment/approval";
 
 // Foundation only: do not advertise real imports before the backend release.
 const enrichmentUnavailable = async (): Promise<never> => {
@@ -27,12 +28,12 @@ export const real: Api = {
   uploadCv: ({ userId, body }) => stageCvText(userId, body),
   removeCv: ({ userId, params }) => removeCv(userId, params.id),
   startEnrichment: ({ userId, body }) => startEnrichment(userId, body),
-  getEnrichment: ({ userId, params }) => getJob(userId, params.id),
-  retryEnrichment: ({ userId, params }) => retryJob(userId, params.id),
-  acceptEnrichment: enrichmentUnavailable,
+  getEnrichment: ({ userId, params }) => getEnrichment(userId, params.id),
+  retryEnrichment: ({ userId, params }) => retryEnrichment(userId, params.id),
+  acceptEnrichment: ({ userId, params, body }) => acceptEnrichment(userId, params.id, body),
   cancelEnrichment: ({ userId, params }) => cancelJob(userId, params.id),
-  enrichmentSources: enrichmentUnavailable,
-  removeEnrichmentSource: enrichmentUnavailable,
+  enrichmentSources: ({ userId }) => enrichmentSources(userId),
+  removeEnrichmentSource: ({ userId, params }) => removeEnrichmentSource(userId, params.id),
   getMe: ({ userId }) => getProfile(userId),
   putMe: ({ userId, body }) => updateProfile(userId, body),
   searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),

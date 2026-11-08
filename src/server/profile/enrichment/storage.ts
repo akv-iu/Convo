@@ -3,6 +3,13 @@ import { db } from "../../../../db";
 import { profileEnrichmentStates } from "../../../../db/schema";
 import { emptyOwnerData, enrichmentError, INPUT_TTL_MS, JOB_HISTORY_MS, OwnerData, StateError } from "./model";
 
+export function nextSweepAt(data: OwnerData): Date | null {
+  const deadlines = [...(data.cv ? [Date.parse(data.cv.metadata.expiresAt)] : []),
+    ...data.discoveries.map(d => Date.parse(d.value.expiresAt)), ...data.removedCvs.map(cv => cv.expiresAt),
+    ...data.jobs.map(j => Date.parse(j.value.expiresAt) + (j.input ? 0 : JOB_HISTORY_MS - INPUT_TTL_MS))];
+  return deadlines.length ? new Date(Math.min(...deadlines)) : null;
+}
+
 /** Pure mutations can retry after a competing tab wins; never call a provider inside them. */
 export async function mutateOwner<T>(userId: string, change: (data: OwnerData) => T): Promise<T> {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -13,15 +20,11 @@ export async function mutateOwner<T>(userId: string, change: (data: OwnerData) =
       const result = change(data);
       const checked = OwnerData.parse(data);
       if (before === JSON.stringify(checked)) return structuredClone(result);
-      const deadlines = [...(checked.cv ? [Date.parse(checked.cv.metadata.expiresAt)] : []),
-        ...checked.discoveries.map(d => Date.parse(d.value.expiresAt)),
-        ...checked.removedCvs.map(cv => cv.expiresAt),
-        ...checked.jobs.map(j => Date.parse(j.value.expiresAt) + (j.input ? 0 : JOB_HISTORY_MS - INPUT_TTL_MS))];
-      const nextSweepAt = deadlines.length ? new Date(Math.min(...deadlines)) : null;
+      const deadline = nextSweepAt(checked);
       const saved = row
-        ? await db().update(profileEnrichmentStates).set({ document: checked, version: row.version + 1, nextSweepAt })
+        ? await db().update(profileEnrichmentStates).set({ document: checked, version: row.version + 1, nextSweepAt: deadline })
           .where(and(eq(profileEnrichmentStates.userId, userId), eq(profileEnrichmentStates.version, row.version))).returning({ userId: profileEnrichmentStates.userId })
-        : await db().insert(profileEnrichmentStates).values({ userId, document: checked, version: 1, nextSweepAt })
+        : await db().insert(profileEnrichmentStates).values({ userId, document: checked, version: 1, nextSweepAt: deadline })
           .onConflictDoNothing().returning({ userId: profileEnrichmentStates.userId });
       if (saved[0]) return structuredClone(result);
     } catch (error) {

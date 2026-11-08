@@ -8,6 +8,8 @@ const lease = z.object({ token: z.uuid(), expiresAt: z.number() });
 export const PrivateJob = z.strictObject({
   fingerprint: z.string(), key: z.uuid(), input: StartEnrichment.nullable(), value: EnrichmentJob,
   lease: lease.nullable(), queuedAt: z.number().int().nonnegative().optional(), collected: z.array(EnrichmentEvidence).max(36),
+  baseTextVersion: z.number().int().nonnegative().optional(), draftVersion: z.number().int().nonnegative().optional(),
+  accepted: z.object({ fingerprint: z.string(), savedRevision: z.number().int().nonnegative() }).optional(),
 });
 export type PrivateJob = z.infer<typeof PrivateJob>;
 export const OwnerData = z.strictObject({

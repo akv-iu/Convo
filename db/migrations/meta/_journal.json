@@ -71,6 +71,13 @@
       "when": 1794107396644,
       "tag": "0009_enrichment_state",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794110231095,
+      "tag": "0010_approved_profile_evidence",
+      "breakpoints": true
     }
   ]
 }

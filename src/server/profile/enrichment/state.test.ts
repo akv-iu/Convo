@@ -14,7 +14,7 @@ vi.mock("./storage", () => ({
   ownersDueForCleanup: mocks.due,
   deferCleanup: mocks.defer,
 }));
-import { cancelJob, claimJob, cleanupExpired, createJob, failJob, getJob, readPrivateState, recordCollection, recordDiscovery, removeCv, retryJob, saveIdentity, stageCvText } from "./state";
+import { cancelJob, claimJob, cleanupExpired, createJob, failJob, finishDraft, getJob, readPrivateState, recordCollection, recordDiscovery, removeCv, retryJob, saveIdentity, stageCvText } from "./state";
 const owner = "google:101";
 const activeInput = (): RouteBody<"startEnrichment"> => ({ ...enrichmentStart(), github: { import: false, bio: false, repos: false, orgs: false }, publicProfile: { kind: "text", text: "Private page input" } });
 function evidence(source: "cv" | "public_profile" = "public_profile") {
@@ -25,6 +25,28 @@ function evidence(source: "cv" | "public_profile" = "public_profile") {
 function completed(sources: EnrichmentJob["sources"]) {
   return sources.map(s => s.status === "not_selected" ? s : { ...s, status: "done" as const, items: 1 });
 }
+it("finishes only a live collected draft, retaining its original text version across badge changes", async () => {
+  const job = await createJob(owner, activeInput(), null, 7); const lease = await claimJob(owner, job.jobId);
+  await recordCollection(owner, job.jobId, lease.token, completed(lease.value.sources), [evidence()]);
+  const proposal = { bio: "Professional work", bioEvidenceIds: [evidence().id], expertise: [{ label: "Research", evidenceIds: [evidence().id] }] };
+  const ready = await finishDraft(owner, job.jobId, lease.token, proposal);
+  expect(ready).toMatchObject({ state: "ready", draft: { baseTextVersion: 7, draftVersion: 1, needsReview: false } });
+  expect((await getJob(owner, job.jobId, 8)).draft?.needsReview).toBe(true);
+  await expect(finishDraft(owner, job.jobId, lease.token, proposal)).rejects.toMatchObject({ code: "draft_superseded" });
+});
+it("rejects invented draft references and late cancelled workers", async () => {
+  const job = await createJob(owner, activeInput(), null); const lease = await claimJob(owner, job.jobId);
+  await recordCollection(owner, job.jobId, lease.token, completed(lease.value.sources), [evidence()]);
+  await expect(finishDraft(owner, job.jobId, lease.token, { bio: "Wrong", bioEvidenceIds: ["foreign"], expertise: [] })).rejects.toMatchObject({ code: "invalid_input" });
+  await cancelJob(owner, job.jobId);
+  await expect(finishDraft(owner, job.jobId, lease.token, { bio: "Work", bioEvidenceIds: [evidence().id], expertise: [] })).rejects.toMatchObject({ code: "draft_superseded" });
+});
+it("keeps an all-source failure distinct from an empty successful/manual import", async () => {
+  const job = await createJob(owner, activeInput(), null); const lease = await claimJob(owner, job.jobId);
+  const progress = lease.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed" as const, reason: "provider_down" as const });
+  await recordCollection(owner, job.jobId, lease.token, progress, []);
+  expect(await finishDraft(owner, job.jobId, lease.token, { bio: "", bioEvidenceIds: [], expertise: [] })).toMatchObject({ state: "failed", draft: null });
+});
 beforeEach(() => { mocks.data.clear(); mocks.due.mockReset().mockResolvedValue([]); vi.useFakeTimers(); vi.setSystemTime(new Date("2026-11-07T12:00:00Z")); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 

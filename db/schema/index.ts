@@ -4,6 +4,7 @@
  */
 import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { ApprovedEvidence, ProfileSource } from "../../src/server/profile/evidence";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
@@ -21,8 +22,13 @@ export const users = pgTable("users", {
   visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
   githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
-  /** A built-in picture (Person.avatar); null shows initials. Last, so existing row reads keep their column order. */
+  /** A built-in picture (Person.avatar); null shows initials. */
   avatar: text("avatar").$type<AvatarId>(),
+  profileEvidence: jsonb("profile_evidence").$type<ApprovedEvidence[]>(),
+  profileSources: jsonb("profile_sources").$type<ProfileSource[]>().notNull().default([]),
+  profileEvidencePending: boolean("profile_evidence_pending").notNull().default(false),
+  expertise: jsonb("expertise").$type<string[]>(),
+  textVersion: integer("text_version").notNull().default(0),
 });
 
 /** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */

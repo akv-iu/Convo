@@ -12,6 +12,7 @@ This tracks the whole feature across the foundation, backend and screens. A chec
 - [x] Authentication implementation: provider-subject ownership, session/state-bound GitHub linking, minimal Google scopes and mocked callback tests. Live acceptance remains open.
 - [ ] Backend: real source discovery/retrieval, isolated CV processing, durable/recoverable jobs, cached synthesis, approval and withdrawal.
 - [x] Private staging/job-state implementation: owner-only answers and pasted CV, durable manual jobs, lease/retry kernel and expiry. Collector/synthesis runner and operational cleanup scheduling remain open.
+- [x] Approved-evidence storage implementation: atomic approval/withdrawal, text revisions, all-source indexing, pending-sync retries and source ownership tests. Migration and live acceptance remain open; see [the storage handoff](../../db/Enrichment-Approval.md).
 - [ ] Screens: source controls, candidate previews, CV, progress, help, editable bio and nullable-handle display.
 - [ ] Search: expertise, reserved-ID protection, cross-route memory state and complete-evidence rebuild recovery.
 - [ ] Data: reviewed additive migrations applied/verified in the intended Neon environment without resetting shared data.
