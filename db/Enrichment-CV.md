@@ -8,7 +8,49 @@ Integration verification: clean `npm ci`, lint/typecheck twice, and two complete
 
 To repeat locally: use Node 22.18+ on the supported 22 line or Node 24, check out the integrated branch in an isolated worktree, run `npm ci`, `npm run lint`, `npm run typecheck`, then `npm test -- --coverage --maxWorkers=2`. Expected: all checks pass; fixture warnings may print. No credentials are needed, no server is started, and no data cleanup is required. Do not install into a worktree whose `node_modules` is a junction to another checkout.
 
-Codex keeps authenticated upload, consent and ownership checks, private storage, expiry and cleanup, contact-data scrubbing, synthesis, approval, routes and migrations.
+Codex keeps contact-data scrubbing, synthesis, approval, start/retry, configuration, dependencies and migrations.
+
+## Upload integration (`b/enrichment-cv-upload`, on `b/enrichment-runner` acd8cb9)
+
+`POST /api/profile-enrichment/cv` with the flag on and the real API now reads PDF and DOCX files. Pasted text works as before. The route file and `real.ts` are unchanged: `uploadCv` already calls `stageCvText`, which now handles both kinds of upload.
+
+The order of checks, before any parsing:
+
+1. **The adapter, unchanged:**
+   - flag off: 404;
+   - cross-site: 403;
+   - signed out: 401;
+   - wrong content type, or more than 2 MiB + 16 KiB streamed: 415 or 413;
+   - extra or repeated form fields, or `consent` other than `"true"`: 400 `invalid_input`;
+   - file over 2 MiB: 413 `cv_too_large`;
+   - declared type other than PDF/DOCX: 415 `cv_unsupported`.
+2. **The contract schema.**
+3. **`stageCvText`:** the upload limit (6 per ten minutes, per owner, durable) is counted in its own write first. A file that then fails to parse, or times out, has still used an attempt. Over the limit it returns 429 and the file is never parsed.
+4. **The file is parsed** with `extractCvText` in the existing worker, bounded by the deadline, heap, memory and two-at-a-time limits described below. Its own bytes decide the format. Errors keep their documented codes: `cv_encrypted` and `cv_unreadable` are 422, `cv_unsupported` is 415, and a broken worker is `unknown`, which the adapter sends as 503.
+5. **Only then is the pending CV replaced**, in one owner-row write:
+   - unfinished jobs using the old CV are cancelled;
+   - the old upload ID gets a removal tombstone;
+   - the extracted text is stored with `filename`, `characters`, `warnings` (`cv_truncated`) and a 24-hour `expiresAt`.
+
+   A failed or refused upload leaves the previous CV untouched.
+
+Privacy:
+- The file's bytes are never stored. They live only in the request and the worker's transferred copy.
+- The filename is shown back only to its owner. Folders and control characters are removed (an empty result becomes "CV").
+- Nothing is logged.
+- The reply is metadata only.
+- Another owner can't read, remove or start with the upload: 404, or `cv_expired`.
+
+Worker packaging, checked against the installed Next 16 documentation:
+- Route handlers run on the Node runtime by default.
+- Turbopack bundles `new Worker(...)` expressions unless they carry a `turbopackIgnore` comment, and none is used.
+- unpdf and Mammoth are not on Next's automatic `serverExternalPackages` list, so they are bundled into the worker chunk.
+
+No `next.config` or route-segment change is needed. A parse takes at most 8 s, but the wait for a free parser slot has no limit of its own. If Vercel's default function duration is ever lowered, set `maxDuration` on this route.
+
+Tests (fixtures and recorded database replies only):
+- `cv-staging.test.ts`: real worker; PDF and DOCX; pasted text; truncation; encrypted, unsupported, scanned and malformed files keeping the previous CV; a parser timeout; the limit counted before parsing; replacement and job cancellation; expiry; owner isolation; filename cleaning.
+- `cv/upload.test.ts`: through the real adapter; signed out, no consent, too large, wrong type and two fields are all refused before parsing or counting; documented codes; metadata-only replies; no bytes stored; foreign removal is 404; the fake's outcomes are unchanged.
 
 ## Interface
 

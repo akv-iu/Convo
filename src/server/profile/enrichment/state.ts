@@ -3,6 +3,7 @@ import type { RouteBody, RouteResponse } from "@/contracts/routes";
 import { DiscoverEnrichment, EnrichmentDiscovery, EnrichmentDraft, EnrichmentEvidence, EnrichmentIdentity, SourceProgress, StartEnrichment, UploadCv, type EnrichmentJob } from "@/contracts/enrichment";
 import { INPUT_TTL_MS, JOB_HISTORY_MS, LEASE_MS, enrichmentError, type OwnerData, type PrivateJob } from "./model";
 import { deferCleanup, mutateOwner, ownersDueForCleanup, readOwner } from "./storage";
+import { CV_LIMITS, extractCvText, type CvLimits } from "./cv-parser";
 
 export const fingerprint = (input: unknown) => createHash("sha256").update(JSON.stringify(input, (_key, value) =>
   value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value)).digest("hex");
@@ -85,16 +86,25 @@ export function saveIdentity(owner: string, input: RouteBody<"saveEnrichmentIden
     data.identity = identity; return projection(data);
   });
 }
-export function stageCvText(owner: string, input: RouteBody<"uploadCv">) {
+/** The name as shown back to its owner: no folders, no control characters. */
+const shownName = (name: string) => name.split(/[\\/]/).at(-1)!.replace(/\p{Cc}/gu, " ").trim().slice(0, 255) || "CV";
+/**
+ * Stages a consented CV: pasted text as given, or a PDF/DOCX read in the
+ * isolated parser. The attempt counts against the upload limit before any
+ * parsing. Only extracted text is kept (never the file's bytes); the previous
+ * pending CV is replaced only once the new one has been read.
+ */
+export async function stageCvText(owner: string, input: RouteBody<"uploadCv">, limits: CvLimits = CV_LIMITS) {
   const parsed = UploadCv.parse(input);
-  if (!("text" in parsed)) enrichmentError("not_ready", 501);
+  await mutate(owner, data => rate(data, "upload", 6));
+  const cv = "text" in parsed ? { text: parsed.text, filename: null, warnings: [] }
+    : { ...await extractCvText(new Uint8Array(await parsed.file.arrayBuffer()), limits), filename: shownName(parsed.file.name) };
   const uploadId = randomUUID();
   return mutate(owner, data => {
-    rate(data, "upload", 6);
     for (const job of data.jobs) if (job.input?.cv?.uploadId === data.cv?.metadata.uploadId && job.input?.cv && !terminal(job)) discard(data, job, "cancelled");
     clearCv(data);
-    const metadata = { uploadId, filename: null, characters: parsed.text.length, warnings: [], expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };
-    data.cv = { metadata, text: parsed.text }; return metadata;
+    const metadata = { uploadId, filename: cv.filename, characters: cv.text.length, warnings: cv.warnings, expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };
+    data.cv = { metadata, text: cv.text }; return metadata;
   });
 }
 export function removeCv(owner: string, uploadId: string) {

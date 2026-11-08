@@ -65,9 +65,6 @@ it("rejects an ORCID with a correct shape but wrong checksum", async () => {
   expect(() => saveIdentity(owner, { ...enrichmentIdentity, orcid: "0000-0002-1825-0098" })).toThrow();
   expect(mocks.data.has(owner)).toBe(false);
 });
-it("requires isolated parsing before accepting PDF/DOCX files", () => {
-  expect(() => stageCvText(owner, { consent: true, file: new File(["%PDF-recorded"], "cv.pdf", { type: "application/pdf" }) })).toThrowError(expect.objectContaining({ status: 501, code: "not_ready" }));
-});
 it("replaces CV input and supports idempotent removal without allowing foreign access", async () => {
   const first = await stageCvText(owner, { consent: true, text: "First private CV" });
   const second = await stageCvText(owner, { consent: true, text: "Second private CV" });
