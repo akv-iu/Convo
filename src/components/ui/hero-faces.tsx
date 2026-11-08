@@ -183,53 +183,96 @@ function outfit(p: HeroPerson): ReactNode {
   }
 }
 
-/** One attendee's face on their badge colour, filling its box. Decorative. */
-export function HeroFace({ person: p, className = "" }: { person: HeroPerson; className?: string }) {
+/** The head, hair, headwear and face, with `body` (the clothes) drawn between the back and the front layers. */
+function FaceLayers({ p, body }: { p: HeroPerson; body: ReactNode }) {
   const wear = headwear(p);
   const covered = p.head === "hijab";
   return (
+    <>
+      {wear.back}
+      {!covered && backHair(p)}
+      {body}
+      <rect x="44" y="58" width="12" height="13" rx="4" fill={p.skin} />
+      {!covered && (
+        <>
+          <circle cx="32.5" cy="46" r="3.6" fill={p.skin} />
+          <circle cx="67.5" cy="46" r="3.6" fill={p.skin} />
+        </>
+      )}
+      <ellipse cx="50" cy="45" rx={covered ? 15 : 17} ry={covered ? 18 : 20} fill={p.skin} />
+      {p.earrings && !covered && (
+        <>
+          <circle cx="32" cy="52" r="1.8" fill="#f1c40f" />
+          <circle cx="68" cy="52" r="1.8" fill="#f1c40f" />
+        </>
+      )}
+      {p.beard && <path d="M34 47c0 14 7 21 16 21s16-7 16-21c-4 7-9 9-16 9s-12-2-16-9z" fill={p.beard} />}
+      {p.beard && <path d="M43 55c3-2 11-2 14 0-3 2-11 2-14 0z" fill={p.beard} />}
+      {!covered && frontHair(p)}
+      {wear.front}
+      <path d="M40 40.5c2-1.6 5-1.6 7 0M53 40.5c2-1.6 5-1.6 7 0" stroke={EYE} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.7" />
+      <circle cx="43.5" cy="45" r="1.9" fill={EYE} />
+      <circle cx="56.5" cy="45" r="1.9" fill={EYE} />
+      {p.glasses && (
+        <g stroke="#1f1f1f" strokeWidth="1.5" fill="none">
+          <circle cx="43.5" cy="45" r="5" />
+          <circle cx="56.5" cy="45" r="5" />
+          <path d="M48.5 45h3" />
+        </g>
+      )}
+      {p.freckles && (
+        <g fill="#c7835a" opacity="0.7">
+          {[[40, 50], [42, 52], [44, 50], [56, 50], [58, 52], [60, 50]].map(([x, y]) => (
+            <circle key={`${x}-${y}`} cx={x} cy={y} r="0.8" />
+          ))}
+        </g>
+      )}
+      <path d="M44.5 53.5q5.5 4 11 0" stroke={EYE} strokeWidth="1.6" strokeLinecap="round" fill="none" />
+    </>
+  );
+}
+
+/** One attendee's face on their badge colour, in a circle filling its box. Decorative. */
+export function HeroFace({ person: p, className = "" }: { person: HeroPerson; className?: string }) {
+  return (
     <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" className={`overflow-hidden rounded-full ${className}`}>
-      <g>
-        <rect width="100" height="100" fill={p.badge} />
-        {wear.back}
-        {!covered && backHair(p)}
-        {outfit(p)}
-        <rect x="44" y="58" width="12" height="13" rx="4" fill={p.skin} />
-        {!covered && (
-          <>
-            <circle cx="32.5" cy="46" r="3.6" fill={p.skin} />
-            <circle cx="67.5" cy="46" r="3.6" fill={p.skin} />
-          </>
-        )}
-        <ellipse cx="50" cy="45" rx={covered ? 15 : 17} ry={covered ? 18 : 20} fill={p.skin} />
-        {p.earrings && !covered && (
-          <>
-            <circle cx="32" cy="52" r="1.8" fill="#f1c40f" />
-            <circle cx="68" cy="52" r="1.8" fill="#f1c40f" />
-          </>
-        )}
-        {p.beard && <path d="M34 47c0 14 7 21 16 21s16-7 16-21c-4 7-9 9-16 9s-12-2-16-9z" fill={p.beard} />}
-        {p.beard && <path d="M43 55c3-2 11-2 14 0-3 2-11 2-14 0z" fill={p.beard} />}
-        {!covered && frontHair(p)}
-        {wear.front}
-        <path d="M40 40.5c2-1.6 5-1.6 7 0M53 40.5c2-1.6 5-1.6 7 0" stroke={EYE} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.7" />
-        <circle cx="43.5" cy="45" r="1.9" fill={EYE} />
-        <circle cx="56.5" cy="45" r="1.9" fill={EYE} />
-        {p.glasses && (
-          <g stroke="#1f1f1f" strokeWidth="1.5" fill="none">
-            <circle cx="43.5" cy="45" r="5" />
-            <circle cx="56.5" cy="45" r="5" />
-            <path d="M48.5 45h3" />
-          </g>
-        )}
-        {p.freckles && (
-          <g fill="#c7835a" opacity="0.7">
-            {[[40, 50], [42, 52], [44, 50], [56, 50], [58, 52], [60, 50]].map(([x, y]) => (
-              <circle key={`${x}-${y}`} cx={x} cy={y} r="0.8" />
-            ))}
-          </g>
-        )}
-        <path d="M44.5 53.5q5.5 4 11 0" stroke={EYE} strokeWidth="1.6" strokeLinecap="round" fill="none" />
+      <rect width="100" height="100" fill={p.badge} />
+      <FaceLayers p={p} body={outfit(p)} />
+    </svg>
+  );
+}
+
+/** The clothes' main colour (chef's whites and lab coats are white whatever the outfit colour). */
+function bodyColour(p: HeroPerson): string {
+  if (p.outfit === "chef") return "#ffffff";
+  if (p.outfit === "labcoat") return "#f4f6f8";
+  return p.outfitColour;
+}
+
+/**
+ * An attendee from the chest up, wearing a lanyard: the strap round their neck and their badge
+ * (in their badge colour) on their chest. Transparent background; 100 × 150. Decorative.
+ */
+export function HeroWearer({ person: p, className = "" }: { person: HeroPerson; className?: string }) {
+  const body = (
+    <>
+      <path d="M6 150C6 98 24 71 50 71s44 27 44 79z" fill={bodyColour(p)} />
+      {outfit(p)}
+    </>
+  );
+  return (
+    <svg viewBox="0 0 100 150" aria-hidden="true" focusable="false" className={className}>
+      <FaceLayers p={p} body={body} />
+      {/* The lanyard: two strap sides from behind the neck to a clip, then the badge. It dangles. */}
+      <g className="hero-dangle">
+      <path d="M41 72 50 110 59 72" fill="none" stroke="var(--accent)" strokeWidth="3.4" strokeLinejoin="round" />
+      <rect x="46.5" y="107" width="7" height="5" rx="1.2" fill="#9aa5b1" />
+        <rect x="35" y="111" width="30" height="34" rx="4" fill="#ffffff" stroke="rgba(0,0,0,0.12)" />
+        <path d="M35 115a4 4 0 0 1 4-4h22a4 4 0 0 1 4 4v4H35z" fill={p.badge} />
+        <circle cx="42" cy="128" r="4" fill={p.badge} />
+        <rect x="48.5" y="125" width="12" height="2.4" rx="1.2" fill="#9aa5b1" />
+        <rect x="48.5" y="130" width="8" height="2.4" rx="1.2" fill="#c3cad3" />
+        <rect x="39" y="137" width="22" height="2.4" rx="1.2" fill="#e1e6eb" />
       </g>
     </svg>
   );
