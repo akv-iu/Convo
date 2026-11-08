@@ -1,0 +1,33 @@
+# Sets the "Feature sign-off" commit status, which is the required check (this job isn't). It passes
+# at once unless the PR completes a feature file (docs/features/) or has the needs-approval label;
+# then it waits for an approval from someone other than the author. It runs again on each review,
+# and each run replaces the status, so an approval turns it green. See docs/Quality-Gates.md.
+name: Feature sign-off
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+# ponytail: no concurrency group, because cancelled runs would stay listed as not passing. An older run
+# could overwrite a newer verdict only inside its own second between reading and writing, which is
+# shorter than a runner takes to start. Add a group without cancel-in-progress if that's ever seen.
+jobs:
+  evaluate:
+    name: Evaluate sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - run: node .github/scripts/feature-signoff.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
