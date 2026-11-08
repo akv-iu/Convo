@@ -9,6 +9,7 @@ This tracks the whole feature across the foundation, backend and screens. A chec
 - [x] Foundation proposal: bounded schemas, owner-scoped fake routes, deterministic failure cases and contract tests.
 - [ ] Contract: Claude's ACK, nullable-handle compatibility merged and all checks green on the current main.
 - [ ] Authentication: Google/GitHub sign-in, protected explicit GitHub linking, no duplicate/merged accounts or leaked tokens.
+- [x] Authentication implementation: provider-subject ownership, session/state-bound GitHub linking, minimal Google scopes and mocked callback tests. Live acceptance remains open.
 - [ ] Backend: real source discovery/retrieval, isolated CV processing, durable/recoverable jobs, cached synthesis, approval and withdrawal.
 - [ ] Screens: source controls, candidate previews, CV, progress, help, editable bio and nullable-handle display.
 - [ ] Search: expertise, reserved-ID protection, cross-route memory state and complete-evidence rebuild recovery.

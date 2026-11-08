@@ -10,6 +10,8 @@ import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
+import { readAccountState } from "@/server/profile/identities";
+import { accountState, beginGitHubConnection } from "@/server/profile/connection";
 
 // Foundation only: do not advertise real imports before the backend release.
 const enrichmentUnavailable = async (): Promise<never> => {
@@ -17,9 +19,9 @@ const enrichmentUnavailable = async (): Promise<never> => {
 };
 
 export const real: Api = {
-  enrichmentState: enrichmentUnavailable,
+  enrichmentState: async ({ userId }) => readAccountState(userId, await accountState(userId)),
   saveEnrichmentIdentity: enrichmentUnavailable,
-  connectGitHub: enrichmentUnavailable,
+  connectGitHub: ({ userId }) => beginGitHubConnection(userId),
   discoverEnrichment: enrichmentUnavailable,
   uploadCv: enrichmentUnavailable,
   removeCv: enrichmentUnavailable,

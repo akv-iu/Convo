@@ -43,6 +43,13 @@
       "when": 1794092939520,
       "tag": "0005_provider-identities",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794095453798,
+      "tag": "0006_auth-link-attempts",
+      "breakpoints": true
     }
   ]
 }

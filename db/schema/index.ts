@@ -33,6 +33,16 @@ export const authIdentities = pgTable("auth_identities", {
   uniqueIndex("auth_identities_user_provider_idx").on(table.userId, table.provider),
 ]);
 
+/** Short-lived linking attempts contain no provider credential or imported profile text. */
+export const authLinkAttempts = pgTable("auth_link_attempts", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  sessionHash: text("session_hash").notNull(),
+  stateHash: text("state_hash"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+}, table => [uniqueIndex("auth_link_attempts_state_idx").on(table.stateHash)]);
+
 export const asks = pgTable(
   "asks",
   {
