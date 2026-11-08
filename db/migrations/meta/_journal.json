@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1794092816083,
-      "tag": "0005_default_avatars",
+      "when": 1794084855563,
+      "tag": "0005_new_ask_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794100079802,
+      "tag": "0006_default_avatars",
       "breakpoints": true
     }
   ]

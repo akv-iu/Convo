@@ -5,7 +5,7 @@ import { visibleCard, visiblePerson } from "./visibility";
 
 const match = {
   person: { ...people[0], workplaceName: "Acme", filters: { country: "US", rorId: "ror-acme", hiring: true } },
-  badges: ["US", "hiring", "synthetic"], highlights: ["Repository evidence"],
+  badges: ["US", "hiring", "synthetic"], highlights: ["Repository evidence"], evidence: [],
   mutual: true, explanation: "Relevant experience", score: 1, rank: 0,
 };
 describe("the badge picture", () => {

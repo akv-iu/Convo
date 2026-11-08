@@ -29,7 +29,7 @@ the existing revision ordering.
   `null` for initials on the badge colour.
   - It's saved with `PUT /api/me { avatar }`, which needs no new route, and stored
     in `users.avatar` (text, nullable, no default; migration
-    `0005_default_avatars`). It carries through `toPerson`, the search index's
+    `0006_default_avatars`). It carries through `toPerson`, the search index's
     stored person and every `CardPerson`.
   - It's always shown, because it isn't a show/hide section.
   - Synthetic profiles have none. Photo uploads come later, as a separate field.

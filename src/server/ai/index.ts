@@ -17,6 +17,11 @@ export interface AiService {
    * Throws AskBlockedError (422) for an offensive ask.
    */
   refineAsk(rawText: string, requester: Person): Promise<RefinedAsk>;
+  /**
+   * Moderation only, for an ask saved as written: resolves if it may be saved, throws
+   * AskBlockedError (422) if it's flagged, and rethrows if the check itself fails.
+   */
+  moderate(text: string): Promise<void>;
   /** ONE batched call: a "why this person" line per candidate, from their highlights. */
   explain(ask: RefinedAsk, candidates: Candidate[]): Promise<string[]>;
 }

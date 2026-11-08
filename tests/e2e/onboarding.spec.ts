@@ -275,7 +275,10 @@ test.describe("your badge (step 2)", () => {
     await openWithDraft(page, "p_003");
     const badge = visibleBadge(page);
     await expect(visibilitySwitch(page, "Workplace")).toBeChecked();
+    // Each line you can remove carries an eraser (country, workplace, hiring); name and GitHub don't.
+    await expect(badge.locator("[data-eraser]")).toHaveCount(3);
     await badge.getByText("University of Oxford").click();
+    await expect(badge.locator("[data-eraser]")).toHaveCount(2); // it went with the line
     await expect(visibilitySwitch(page, "Workplace")).not.toBeChecked();
     await expect(badge).not.toContainText("University of Oxford"); // gone, not struck through
     await badge.getByText("United Kingdom").click();

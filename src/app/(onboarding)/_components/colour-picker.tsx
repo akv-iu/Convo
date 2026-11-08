@@ -5,11 +5,18 @@ import { badgeColours, DEFAULT_COLOUR, type BadgeColour } from "./badge-prefs";
  * server-rendered, so it works inside a plain form; a surrounding element
  * can react to the choice with `:has(#colour-<id>:checked)`.
  */
-export function ColourPicker({ defaultColour = DEFAULT_COLOUR }: { defaultColour?: BadgeColour }) {
+export function ColourPicker({
+  defaultColour = DEFAULT_COLOUR,
+  centred = false,
+}: {
+  defaultColour?: BadgeColour;
+  /** Centre the label and swatches, e.g. under the badge. */
+  centred?: boolean;
+}) {
   return (
-    <fieldset>
-      <legend className="mb-3 text-base font-semibold">Badge colour</legend>
-      <div className="flex flex-wrap gap-3">
+    <fieldset className={centred ? "text-center" : undefined}>
+      <legend className={`mb-3 text-base font-semibold ${centred ? "mx-auto" : ""}`}>Badge colour</legend>
+      <div className={`flex flex-wrap gap-3 ${centred ? "justify-center" : ""}`}>
         {badgeColours.map((c) => (
           <label key={c.id} className="relative cursor-pointer" title={c.name}>
             <input
