@@ -7,7 +7,12 @@
  * is optional: it asks for a suggestion (POST /api/refine/preview, which
  * saves and registers nothing) and puts it in the box, where it can be
  * edited, or swapped back for the asker's own words, before sending. Only
- * what's sent is saved. Ctrl/Cmd+Enter sends what's in the box.
+ * what's sent is saved. Ctrl/Cmd+Enter sends what's in the box. Sending
+ * goes straight to the matches; the asker chose their wording in the box.
+ *
+ * /ask?ask=<id> (the matches' "Back to your question") reads a saved
+ * question back as the "Current request", with Find people and Ask
+ * something else.
  *
  * There's no route to edit a saved ask, so changing one means asking again
  * (a new ask). A blocked ask (422) shows the server's message and nothing is
@@ -52,8 +57,6 @@ export function AskForm() {
   const askParam = useSearchParams().get("ask");
   const [readBack, setReadBack] = useState<"loading" | "missing" | "failed" | null>(askParam ? "loading" : null);
   const [readAttempt, setReadAttempt] = useState(0);
-  /** The ask this screen just sent; the address then points at it, and it needs no loading. */
-  const sentRef = useRef<string | null>(null);
   const [text, setText] = useState("");
   /** The asker's own words while the box holds an AI suggestion; null when it holds their own. */
   const [original, setOriginal] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export function AskForm() {
 
   // Read the saved question back: this tab's copy at once, then the server's (the truth).
   useEffect(() => {
-    if (!askParam || sentRef.current === askParam) return; // nothing to show, or just sent here
+    if (!askParam) return; // nothing to read back
     let live = true;
     void (async () => {
       const kept = recallAsk(askParam);
@@ -121,6 +124,7 @@ export function AskForm() {
   async function send() {
     if (!start("send")) return;
     const question = text.trim();
+    let leaving = false;
     try {
       const res = await fetch("/api/asks", {
         method: "POST",
@@ -136,15 +140,14 @@ export function AskForm() {
       const saved = body as { askId: string; ask: Ask };
       // Saved as written, so its refined text is exactly what was sent.
       const done = { askId: saved.askId, rawText: original ?? question, refined: saved.ask.refined ?? { text: question, type, minutes: 5 } };
-      rememberAsk(done);
-      setResult(done);
-      sentRef.current = done.askId;
-      // Keep it in the address, so a reload or the matches' Back link comes back to it.
-      router.replace(`/ask?ask=${encodeURIComponent(done.askId)}`, { scroll: false });
+      rememberAsk(done); // the matches screen shows the question from this at once
+      // Straight to the people who can help; the buttons stay unavailable while the page changes.
+      leaving = true;
+      router.push(`/matches?ask=${encodeURIComponent(done.askId)}`);
     } catch {
       setFailure(sendFailure(0, null));
     } finally {
-      finish();
+      if (!leaving) finish();
     }
   }
 
@@ -206,7 +209,6 @@ export function AskForm() {
     setOriginal(null);
     setAnnounce("");
     setReadBack(null);
-    sentRef.current = null;
     if (askParam) router.replace("/ask", { scroll: false });
     setTimeout(() => boxRef.current?.focus(), 0);
   }
@@ -324,11 +326,8 @@ export function AskForm() {
           </button>
         </p>
       )}
-      <p id="ask-hint" className="mt-2 flex justify-between gap-3 text-sm text-muted">
-        <span>Press Ctrl+Enter to send it as it is.</span>
-        <span>
-          {text.trim().length} of {ASK_MAX}
-        </span>
+      <p id="ask-hint" className="mt-2 text-right text-sm text-muted">
+        {text.trim().length} of {ASK_MAX}
       </p>
       {problem && (
         <p id="ask-problem" className={`mt-1 ${errorClass}`}>

@@ -98,12 +98,11 @@ function fakeMatches(n: number) {
 }
 
 test.describe("match list (A2 steps 1-2)", () => {
-  test("Find people on the refine screen opens the cards, best match first, with the question", async ({ page }) => {
+  test("Send on the ask screen opens the list, best match first, with the question", async ({ page }) => {
     await page.setExtraHTTPHeaders({ "x-demo-user": ME });
     await page.goto("/ask");
     await page.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
     await page.getByRole("button", { name: "Send", exact: true }).click();
-    await page.getByRole("link", { name: "Find people" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
     await rows(page).first().click();
     await expect(page.getByText(/Your question: .how does the Kubernetes scheduler do preemption./)).toBeVisible(); // as written

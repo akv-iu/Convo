@@ -23,6 +23,13 @@ async function open(page: Page, person = "p_003") {
   await expect(box(page)).toBeVisible();
 }
 
+/** After Send: the matches for the new question; returns its ID. */
+async function onMatches(page: Page) {
+  await expect(page).toHaveURL(/\/matches\?ask=/, { timeout: AFTER_SUBMIT });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help");
+  return new URL(page.url()).searchParams.get("ask")!;
+}
+
 /** A question saved on the server for `person`, as the ask screen saves it; returns its ID. */
 async function savedAsk(page: Page, text: string, person = "p_003") {
   const res = await page.request.post("/api/asks", { headers: { "x-demo-user": person }, data: { text } });
@@ -40,7 +47,7 @@ function watch(page: Page) {
 }
 
 test.describe("ask as written, sharpening optional (A1 step 5)", () => {
-  test("Send saves the question exactly as written, as a 5-minute chat to learn something", async ({ page }) => {
+  test("Send saves the question exactly as written and goes straight to the matches", async ({ page }) => {
     await open(page);
     const seen = watch(page);
     await box(page).fill("how does Raft do the voting thing");
@@ -48,21 +55,34 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await send(page).click();
     expect((await saving).postDataJSON()).toEqual({ text: "how does Raft do the voting thing", type: "knowledge" });
 
+    // No "Current request" step in between: the matches open, with the question as written.
+    const askId = await onMatches(page);
+    await expect(page.getByText(/Your question: .how does Raft do the voting thing./)).toBeVisible();
+    expect(seen.filter((r) => isPreview(r) || isOldRefine(r))).toHaveLength(0); // no AI rewrite
+
+    // The server saved exactly that: read it back.
+    const saved = await (await page.request.get(`/api/asks/${askId}`, { headers: { "x-demo-user": "p_003" } })).json();
+    expect(saved).toMatchObject({
+      rawText: "how does Raft do the voting thing",
+      refined: { text: "how does Raft do the voting thing", type: "knowledge", minutes: 5 },
+      softBlocker: false,
+    });
+
+    // Back to it: the "Current request" screen, read back from the address.
+    await page.getByRole("link", { name: "Back to your question" }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
     await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
     await expect(page.locator("blockquote")).toHaveText("how does Raft do the voting thing");
     await expect(page.getByText("Learn something")).toBeVisible();
     await expect(page.getByText("5-minute chat")).toBeVisible();
-    await expect(page.getByText("You first wrote:")).toHaveCount(0); // nothing was sharpened
-    expect(seen.filter((r) => isPreview(r) || isOldRefine(r))).toHaveLength(0); // no AI rewrite
+    await expect(page.getByText("You first wrote:")).toHaveCount(0);
+  });
 
-    const href = await page.getByRole("link", { name: "Find people" }).getAttribute("href");
-    const askId = new URL(href!, "http://x").searchParams.get("ask")!;
-    // The server saved exactly that: read it back and match it.
-    const saved = await (await page.request.get(`/api/asks/${askId}`, { headers: { "x-demo-user": "p_003" } })).json();
-    expect(saved).toMatchObject({ rawText: "how does Raft do the voting thing", refined: { text: "how does Raft do the voting thing" }, softBlocker: false });
-    const match = await page.request.post("/api/match", { headers: { "x-demo-user": "p_003" }, data: { askId } });
-    expect(match.ok()).toBe(true);
+  test("the box shows a character count, and no shortcut hint", async ({ page }) => {
+    await open(page);
+    await box(page).fill("how does etcd store keys");
+    await expect(page.getByText("24 of 500")).toBeVisible();
+    await expect(page.getByText(/Ctrl\+Enter/)).toHaveCount(0);
   });
 
   test("Sharpen suggests a question without saving it; edit the suggestion, then send that", async ({ page }) => {
@@ -81,9 +101,8 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     const saving = page.waitForRequest(isSave);
     await send(page).click();
     expect((await saving).postDataJSON()).toEqual({ text: "I want a job at Stripe. What did you do before joining?", type: "career" });
-    await expect(page.locator("blockquote")).toHaveText("I want a job at Stripe. What did you do before joining?");
-    await expect(page.getByText("Career move")).toBeVisible();
-    await expect(page.getByText("You first wrote:")).toBeVisible();
+    await onMatches(page); // the asker chose in the box, so Send goes straight on
+    await expect(page.getByText(/Your question: .I want a job at Stripe\. What did you do before joining\?./)).toBeVisible();
     expect(seen.filter(isSave)).toHaveLength(1);
   });
 
@@ -99,6 +118,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     const saving = page.waitForRequest(isSave);
     await send(page).click();
     expect((await saving).postDataJSON()).toMatchObject({ text: "how does etcd store keys" });
+    await onMatches(page);
   });
 
   test("you can pick the kind of question before sending", async ({ page }) => {
@@ -110,7 +130,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     const saving = page.waitForRequest(isSave);
     await send(page).click();
     expect((await saving).postDataJSON()).toEqual({ text: "anyone want to build a Raft visualiser with me", type: "collaboration" });
-    await expect(page.getByText("Build together")).toBeVisible();
+    await onMatches(page);
   });
 
   test("too short is explained and nothing is sent, by either button", async ({ page }) => {
@@ -156,7 +176,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(alertWithText(page)).toHaveText("Lanyard is busy. Try again.");
     expect(calls).toBe(1);
     await send(page).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request", { timeout: AFTER_SUBMIT });
+    await onMatches(page);
     expect(calls).toBe(2);
   });
 
@@ -168,7 +188,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(alertWithText(page)).toHaveText("Question refinement is unavailable. Try again. You can still send it as written.");
     await expect(box(page)).toHaveValue("how does etcd store keys");
     await send(page).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request", { timeout: AFTER_SUBMIT });
+    await onMatches(page);
   });
 
   test("an unfinished profile is sent to set up first", async ({ page }) => {
@@ -180,10 +200,12 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     await expect(page.getByRole("link", { name: "Set up your badge" })).toHaveAttribute("href", "/signin");
   });
 
-  test("Ask something else goes back with the text kept", async ({ page }) => {
+  test("Ask something else, from the question read back, starts from its text", async ({ page }) => {
     await open(page);
     await box(page).fill("how does Raft do the voting thing");
     await send(page).click();
+    await onMatches(page);
+    await page.getByRole("link", { name: "Back to your question" }).click();
     await expect(page).toHaveURL(/\/ask\?ask=/); // the address points at the saved question
     await page.getByRole("button", { name: "Ask something else" }).click();
     await expect(box(page)).toBeFocused();
@@ -201,9 +223,7 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
     const saving = page.waitForRequest(isSave);
     await page.keyboard.press("Control+Enter");
     expect((await saving).postDataJSON()).toMatchObject({ text: "how does the scheduler do preemption" });
-    await expect(page.getByRole("heading", { level: 1 })).toBeFocused({ timeout: AFTER_SUBMIT });
-    await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: "Find people" })).toBeFocused();
+    await onMatches(page);
   });
 
   test("the counter shows how many people are looking, as the server counts them", async ({ page }) => {
@@ -273,8 +293,10 @@ test.describe("ask as written, sharpening optional (A1 step 5)", () => {
       await expect(page.getByText("Sharpened with AI.")).toBeVisible();
       await scan("sharpened suggestion");
       await send(page).click();
+      await onMatches(page);
+      await page.getByRole("link", { name: "Back to your question" }).click();
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
-      await scan("sent");
+      await scan("read back");
     });
   }
 });
@@ -284,11 +306,7 @@ test.describe("reading a saved question back (/ask?ask=<id>)", () => {
     await open(page);
     await box(page).fill("how does the scheduler do preemption");
     await send(page).click();
-    await expect(page).toHaveURL(/\/ask\?ask=/, { timeout: AFTER_SUBMIT });
-    const askId = new URL(page.url()).searchParams.get("ask")!;
-
-    await page.getByRole("link", { name: "Find people" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help", { timeout: AFTER_SUBMIT });
+    const askId = await onMatches(page);
     const back = page.getByRole("link", { name: "Back to your question" });
     await expect(back).toHaveAttribute("href", `/ask?ask=${askId}`);
     await back.click();

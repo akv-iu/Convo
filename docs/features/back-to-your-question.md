@@ -9,14 +9,16 @@ Owner: Person A · PRs: #52
   - **Ask:** `/ask?ask=<id>` shows that saved question as the current request. It shows this tab's copy at once, then the server's (`GET /api/asks/:id`, already in the contract).
     - **States:** loading, "isn't one of yours" (404 or 401) with an empty box, and a failed load with Try again.
     - **An answered question** gets a note and no Find people.
-  - Sending a question puts its ID in the address, so a reload keeps it. "Ask something else" takes it out again and keeps the text.
+  - **Send goes straight to the matches** (Aaron's round-5 feedback): the asker chose the wording in the box, sharpened or not, so there's no "Current request" step after sending. That screen is now reached only by reading a question back.
+  - The "Press Ctrl+Enter…" hint is gone; the character count stays, and so does the shortcut.
+  - "Ask something else" on a question read back takes `?ask=` out of the address, and starts from that question's text.
 - [x] **Tests:** Playwright covers the round trip from the matches and back, a reload with this tab's copy cleared (so the server is read), someone else's and unknown questions, a failed load then Try again, an answered question, and the address while sending and asking again. `back-links.spec.ts` has the new targets.
 - [x] **Docs:** this file.
 
 ## How to try it
 
-1. Open **Ask**, type a question and press **Send**. The address ends `/ask?ask=…`.
-2. Press **Find people**, then **← Back to your question**. You see the same question under "Current request", not an empty box.
+1. Open **Ask**, type a question and press **Send**. The matches open straight away, with your question at the top.
+2. Press **← Back to your question**. You see the same question under "Current request", not an empty box.
 3. Reload the page. The question is still there.
 4. Press **Ask something else**. The address goes back to `/ask`, and your text stays in the box.
 5. Open `/ask?ask=not-a-real-id`. Expect "That question isn't one of yours, or it no longer exists", with an empty box.
