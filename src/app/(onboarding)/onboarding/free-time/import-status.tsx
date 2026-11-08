@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { enrichmentApi } from "../../signin/sources/api";
 
 const POLL_MS = 3000;
+const RETRY_MS = 6000;
 type Job = Pick<EnrichmentJob, "jobId" | "state">;
 
 const WORKING = new Set<Job["state"]>(["queued", "running"]);
@@ -36,11 +37,20 @@ export function ImportStatus() {
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // A failed read keeps what's on screen and tries again a little later; it never stops for good.
+    const again = (jobId: string | null) => (timer = setTimeout(() => void read(jobId), RETRY_MS));
     async function read(jobId: string | null) {
-      const id = jobId ?? (await enrichmentApi.state().then((s) => (s.ok ? (s.data.job?.jobId ?? null) : null)));
-      if (!id || !live) return;
+      let id = jobId;
+      if (!id) {
+        const owner = await enrichmentApi.state();
+        if (!live) return;
+        if (!owner.ok) return again(null);
+        id = owner.data.job?.jobId ?? null;
+        if (!id) return; // no import: nothing to show
+      }
       const current = await enrichmentApi.job(id);
-      if (!live || !current.ok) return; // a failed read keeps what's on screen
+      if (!live) return;
+      if (!current.ok) return again(id);
       setJob({ jobId: current.data.jobId, state: current.data.state });
       if (WORKING.has(current.data.state)) timer = setTimeout(() => void read(id), POLL_MS);
     }

@@ -166,6 +166,69 @@ test.describe("profile enrichment: badge and free time", () => {
     await expect(continueButton(page)).toBeEnabled(); // the import never blocks free time
   });
 
+  test("a badge whose saved profile fails to load asks to try again instead of saving defaults over it", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    await startImport(page);
+    await page.locator("label").filter({ hasText: "Not right now" }).click();
+    await page.getByRole("button", { name: "Choose a picture" }).click();
+    await page.getByRole("group", { name: "Your picture" }).locator("label").filter({ has: page.getByRole("radio", { name: "Moon" }) }).click();
+    await toggle(page, "Workplace");
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/);
+
+    let failing = true;
+    await page.route("**/api/me", (route) =>
+      failing && route.request().method() === "GET" ? route.fulfill({ status: 503, json: { error: "Recorded outage" } }) : route.continue(),
+    );
+    const saves: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "PUT" && new URL(r.url()).pathname === "/api/me") saves.push(r.url());
+    });
+    await page.goto("/onboarding");
+    await expect(page.getByRole("alert").filter({ hasText: "Your details didn't load" })).toBeVisible();
+    await expect(continueButton(page)).toHaveCount(0); // nothing to save until the profile is back
+    failing = false;
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("switch", { name: "Workplace", exact: true })).not.toBeChecked();
+    await expect(badge(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "moon");
+    expect(saves).toEqual([]);
+    const saved = await (await page.request.get("/api/me", { headers: { "x-demo-user": user } })).json();
+    expect(saved).toMatchObject({ avatar: "moon", visibility: { workplace: false } });
+  });
+
+  test("a source changed on page one starts a new import instead of keeping the old one", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    await startImport(page);
+    const original = (await owner(page, user)).job.jobId;
+    await page.goto("/signin");
+    await toggle(page, "Research papers");
+    await continueButton(page).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Choose what Lanyard reads");
+    await expect(page.getByRole("switch", { name: "Research papers", exact: true })).not.toBeChecked();
+    const starts: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/api/profile-enrichment") starts.push(r.url());
+    });
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding$/);
+    expect(starts).toHaveLength(1);
+    expect((await owner(page, user)).job.jobId).not.toBe(original);
+  });
+
+  test("page four keeps reading the import after one failed read", async ({ page }) => {
+    await asNewGoogleUser(page);
+    await startImport(page);
+    await page.locator("label").filter({ hasText: "Not right now" }).click();
+    let reads = 0;
+    await page.route(/\/api\/profile-enrichment\/[^/]+$/, (route) =>
+      ++reads === 2 ? route.fulfill({ status: 503, json: { error: "Unavailable", code: "provider_down" } }) : route.continue(),
+    );
+    await continueButton(page).click();
+    await expect(page).toHaveURL(/\/onboarding\/free-time$/);
+    await expect(shown(page, "Your sources have been read. You'll check your bio next.")).toBeVisible({ timeout: 20_000 });
+    expect(reads).toBeGreaterThan(2);
+  });
+
   test("with no import running, page four shows no import status", async ({ page }) => {
     await asNewGoogleUser(page);
     await page.goto("/signin");

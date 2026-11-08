@@ -142,6 +142,33 @@ function stillValid(found: Found<Discovery> | undefined): Found<Discovery> {
   return found?.state === "done" && Date.parse(found.value.expiresAt) > Date.now() ? found : null;
 }
 
+/** The start request without this visit's picks: what the page shows on loading, before anything is chosen. */
+const unpickedRequest = (identity: Identity, sources: SourceChoices, cvUploadId: string | null) =>
+  JSON.stringify(startBody(identity, sources, { research: null, publicProfile: null, cvUploadId }));
+
+/**
+ * The import this tab started and the (unpicked) request it was started with. Coming back with that
+ * import still active and nothing changed, here or on page one, carries on with it; anything else starts again.
+ */
+const STARTED_KEY = "convo_enrichment_started";
+const startRecord = (jobId: string, request: string) => JSON.stringify({ jobId, request });
+
+function rememberStart(record: string) {
+  try {
+    sessionStorage.setItem(STARTED_KEY, record);
+  } catch {
+    // Storage off: coming back starts again, which is safe.
+  }
+}
+
+function startedHere(record: string): boolean {
+  try {
+    return sessionStorage.getItem(STARTED_KEY) === record;
+  } catch {
+    return false;
+  }
+}
+
 function githubStatus(github: Owner["github"]): string {
   if (!github.connected) return "Not connected to this account.";
   return github.login ? `Connected as @${github.login}.` : "Connected.";
@@ -195,8 +222,7 @@ export function SourcesForm({
       setLoad(next);
       if (next.state !== "ready") return;
       setCvUpload(next.owner.pendingCv);
-      const unpicked = { research: null, publicProfile: null, cvUploadId: next.owner.pendingCv?.uploadId ?? null };
-      asLoaded.current = JSON.stringify(startBody(next.identity, chosen, unpicked));
+      asLoaded.current = unpickedRequest(next.identity, chosen, next.owner.pendingCv?.uploadId ?? null);
       const kept = takeKept(next.identity);
       const keptResearch = stillValid(kept?.research);
       const keptPages = stillValid(kept?.pages);
@@ -397,13 +423,17 @@ export function SourcesForm({
     }
     const body = startBody(identity, sources, picks);
     // Back here from a later page and nothing changed: carry on with the running import instead of starting another.
-    if (owner.job && ACTIVE_JOB.has(owner.job.state) && JSON.stringify(body) === asLoaded.current) return router.push(NEXT_PAGE);
+    // Only when this tab started that import with these same choices: a change on page one doesn't show here.
+    const active = owner.job && ACTIVE_JOB.has(owner.job.state) ? owner.job.jobId : null;
+    const loaded = asLoaded.current;
+    if (active && loaded === JSON.stringify(body) && startedHere(startRecord(active, loaded))) return router.push(NEXT_PAGE);
     key.current = keyFor(body, key.current);
     setStarting(true);
     setStartFailure(null);
     setNotice(null);
     const result = await enrichmentApi.start({ ...body, idempotencyKey: key.current.key });
     if (result.ok) {
+      rememberStart(startRecord(result.data.jobId, unpickedRequest(identity, sources, cvUpload?.uploadId ?? null)));
       router.push(NEXT_PAGE);
       return;
     }

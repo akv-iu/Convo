@@ -62,9 +62,14 @@ type Load =
 
 const sections = VISIBILITY_SECTIONS;
 
-/** With profile enrichment: step 1's answers from the account's saved identity, the handle from its GitHub connection. */
-function fromIdentity(owner: Result<RouteResponse<"enrichmentState">>, profile: Person | null): Load {
+/**
+ * With profile enrichment: step 1's answers from the account's saved identity, the handle from its GitHub
+ * connection. The saved profile (colour, picture, visibility, hiring) must load or be confirmed missing (409):
+ * starting from defaults after a failed read would save them over the person's choices.
+ */
+function fromIdentity(owner: Result<RouteResponse<"enrichmentState">>, profile: Person | null, profileStatus: number): Load {
   if (!owner.ok) return { state: "failed", status: owner.status };
+  if (!profile && profileStatus !== 409) return { state: "failed", status: profileStatus };
   const { identity, github } = owner.data;
   if (!identity) return { state: "start" };
   return {
@@ -121,7 +126,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       setAvatar(profile?.avatar ?? null);
 
       if (owner) {
-        const next = fromIdentity(owner, profile);
+        const next = fromIdentity(owner, profile, status);
         if (next.state === "ready") setHiring(next.hiring);
         setLoad(next);
       } else if (draft) {
