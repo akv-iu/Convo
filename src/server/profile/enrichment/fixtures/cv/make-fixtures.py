@@ -119,10 +119,12 @@ def flate_bomb(size):
 
 # ---------- ZIP / DOCX ----------
 
-def build_zip(entries):
-    """entries: (name, data, options) with options: stored, flags, declared (central and local size override)."""
+def build_zip(entries, claim=None, shrink=False):
+    """entries: (name, data, options) with options: stored, flags, declared (central and local size override).
+    claim: the entry count the end record states; shrink: its directory size then covers only those entries."""
     out = bytearray()
     central = bytearray()
+    record_ends = []
     for name, data, opts in entries:
         raw_name = name.encode()
         method = 0 if opts.get("stored") else 8
@@ -135,10 +137,12 @@ def build_zip(entries):
         out += raw_name + body
         central += struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, flags, method, 0, 0x21, crc, len(body), size,
                                len(raw_name), 0, 0, 0, 0, 0, offset) + raw_name
-    count = len(entries)
+        record_ends.append(len(central))
+    count = len(entries) if claim is None else claim
+    size = record_ends[count - 1] if shrink else len(central)
     out_end = len(out)
     out += central
-    out += struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, count, count, len(central), out_end, 0)
+    out += struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, count, count, size, out_end, 0)
     return bytes(out)
 
 
@@ -162,9 +166,9 @@ def document_xml(paragraphs):
             + body + b"</w:body></w:document>")
 
 
-def docx(document, extra=(), **doc_opts):
+def docx(document, extra=(), claim=None, shrink=False, **doc_opts):
     return build_zip([("[Content_Types].xml", CONTENT_TYPES, {}), ("_rels/.rels", RELS, {}),
-                      ("word/document.xml", document, doc_opts), *extra])
+                      ("word/document.xml", document, doc_opts), *extra], claim, shrink)
 
 
 def main():
@@ -187,6 +191,11 @@ def main():
     write("lying.docx", docx(document_xml(["y" * (5 << 20)]), declared=4096))
     write("encrypted-entry.docx", docx(document_xml(CV_LINES), flags=1))
     write("many-entries.docx", docx(document_xml(CV_LINES), extra=[(f"customXml/item{n}.xml", b"<a/>", {"stored": True}) for n in range(1000)]))
+    # The end record understates the entry count (and, shrunk, the directory size), hiding entries JSZip
+    # still lists but Mammoth never reads: 500 parts (past the entry cap) and one lying about its size.
+    hidden = [(f"customXml/item{n}.xml", b"<a/>", {"stored": True}) for n in range(500)] + [("customXml/big.xml", b"z" * (1 << 20), {"declared": 10})]
+    write("miscounted.docx", docx(document_xml(CV_LINES), extra=hidden, claim=3))
+    write("miscounted-size.docx", docx(document_xml(CV_LINES), extra=hidden, claim=3, shrink=True))
     write("not-docx.zip", build_zip([("mimetype", b"application/vnd.oasis.opendocument.text", {"stored": True}),
                                      ("content.xml", b"<office:document-content/>", {})]))
     write("legacy.doc", OLE + bytes(504) + "WordDocument".encode("utf-16-le") + bytes(1000))

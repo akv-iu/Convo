@@ -44,7 +44,7 @@ The file's own signature decides; its name and declared MIME type are ignored.
 
 Parsing runs in a `worker_threads` worker (`cv-worker.mts`), one per CV. The worker is terminated afterwards and whenever a limit is hit; `terminate()` stops running JavaScript, so a stuck parser is not merely abandoned. The worker gets:
 
-- its own copy of the bytes (transferred, not shared);
+- its own copy of the bytes, made with `new Uint8Array(bytes)` and transferred. A Node `Buffer` works too: its `slice()` would share pooled memory, so it isn't used;
 - an empty environment;
 - console methods that do nothing;
 - captured and discarded stdout and stderr.
@@ -66,6 +66,7 @@ Notes on the limits:
 
 - The deadline counts from the worker's start, not from any time spent waiting for a slot.
 - **DOCX expansion is checked before Mammoth runs.** Each central-directory entry is decompressed with `inflateRawSync`, using `maxOutputLength` set to its declared size. An entry that claims to be small but inflates further is stopped at that size (no full expansion), and must match its declared size exactly.
+- **The end record must account for every entry.** JSZip lists every consecutive central-directory record, whatever the end record's count says. So the count and directory size must cover exactly the records up to the end record, on a single disk. Otherwise, extra records could slip past the check unexamined.
 - Other DOCX rejections: ZIP64, multi-disk archives and compression methods other than stored or deflate. JSZip then only re-reads parts already proven bounded.
 
 Libraries:
@@ -95,6 +96,7 @@ Libraries:
 - **Encrypted:** an RC4-encrypted PDF (user password); a ZIP with an encrypted entry; an OLE `EncryptedPackage` stand-in for a password-protected Word file.
 - **Unreadable:** an image-only (scanned) PDF, an empty DOCX, a malformed PDF, and a messy DOCX for tidying.
 - **Expansion limits:** an honest 21 MiB expansion, a lying entry (declares 4 KiB, inflates to 5 MiB), and 1,000 entries.
+- **Miscounted end records:** 500 parts and a lying part hidden behind an end record that claims 3 entries, with and without a matching shrunk directory size.
 - **Memory limits:** a DOCX with 14 MiB of paragraphs, which exceeds the worker heap; and a 0.5 MB PDF whose content stream decodes to 512 MiB, which trips the memory watchdog or the deadline.
 - **Unsupported:** a legacy `.doc`, an ODT-style ZIP and a PNG.
 
@@ -107,7 +109,7 @@ Word was not used: automating it stalled on a hidden dialog, and the Word instan
 - recovery after a terminated parser;
 - two parsers at most at once;
 - a worker that cannot load being reported as `unknown`/500;
-- the caller's bytes left unchanged;
+- the caller's bytes left unchanged, including pooled and standalone Node Buffers;
 - no console, stdout or stderr output.
 
 The worker's own functions also run in-process, for coverage.

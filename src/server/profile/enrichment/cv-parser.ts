@@ -57,7 +57,8 @@ function releaseSlot(): void {
 /** null: the document hit a limit (deadline, heap or memory growth). "broken": the worker itself failed, a server fault. */
 function parseInWorker(format: CvFormat, bytes: Uint8Array, limits: CvLimits): Promise<CvWorkerResult | null | "broken"> {
   // The worker gets its own copy, transferred, so the caller's buffer is untouched and nothing is shared.
-  const copy = bytes.slice();
+  // new Uint8Array(...) always copies; a Buffer's slice() would share (often pooled) memory instead.
+  const copy = new Uint8Array(bytes);
   const worker = new Worker(new URL("./cv-worker.mts", import.meta.url), {
     workerData: { cvParser: true, format, bytes: copy, maxText: MAX_SOURCE_TEXT },
     transferList: [copy.buffer],

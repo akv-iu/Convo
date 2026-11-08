@@ -29,6 +29,18 @@ describe("extractCvText", () => {
     expect(bytes).toEqual(copy);
   });
 
+  it("accepts Node Buffers, pooled or standalone, and leaves them intact", async () => {
+    const file = fixture("text.pdf");
+    const pooled = Buffer.from(file); // small Buffers share one pooled ArrayBuffer
+    const standalone = Buffer.alloc(file.length);
+    standalone.set(file);
+    for (const input of [pooled, standalone]) {
+      await expect(extractCvText(input)).resolves.toMatchObject({ warnings: [] });
+      expect(input.byteLength).toBe(file.length);
+      expect(Uint8Array.from(input)).toEqual(file);
+    }
+  });
+
   it("keeps the first 30,000 characters and reports cv_truncated", async () => {
     const { text, warnings } = await extractCvText(fixture("long.pdf"));
     expect(text).toHaveLength(MAX_SOURCE_TEXT);
@@ -54,6 +66,8 @@ describe("extractCvText", () => {
     ["image-only.docx", "cv_unreadable", 422],
     ["malformed.pdf", "cv_unreadable", 422],
     ["many-entries.docx", "cv_unreadable", 422],
+    ["miscounted.docx", "cv_unreadable", 422],
+    ["miscounted-size.docx", "cv_unreadable", 422],
   ])("rejects %s honestly as %s", async (name, code, status) => {
     await expect(extractCvText(fixture(name))).rejects.toMatchObject({ code, status });
   });
@@ -171,6 +185,9 @@ describe("extractText (worker code, in-process)", () => {
     ["many-entries.docx", "docx", { failure: "cv_unreadable" }],
     ["bomb.docx", "docx", { failure: "cv_unreadable" }],
     ["lying.docx", "docx", { failure: "cv_unreadable" }],
+    // The end record must account for every central-directory entry JSZip would read.
+    ["miscounted.docx", "docx", { failure: "cv_unreadable" }],
+    ["miscounted-size.docx", "docx", { failure: "cv_unreadable" }],
   ] as const)("%s", async (name, format, expected) => {
     expect(await extractText(format, fixture(name), MAX_SOURCE_TEXT)).toMatchObject(expected);
   });

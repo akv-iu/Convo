@@ -62,7 +62,11 @@ function checkDocx(zip: Buffer): void {
   if (eocd < 0) throw new Failure("cv_unreadable");
   const count = zip.readUInt16LE(eocd + 10);
   let at = zip.readUInt32LE(eocd + 16);
-  if (count > MAX_ZIP_ENTRIES || at + zip.readUInt32LE(eocd + 12) > eocd) throw new Failure("cv_unreadable");
+  // JSZip reads every consecutive record from the directory's start, whatever the end record's count
+  // says. So the end record must be single-disk and its count and size must account for exactly the
+  // records up to it: then every record JSZip can list is one checked below.
+  const singleDisk = zip.readUInt32LE(eocd + 4) === 0 && zip.readUInt16LE(eocd + 8) === count;
+  if (!singleDisk || count > MAX_ZIP_ENTRIES || at + zip.readUInt32LE(eocd + 12) !== eocd) throw new Failure("cv_unreadable");
   const names = new Set<string>();
   let budget = MAX_DOCX_EXPANDED;
   for (let i = 0; i < count; i++) {
@@ -71,6 +75,7 @@ function checkDocx(zip: Buffer): void {
     budget -= entry.size;
     at = entry.next;
   }
+  if (at !== eocd) throw new Failure("cv_unreadable"); // records past the stated count
   if (!names.has("[Content_Types].xml") || !names.has("word/document.xml")) throw new Failure("cv_unsupported");
 }
 
