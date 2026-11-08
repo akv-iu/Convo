@@ -268,7 +268,8 @@ function DetailsFields({ initial }: { initial: Draft | null }) {
         </fieldset>
       </div>
 
-      <div className="sticky bottom-0 -mx-4 mt-8 flex items-center gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+      {/* Sticky on phones; the page's scroll padding keeps a focused field above it. */}
+      <div className="sticky bottom-0 -mx-4 mt-8 flex items-center gap-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur max-sm:[html:has(&)]:scroll-pb-24 sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         <Button type="submit" className="flex-1 text-lg sm:flex-none sm:px-10">
           Continue
         </Button>

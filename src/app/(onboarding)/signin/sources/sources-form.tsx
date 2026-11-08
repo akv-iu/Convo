@@ -64,12 +64,18 @@ const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 /**
  * The signed-in owner and page one's identity. A page-one draft from this tab
- * wins and is saved privately, so another tab can resume before Continue;
- * without one, the saved identity is used.
+ * wins once and is saved privately, so another tab can resume before
+ * Continue. After that the saved identity is used, so this tab can't later
+ * write its older copy over one saved from another tab. Sources come from the
+ * draft; without them, CV starts on only if a CV is already staged.
  */
 async function loadOwner(): Promise<{ load: Load; sources: SourceChoices }> {
   const draft = readDraft();
-  return { load: await ownerLoad(draft ? identityFrom(draft) : null), sources: draft?.sources ?? DEFAULT_SOURCES };
+  const load = await ownerLoad(draft && !draft.identitySaved ? identityFrom(draft) : null);
+  const latest = readDraft(); // switches may have changed while this loaded
+  if (latest && !latest.identitySaved && load.state === "ready") saveDraft({ ...latest, identitySaved: true });
+  const staged = load.state === "ready" && load.owner.pendingCv !== null;
+  return { load, sources: latest?.sources ?? { ...DEFAULT_SOURCES, cv: staged } };
 }
 
 const unavailable = (status: number): Load => ({ state: status === 401 ? "signed-out" : "failed" });
@@ -236,23 +242,34 @@ export function SourcesForm({
     if (on && load.state === "ready" && (!pages || pages.state === "failed")) void discover("public_profile", load.identity);
   }
 
-  /** Discards the staged CV. If that fails, CV stays on, so nothing is silently kept. */
-  async function removeCv(turningOff: boolean) {
-    if (!cvUpload) return;
-    setCvRemoveFailed(false);
-    const result = await enrichmentApi.removeCv(cvUpload.uploadId);
-    if (!result.ok && result.status !== 404) {
-      setCvRemoveFailed(true);
-      if (turningOff) changeSources({ ...sources, cv: true });
-      return;
-    }
-    setCvUpload(null);
-  }
+  /**
+   * Discards a staged CV. If that fails while turning CV off, CV goes back on
+   * (and only CV: switches changed meanwhile stay), so nothing is silently kept.
+   */
+  const removeCv = useCallback(
+    (upload: CvUpload, turningOff: boolean) =>
+      enrichmentApi.removeCv(upload.uploadId).then((result) => {
+        const removed = result.ok || result.status === 404;
+        setCvRemoveFailed(!removed);
+        if (removed) return setCvUpload((u) => (u?.uploadId === upload.uploadId ? null : u));
+        setCvUpload((u) => u ?? upload);
+        if (!turningOff) return;
+        setSources((s) => ({ ...s, cv: true }));
+        const draft = readDraft();
+        if (draft?.sources) saveDraft({ ...draft, sources: { ...draft.sources, cv: true } });
+      }),
+    [],
+  );
+
+  // CV is off but a CV is staged: turned off here, turned off on page one, or the upload finished after turning it off.
+  const stagedWhileOff = !sources.cv && cvUpload ? cvUpload : null;
+  useEffect(() => {
+    if (stagedWhileOff) void removeCv(stagedWhileOff, true);
+  }, [stagedWhileOff, removeCv]);
 
   function toggleCv(on: boolean) {
     changeSources({ ...sources, cv: on });
     setCvProblem(null);
-    if (!on && cvUpload) void removeCv(true);
   }
 
   async function connectGitHub() {
@@ -519,7 +536,7 @@ export function SourcesForm({
             setCvUpload(upload);
             setCvProblem(null);
           }}
-          onRemove={() => void removeCv(false)}
+          onRemove={() => cvUpload && void removeCv(cvUpload, false)}
           removeFailed={cvRemoveFailed}
           problem={cvProblem ?? (shown("cv_missing") ? "cv_missing" : null)}
         />
@@ -531,8 +548,9 @@ export function SourcesForm({
         </p>
         {startFailure && <HowToFix reason={startFailure.reason} retryAfterSeconds={startFailure.retryAfterSeconds} />}
       </div>
-      {/* Only the button is sticky on phones, so a message never grows to cover the page. */}
-      <div className="sticky bottom-0 -mx-4 mt-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+      {/* Only the button is sticky on phones, so a message never grows to cover the page. The page's
+          scroll padding keeps a focused field or link above it. */}
+      <div className="sticky bottom-0 -mx-4 mt-3 bg-background/95 px-4 pb-4 pt-3 backdrop-blur max-sm:[html:has(&)]:scroll-pb-24 sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         <Button type="button" className="w-full text-lg sm:w-auto sm:px-10" aria-disabled={starting} onClick={onContinue}>
           {starting ? "Starting…" : "Continue"}
         </Button>

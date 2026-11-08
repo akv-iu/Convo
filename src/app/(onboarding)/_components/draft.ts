@@ -28,6 +28,8 @@ export const Draft = z.object({
   /** Profile enrichment's page one only: an ORCID iD and which sources to import. */
   orcid: z.string().nullable().optional(),
   sources: SourceChoices.optional(),
+  /** Page two has saved this identity; from then on the account's saved identity wins over this tab's copy. */
+  identitySaved: z.boolean().optional(),
 });
 export type Draft = z.infer<typeof Draft>;
 

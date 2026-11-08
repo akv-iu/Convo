@@ -181,6 +181,26 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(github.getByText("Sign in with that GitHub instead", { exact: false })).toBeVisible();
   });
 
+  test("a Connect GitHub reply that points anywhere but sign-in is refused, not followed", async ({ page }) => {
+    await asNewGoogleUser(page);
+    await page.route((url) => url.hostname !== "localhost", (route) => route.abort()); // never leave for a real site
+    await fillDetails(page);
+    await toSources(page);
+    const paths = ["https://lanyard.invalid/api/auth/connect/github", "//lanyard.invalid/api/auth/", "/onboarding"];
+    let replies = 0;
+    await page.route("**/api/profile-enrichment/github/connect", (route) =>
+      route.fulfill({ json: { status: "redirect", path: paths[replies++] } }),
+    );
+    const github = region(page, "GitHub");
+    for (let i = 1; i <= paths.length; i++) {
+      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      await expect.poll(() => replies).toBe(i);
+      await expect(github.getByText("This import isn't available")).toBeVisible();
+      await expect(page).toHaveURL(/\/signin\/sources$/);
+    }
+    await expect(page.getByRole("button", { name: "Connect GitHub" })).toBeVisible(); // not stuck on "Connecting…"
+  });
+
   test("unavailable and empty searches say so, and searching again works", async ({ page }) => {
     await asNewGoogleUser(page);
     await fillDetails(page, "Ada [demo:unavailable]");
@@ -250,6 +270,126 @@ test.describe("profile enrichment: details and sources", () => {
 
     await toggle(page, "CV");
     await expect.poll(async () => (await api(page, user)).pendingCv).toBeNull();
+  });
+
+  test("CV off never leaves a CV staged, and a failed removal turns only CV back on", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    await fillDetails(page);
+    await toggle(page, "GitHub");
+    await toggle(page, "CV");
+    await toSources(page);
+    const cv = region(page, "CV");
+    const pending = async () => (await api(page, user)).pendingCv;
+    async function useText() {
+      await cv.getByRole("textbox", { name: "CV text" }).fill("Engineer. Writes about computation.");
+      await cv.getByRole("button", { name: "Use this text" }).click();
+    }
+
+    // Turned off while the upload is on its way: the finished upload is discarded.
+    let deliver!: () => void;
+    const held = new Promise<void>((resolve) => (deliver = resolve));
+    await page.route("**/api/profile-enrichment/cv", async (route) => {
+      const response = await route.fetch();
+      await held;
+      await route.fulfill({ response });
+    });
+    await useText();
+    await expect(cv.getByText("Uploading…")).toBeVisible();
+    await toggle(page, "CV");
+    const uploaded = page.waitForResponse("**/api/profile-enrichment/cv");
+    deliver();
+    await uploaded;
+    await expect.poll(pending).toBeNull();
+    await page.unroute("**/api/profile-enrichment/cv");
+
+    // Removal fails while another switch changes: CV comes back on, Research papers stays off.
+    await toggle(page, "CV");
+    await useText();
+    await expect(cv.getByText("Pasted CV text")).toBeVisible();
+    let fail!: () => void;
+    const failing = new Promise<void>((resolve) => (fail = resolve));
+    await page.route("**/api/profile-enrichment/cv/*/remove", async (route) => {
+      await failing;
+      await route.fulfill({ status: 503, json: { error: "Unavailable", code: "provider_down" } });
+    });
+    const removing = page.waitForRequest("**/api/profile-enrichment/cv/*/remove");
+    await toggle(page, "CV");
+    await removing;
+    await toggle(page, "Research papers");
+    fail();
+    await expect(cv.getByText("Your uploaded CV couldn't be removed, so CV is still on. Try again.")).toBeVisible();
+    await expect(page.getByRole("switch", { name: "CV", exact: true })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "Research papers", exact: true })).not.toBeChecked();
+    await page.unroute("**/api/profile-enrichment/cv/*/remove");
+    expect(await pending()).not.toBeNull();
+
+    // Turned off on page one: page two discards it.
+    await page.getByRole("link", { name: "Back to About you" }).click();
+    await expect(page.getByRole("switch", { name: "CV", exact: true })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "Research papers", exact: true })).not.toBeChecked();
+    await toggle(page, "CV");
+    await toSources(page);
+    await expect(page.getByRole("switch", { name: "CV", exact: true })).not.toBeChecked();
+    await expect.poll(pending).toBeNull();
+  });
+
+  test("an older tab's Continue refreshes to the identity a newer tab saved, and never writes over it", async ({ page, context }) => {
+    const user = await asNewGoogleUser(page);
+    await fillDetails(page);
+    await toggle(page, "GitHub");
+    await toSources(page);
+
+    const newer = await context.newPage();
+    await newer.setExtraHTTPHeaders({ "x-demo-user": user });
+    await fillDetails(newer, "Ada King");
+    await toggle(newer, "GitHub");
+    await toSources(newer);
+    expect((await api(page, user)).identity.name).toBe("Ada King");
+
+    const searchedAgain = page.waitForRequest((r) => r.url().endsWith("/api/profile-enrichment/discover") && r.postDataJSON()?.source === "research");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByText("Something changed since this page loaded", { exact: false })).toBeVisible();
+    expect((await searchedAgain).postDataJSON().name).toBe("Ada King");
+    expect((await api(page, user)).identity.name).toBe("Ada King");
+
+    // Reloading the older tab doesn't write its copy back either.
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Choose what Lanyard reads");
+    expect((await api(page, user)).identity.name).toBe("Ada King");
+  });
+
+  test("on phones, keyboard focus never lands under the sticky Continue", async ({ page }) => {
+    test.skip(!test.info().project.name.endsWith("phone"), "Continue is sticky only on phones");
+    /** Tabs to Continue; returns each field or link that was focused but sat under the bar. */
+    async function coveredOnTheWay(): Promise<string[]> {
+      const covered: string[] = [];
+      for (let i = 0; i < 80; i++) {
+        await page.keyboard.press("Tab");
+        const found = await page.evaluate(() => {
+          const bar = document.querySelector("main .sticky");
+          const el = document.activeElement;
+          if (!bar || !el) return "lost";
+          if (bar.contains(el)) return "bar";
+          if (el === document.body) return null; // nothing focused for this press
+          const under = el.getBoundingClientRect().bottom > bar.getBoundingClientRect().top + 0.5;
+          return under ? (el.getAttribute("aria-label") ?? el.id ?? el.tagName).slice(0, 60) || el.tagName : null;
+        });
+        if (found === "bar") return covered;
+        if (found === "lost") throw new Error("No sticky bar or focus");
+        if (found) covered.push(found);
+      }
+      throw new Error("Tab never reached Continue");
+    }
+
+    await asNewGoogleUser(page);
+    await page.goto("/signin");
+    await expect(page.getByLabel("Your name")).toBeVisible();
+    expect(await coveredOnTheWay()).toEqual([]);
+
+    await fillDetails(page);
+    await toSources(page);
+    await expect(region(page, "Research papers").getByRole("radio")).toHaveCount(5);
+    expect(await coveredOnTheWay()).toEqual([]);
   });
 
   test("signed out, page two offers Google and GitHub, and shows only known reasons", async ({ page }) => {
