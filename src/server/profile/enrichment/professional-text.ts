@@ -31,7 +31,10 @@ export function professionalCv(owner: string, text: string): ApprovedEvidence[] 
     if (/^(?:(?:professional|work|research|teaching) )?experience$|^(?:education|skills|technical skills|publications|selected publications|projects|research interests|certifications|grants|awards)$/i.test(heading)) {
       current = { label: heading, lines: [] }; sections.push(current);
     } else if (/^\s*#+\s/.test(line) || /^(?:[\p{L} ]{1,60}):$/u.test(line.trim())
-      || /^(?:(?:professional )?references|referees|personal(?: details| information)?|medical(?: information| history)?|hobbies|interests|contact)$/i.test(heading)) current = undefined;
+      || /^(?:(?:professional )?references|referees|personal(?: details| information)?|medical(?: information| history)?|hobbies|interests|contact)$/i.test(heading)
+      // Referee headings often carry words after them ("Referees (available on request)"); never let the
+      // names below them join the previous professional section. "Reference implementation" stays content.
+      || /^(?:(?:professional )?references\b|referees?\b|reference\s*:)/i.test(heading)) current = undefined;
     else if (current) current.lines.push(line);
   }
   return sections.flatMap((section, index) => {

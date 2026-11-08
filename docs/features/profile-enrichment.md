@@ -15,8 +15,9 @@ This tracks the whole feature across the foundation, backend and screens. A chec
 - [x] Approved-evidence storage implementation: atomic approval/withdrawal, text revisions, all-source indexing, pending-sync retries and source ownership tests. Migration and live acceptance remain open; see [the storage handoff](../../db/Enrichment-Approval.md).
 - [x] Internal import runner and synthesis: selected-source collection, partial retry, professional excerpts, lease-fenced cached draft generation and atomic cache erasure. Request wiring, cleanup scheduling and live acceptance remain open; see [the runner handoff](../../db/Enrichment-Runner.md).
 - [x] Start/retry execution implementation: real requests schedule the runner with owner-bound credentials, current text revisions and per-attempt callback fencing. Discovery/CV/cleanup integration and live acceptance remain open; see [the execution handoff](../../db/Enrichment-Execution.md).
+- [x] Backend integration: execution, CV upload, discovery API and authenticated cleanup merged on one branch, with manual-input retention and stale cleanup-deadline fixes; migration chain and credential-free build checked. Migrations, settings, the retention decision and live acceptance remain open; see [the backend integration handoff](../../db/Enrichment-Backend-Integration.md).
 - [ ] Screens: source controls, candidate previews, CV, progress, help, editable bio and nullable-handle display.
-- [ ] Search: expertise, reserved-ID protection, cross-route memory state and complete-evidence rebuild recovery.
+- [x] Search: expertise, reserved-ID protection, cross-route memory state and complete-evidence rebuild recovery (included in the backend integration).
 - [ ] Data: reviewed additive migrations applied/verified in the intended Neon environment without resetting shared data.
 - [ ] Settings: Google/OpenAlex/Brave/cleanup environment values configured privately by Person B; feature remains off until acceptance.
 - [ ] Tests: two review rounds, fake flag-off/on browser coverage with axe, then authorized live two-account/source/removal acceptance.

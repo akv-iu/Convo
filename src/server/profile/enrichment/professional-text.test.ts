@@ -27,3 +27,9 @@ it("ends an allowed section at unrelated Markdown headings or professional refer
   expect(professionalCv("owner","## Skills\nTypeScript\n## Medical Information\nDiabetes").map(d=>d.excerpt)).toEqual(["TypeScript"]);
   expect(professionalCv("owner","Skills\nTypeScript\nProfessional References\nDr Other\nProfessor Friend").map(d=>d.excerpt)).toEqual(["TypeScript"]);
 });
+it.each(["Referees (available on request)", "References available upon request", "REFEREES - two academic", "Reference: on request"])("ends a section at a referees heading with trailing words: %s", heading => {
+  expect(professionalCv("owner", `Skills\nTypeScript\n${heading}\nDr Jane Other, Professor of Physics`).map(d => d.excerpt)).toEqual(["TypeScript"]);
+});
+it("keeps professional lines that merely mention references", () => {
+  expect(professionalCv("owner", "Projects\nReference implementation of a JSON parser").map(d => d.excerpt)).toEqual(["Reference implementation of a JSON parser"]);
+});
