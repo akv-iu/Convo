@@ -20,6 +20,17 @@ Note for local runs: free ports 3100 and 3101 first. Another session's harness u
 
 After "Back to About you", the test checked the CV and Research switches, then tapped CV. Page 2 has the same switches in the same states, so those checks could pass against page 2 before page 1 had rendered. The tap then targeted page 2's label, which was hidden a moment later, so the click waited until the 30 s timeout (see the central test results' phone trace).
 
+**Underlying cause (Claude 1, from the original phone trace):**
+- With `cacheComponents: true`, Next keeps the page you leave in the page inside a hidden React `<Activity>`, rather than removing it (`next/dist/client/components/layout-router.js:518-521`, `mode: 'hidden'`). Page two's label was therefore hidden but still attached.
+- Playwright retries a click on the same element for as long as that element stays attached. In the trace, the toggle's locator resolved once, then got "element is not visible" 59 times until the timeout. It never looked again, so it never found page one's visible label.
+- A phone run is slower, which widens the window between the Back click and page one appearing. That explains why phone failed and laptop passed.
+- This is a test synchronization defect, not an application or data defect.
+
+**Why the fix covers it:**
+- "Your name" exists only on page one, and page one was itself kept hidden while page two showed. So `toBeVisible()`, not a presence check, waits until React has finished the swap, which hides page two in the same commit.
+- After that, `getByRole("switch")` (inside the toggle helper too) skips the hidden page-two switches. The tap can only resolve page one's visible label, and normal hit-testing still applies.
+- The other Back steps already wait on content only the destination page shows: `sources.spec.ts:216`, and `preferences.spec.ts:105` and `:118`.
+
 The test now waits for `/signin` and page 1's "Your name" field before using the switches. It's a test-only change: no forced click, timeout, retry or skip. The other Back step (line 215) already waited on "Your name".
 
 ## Verification (one final run)
