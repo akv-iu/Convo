@@ -25,6 +25,12 @@ export function expire(data: OwnerData) {
   if (expiredCv) clearCv(data);
   for (const job of data.jobs) {
     if (job.value.state === "failed" && job.input === null) continue;
+    // Manual is never reviewed or retried. Rows saved before finishDraft dropped its input still hold it,
+    // which also pins their cleanup deadline in the past: drop it here (a pending CV is separate and kept).
+    if (job.value.state === "manual" && (job.input || job.collected.length)) {
+      job.input = null; job.collected = []; delete job.synthesisCacheKeys;
+      continue;
+    }
     if (!terminal(job) && (Date.parse(job.value.expiresAt) <= now || (expiredCv && job.input?.cv?.uploadId === expiredCv))) {
       discard(data, job, "failed");
       job.value.sources = job.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "failed", reason: s.source === "cv" && expiredCv ? "cv_expired" : "timeout" });
@@ -96,11 +102,15 @@ const shownName = (name: string) => name.split(/[\\/]/).at(-1)!.replace(/\p{Cc}/
  */
 export async function stageCvText(owner: string, input: RouteBody<"uploadCv">, limits: CvLimits = CV_LIMITS) {
   const parsed = UploadCv.parse(input);
-  await mutate(owner, data => rate(data, "upload", 6));
+  const uploadId = randomUUID();
+  // The attempt is counted and becomes the current upload before parsing; a newer upload, or a start,
+  // identity change or withdrawal (each a new generation) while it's read means its text is never staged.
+  await mutate(owner, data => { rate(data, "upload", 6); data.cvAttempt = { uploadId, generation: data.generation }; });
   const cv = "text" in parsed ? { text: parsed.text, filename: null, warnings: [] }
     : { ...await extractCvText(new Uint8Array(await parsed.file.arrayBuffer()), limits), filename: shownName(parsed.file.name) };
-  const uploadId = randomUUID();
   return mutate(owner, data => {
+    if (data.cvAttempt?.uploadId !== uploadId || data.cvAttempt.generation !== data.generation) enrichmentError("consent_changed");
+    delete data.cvAttempt;
     for (const job of data.jobs) if (job.input?.cv?.uploadId === data.cv?.metadata.uploadId && job.input?.cv && !terminal(job)) discard(data, job, "cancelled");
     clearCv(data);
     const metadata = { uploadId, filename: cv.filename, characters: cv.text.length, warnings: cv.warnings, expiresAt: new Date(Date.now()+INPUT_TTL_MS).toISOString() };

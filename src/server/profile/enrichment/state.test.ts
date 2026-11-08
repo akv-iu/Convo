@@ -245,3 +245,24 @@ it("keeps no private input once an all-empty import finishes manual, so cleanup 
   const { nextSweepAt } = await vi.importActual<typeof import("./storage")>("./storage");
   expect(nextSweepAt(mocks.data.get(owner)!)!.getTime()).toBeGreaterThan(Date.now());
 });
+it("erases input a manual job saved by earlier code still holds, keeping its history and a newer CV, so cleanup moves on", async () => {
+  const job = await createJob(owner, activeInput(), null); const lease = await claimJob(owner, job.jobId);
+  await recordCollection(owner, job.jobId, lease.token, lease.value.sources.map(s => s.status === "not_selected" ? s : { ...s, status: "empty" as const, items: 0 }), []);
+  await finishDraft(owner, job.jobId, lease.token, { bio: "", bioEvidenceIds: [], expertise: [] });
+  const legacy = mocks.data.get(owner)!;
+  legacy.jobs[0].input = activeInput(); // as stored before manual completion dropped it
+  vi.setSystemTime(Date.now() + INPUT_TTL_MS + 60_000);
+  legacy.cv = { metadata: { uploadId: crypto.randomUUID(), filename: null, characters: 8, warnings: [], expiresAt: new Date(Date.now() + INPUT_TTL_MS).toISOString() }, text: "Newer CV" };
+  const { nextSweepAt } = await vi.importActual<typeof import("./storage")>("./storage");
+  expect(nextSweepAt(legacy)!.getTime()).toBeLessThan(Date.now()); // due, and without the fix it would stay due on every run
+  mocks.data.set("google:other", { ...emptyOwnerData(), cv: { metadata: { uploadId: crypto.randomUUID(), filename: null, characters: 5, warnings: [],
+    expiresAt: new Date(Date.now() - 1).toISOString() }, text: "Other owner's expired CV" } });
+  mocks.due.mockResolvedValue([owner, "google:other"]);
+  expect(await cleanupExpired()).toEqual({ processed: 2, failed: 0 });
+  const after = mocks.data.get(owner)!;
+  expect(JSON.stringify(after)).not.toContain("Private page input");
+  expect(after.jobs[0]).toMatchObject({ input: null, collected: [], value: { state: "manual" } });
+  expect(after.cv?.text).toBe("Newer CV");
+  expect(nextSweepAt(after)!.getTime()).toBeGreaterThan(Date.now());
+  expect(mocks.data.get("google:other")!.cv).toBeNull();
+});

@@ -79,7 +79,15 @@ Facts from Vercel's documentation, checked 2026-11-07:
 2. **Pro plan, hourly schedule.** Change the expression to `"17 * * * *"` for about 25 hours. Deployment fails on Hobby with this expression, so change it only once the project is on Pro.
 3. **A second free trigger.** For example, a scheduled GitHub Actions workflow calling the endpoint with the secret. `.github/` is a gated folder that needs both people's approval, GitHub's own schedule is also best effort, and the workflow would need the secret as a repository secret.
 
-Until then, expired input is still unreadable after 24 hours, because every read applies `expire()` first. Only physical removal from Postgres can take up to about 49 hours.
+Until then, expired input is still unreadable after 24 hours, because every read applies `expire()` first. Only physical removal from Postgres can take up to about 49 hours. Don't describe deletion as "within 48 hours" anywhere until one of these is chosen and verified.
+
+**Monitoring and recovery** (whichever option is chosen):
+- Check the Cron Jobs log after each run for the first week, then weekly.
+  - **200 `complete`:** that run's due rows are done.
+  - **500 `partial`:** some owners failed. They were deferred ten minutes, but nothing runs again until the next scheduled run. Investigate the cause (for example, an unreadable stored document, which is never reset automatically), then trigger a run by hand: open the cron job in Vercel and choose Run, or call the endpoint with the secret.
+  - **503 `failed`:** storage was unreachable or the migrations are missing. Fix that, then run by hand.
+  - **`stoppedEarly: true`:** the batch budget ran out. Run again by hand; if it repeats, investigate before raising limits.
+- A failed or skipped run adds a day to physical deletion on the daily schedule. Unreadability at 24 hours doesn't depend on runs.
 
 **Capacity:** each run covers up to 1,000 owner attempts in 30 seconds of batching. That is far beyond the expected daily volume. If `stoppedEarly` shows up repeatedly, investigate before raising the limits.
 
@@ -97,20 +105,25 @@ When every selected source came back empty, `finishDraft()` set the job to `manu
 
 The fixes, on `b/enrichment-backend-integration`, each with a failing-first regression:
 - `finishDraft` now clears `input` and `collected` when a job ends `manual`. Manual jobs are never retried.
+- `expire()` also clears them from **manual jobs already stored by earlier code**, so those rows stop holding input and stop pinning a past deadline. Job history and any pending CV are kept.
 - `mutateOwner` now rewrites the deadline, version-guarded, whenever the stored value differs from the computed one, even when the document is unchanged.
 
-The regressions are in `state.test.ts`, `storage.test.ts` and this route's starvation test.
+The regressions are in `state.test.ts` (a new manual completion, and a stored manual row with input processed alongside another owner), `storage.test.ts`, and this route's starvation test.
 
 ## Setup (deployment, needs the user's approval)
 
 Person B sets Vercel variables (AGENTS.md).
 
-1. Generate a secret locally and keep it out of chat, screenshots and commits. In PowerShell: `[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))`, or `openssl rand -base64 32`.
-2. In Vercel, open the project's Settings, then Environment Variables. Add `CRON_SECRET` for **Production**. Preview is unnecessary, since cron jobs never call previews.
-3. Merge to `main` with `vercel.json` and redeploy production. A changed secret only takes effect after a redeploy.
-4. In Vercel, open the project's Settings, then Cron Jobs. Expect `/api/cron/enrichment-cleanup` at `17 3 * * *`. After the next run, the invocation log should show 200 (or 500 `partial`, which needs investigating).
-5. Apply the reviewed migration chain first. Without `profile_enrichment_states`, the run answers 503 `failed`.
+1. **Migrations before any deployment of this code.**
+   - Apply and verify the reviewed chain (`0007`–`0010`), following the order and checks in `Enrichment-Migrations.md` and `Enrichment-Backend-Integration.md`.
+   - Do it even with the feature off: ordinary profile reads select the new user columns, and cleanup needs `profile_enrichment_states` (without it, the run answers 503 `failed`).
+   - Never reset data.
+2. Generate a secret locally and keep it out of chat, screenshots and commits. In PowerShell: `[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))`, or `openssl rand -base64 32`.
+3. In Vercel, open the project's Settings, then Environment Variables. Add `CRON_SECRET` for **Production**. Preview is unnecessary, since cron jobs never call previews.
+4. Only after step 1 is verified: merge to `main` with `vercel.json` and redeploy production. A changed secret only takes effect after a redeploy.
+5. In Vercel, open the project's Settings, then Cron Jobs. Expect `/api/cron/enrichment-cleanup` at `17 3 * * *`. After the next run, the invocation log should show 200. A 500 `partial` or 503 `failed` needs the steps under Monitoring and recovery.
 6. Keep `PROFILE_ENRICHMENT_ENABLED` off until the whole feature passes acceptance. Cleanup runs either way.
+7. Before enabling imports, retire any older deployment that still writes evidence the old way (see `Enrichment-Approval.md`), so it can't overwrite approved evidence.
 
 ## Complete manual checklist
 

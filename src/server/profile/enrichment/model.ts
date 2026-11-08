@@ -22,6 +22,8 @@ export const OwnerData = z.strictObject({
   discoveries: z.array(z.object({ input: DiscoverEnrichment, value: EnrichmentDiscovery })).max(16),
   jobs: z.array(PrivateJob).max(50),
   limits: z.partialRecord(z.enum(["identity", "upload", "start", "retry", "discovery"]), z.object({ since: z.number(), count: z.number().int().nonnegative() })),
+  /** The CV upload being read now: only it may be staged, and only under the generation it started in. */
+  cvAttempt: z.object({ uploadId: z.uuid(), generation: z.number().int().nonnegative() }).optional(),
 });
 export type OwnerData = z.infer<typeof OwnerData>;
 export const cacheKeys = (data: OwnerData) => data.jobs.flatMap(job => job.synthesisCacheKeys ?? []);
