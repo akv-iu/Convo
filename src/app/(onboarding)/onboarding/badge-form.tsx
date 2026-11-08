@@ -321,7 +321,7 @@ export function BadgeForm() {
           card so their tops and bottoms line up. From 1024 px the badge hangs from a strap (lg:mt-16),
           so the same margin here starts the panel level with the card.
         */}
-        <div className="flex w-full max-w-sm flex-col justify-between gap-2 rounded-2xl border-2 border-border bg-surface px-4 py-2.5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-stretch lg:mt-16">
+        <div className="flex w-full max-w-sm flex-col justify-between gap-2 rounded-2xl border-2 border-border bg-surface px-4 py-2.5 sm:col-start-2 sm:row-start-1 sm:self-stretch lg:mt-16">
           <fieldset className="border-0 p-0">
             <legend className="sr-only">Show on your badge</legend>
             <div className="flex flex-col divide-y-2 divide-border">
