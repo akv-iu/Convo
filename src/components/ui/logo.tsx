@@ -62,23 +62,23 @@ function TuckedY() {
 }
 
 /**
- * The y as a written one: the V meets lower, the right arm carries on down and curves to the left
- * like a y's tail, and the badge hangs from its end, tilted with the curve, below the line.
+ * The y as a written one: the V's arms meet low, below the line of the other letters, and the
+ * badge hangs straight from that point, swinging out to the left like a y's tail.
  */
 function DropY() {
   return (
-    <svg viewBox="0 0 64 120" focusable="false" className="mx-[0.01em] inline-block h-[1.16em] w-[0.62em] align-[-0.56em]">
-      {/* The left arm, meeting the right one below the baseline. */}
-      <path d="M8 7 34 58" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-      {/* The right arm becomes the strap: down past the meeting point, then curving left. */}
-      <path d="M56 7C50 30 42 50 34 62C29 70 24 74 18 77" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-      {/* The badge hangs from the strap's end, tilted with the curve. */}
-      <g transform="rotate(16 18 78)">
-        <rect x="5" y="74" width="27" height="40" rx="5.5" fill="var(--accent)" />
-        <path d="M5 79.5a5.5 5.5 0 0 1 5.5-5.5h16a5.5 5.5 0 0 1 5.5 5.5v3.5H5z" fill="var(--logo-stripe)" />
-        <circle cx="14" cy="97" r="4.5" fill="var(--on-accent)" />
-        <rect x="21" y="93.5" width="7.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
-        <rect x="21" y="99.5" width="5.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
+    <svg viewBox="0 0 64 124" focusable="false" className="mx-[0.01em] inline-block h-[1.2em] w-[0.62em] align-[-0.6em]">
+      {/* The arms, meeting low; the right one bends a little into the tail. */}
+      <path d="M8 7 36 76" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
+      <path d="M58 7C53 31 45 55 36 76" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
+      {/* The badge starts right at the bottom of the V and swings out to the left. */}
+      <g transform="rotate(24 36 76)">
+        <rect x="31" y="72" width="10" height="7" rx="2" fill="currentColor" />
+        <rect x="22" y="77" width="28" height="40" rx="5.5" fill="var(--accent)" />
+        <path d="M22 82.5a5.5 5.5 0 0 1 5.5-5.5h17a5.5 5.5 0 0 1 5.5 5.5v3.5H22z" fill="var(--logo-stripe)" />
+        <circle cx="31" cy="100" r="4.5" fill="var(--on-accent)" />
+        <rect x="38" y="96.5" width="7.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
+        <rect x="38" y="102.5" width="5.5" height="3.2" rx="1.6" fill="var(--on-accent)" />
       </g>
     </svg>
   );
