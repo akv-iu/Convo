@@ -176,6 +176,8 @@ export function SourcesForm({
   const [notice, setNotice] = useState<string | null>(null);
   const key = useRef<StartKey | null>(null);
   const searches = useRef({ research: 0, public_profile: 0 });
+  /** The start request as this page loaded, before any change: Continue with exactly that keeps a running import. */
+  const asLoaded = useRef<string | null>(null);
 
   const discover = useCallback(async (source: "research" | "public_profile", identity: Identity) => {
     const set = source === "research" ? setResearch : setPages;
@@ -193,6 +195,8 @@ export function SourcesForm({
       setLoad(next);
       if (next.state !== "ready") return;
       setCvUpload(next.owner.pendingCv);
+      const unpicked = { research: null, publicProfile: null, cvUploadId: next.owner.pendingCv?.uploadId ?? null };
+      asLoaded.current = JSON.stringify(startBody(next.identity, chosen, unpicked));
       const kept = takeKept(next.identity);
       const keptResearch = stillValid(kept?.research);
       const keptPages = stillValid(kept?.pages);
@@ -392,6 +396,8 @@ export function SourcesForm({
       return;
     }
     const body = startBody(identity, sources, picks);
+    // Back here from a later page and nothing changed: carry on with the running import instead of starting another.
+    if (owner.job && ACTIVE_JOB.has(owner.job.state) && JSON.stringify(body) === asLoaded.current) return router.push(NEXT_PAGE);
     key.current = keyFor(body, key.current);
     setStarting(true);
     setStartFailure(null);
