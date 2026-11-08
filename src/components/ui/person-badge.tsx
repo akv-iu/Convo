@@ -1,10 +1,11 @@
 /**
  * A person as they chose to show themselves, shared by match and request cards. Their badge
- * colour, name and GitHub, workplace, country and hiring (hidden sections
- * aren't there), a line of bio and a few skills.
+ * colour, name, GitHub (when they've connected one), workplace, country and hiring (hidden
+ * sections aren't there), a line of bio and a few skills.
  */
 import type { CSSProperties } from "react";
 import type { CardPerson } from "@/contracts/types";
+import { Avatar } from "./avatars";
 import { personColour } from "./badge-colours";
 import { countryName } from "./countries";
 
@@ -34,21 +35,23 @@ export function PersonBadge({ person, caption, nameId }: { person: CardPerson | 
   const Name = nameId ? "h2" : "p";
   return (
     <div style={style} className="flex gap-3 rounded-xl border-l-8 border-[var(--badge)] bg-background px-3 py-2.5">
-      <span aria-hidden="true" className="mt-1 size-10 shrink-0 rounded-full bg-[var(--badge)]" />
+      <Avatar avatar={person.avatar} name={person.name} className="mt-1 size-10 text-sm" />
       <div className="min-w-0 flex-1">
         {caption && <p className="text-xs font-semibold text-muted">{caption}</p>}
         <Name id={nameId} className={`font-bold leading-snug break-words${nameId ? " text-2xl tracking-tight" : ""}`}>
           {person.name}
         </Name>
-        <a
-          href={githubProfile(person.githubLogin)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
-        >
-          @{person.githubLogin}
-          <span className="sr-only"> on GitHub (opens in a new tab)</span>
-        </a>
+        {person.githubLogin && (
+          <a
+            href={githubProfile(person.githubLogin)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            @{person.githubLogin}
+            <span className="sr-only"> on GitHub (opens in a new tab)</span>
+          </a>
+        )}
         {facts.length > 0 && <p className="text-sm text-muted">{facts.join(" · ")}</p>}
         {person.bio && <p className="mt-1 line-clamp-2 text-sm">{person.bio}</p>}
         {(person.synthetic || chips.length > 0) && (

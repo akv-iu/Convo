@@ -6,6 +6,7 @@
 import type { CSSProperties } from "react";
 import type { MatchResult } from "@/contracts/types";
 import { personColour } from "./badge-colours";
+import { Avatar } from "./avatars";
 import { badgeFacts } from "./person-badge";
 
 /** The condensed row: colour, name, handle, the facts they show, and why Lanyard picked them. */
@@ -23,11 +24,11 @@ export function MatchSummary({
   const facts = badgeFacts(p);
   return (
     <span style={{ "--badge": personColour(p) } as CSSProperties} className="flex min-w-0 flex-1 items-start gap-3 text-left">
-      <span aria-hidden="true" className="mt-0.5 size-10 shrink-0 rounded-full bg-[var(--badge)]" />
+      <Avatar avatar={p.avatar} name={p.name} className="mt-0.5 size-10 text-sm" />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className="text-lg font-bold leading-snug break-words">{p.name}</span>
-          <span className="text-sm text-muted">@{p.githubLogin}</span>
+          {p.githubLogin && <span className="text-sm text-muted">@{p.githubLogin}</span>}
         </span>
         {facts.length > 0 && <span className="block text-sm text-muted">{facts.join(" · ")}</span>}
         <span className="mt-1 line-clamp-2 text-sm leading-snug">{match.explanation}</span>

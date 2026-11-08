@@ -26,6 +26,30 @@ describe("hard filters", () => {
   });
 });
 
+describe("evidence behind a candidate", () => {
+  it("lists the matching evidence in order, with https links", async () => {
+    const found = await memorySearch.searchCandidates("kubernetes scheduler preemption", { excludeIds: [] });
+    const b = found.find((c) => c.person.id === DEMO_USER_B);
+    expect(b?.evidence[0]).toEqual({
+      kind: "commit_area",
+      title: "Maintains pkg/scheduler/framework/preemption",
+      url: "https://github.com/kubernetes/kubernetes/tree/master/pkg/scheduler/framework/preemption",
+    });
+    expect(b?.evidence.map((e) => e.kind)).toContain("talk"); // a document without a link keeps its title
+    expect(found.every((c) => c.evidence.length <= 5)).toBe(true);
+  });
+
+  it("drops a non-https link but keeps the item", async () => {
+    const person = { ...structuredClone(people[0]), id: "evidence-link-test", bio: "" };
+    await memorySearch.ingestPerson(person, [
+      { id: "plain-link", personId: person.id, kind: "repo", title: "LinkToken repo", text: "", url: "http://example.org/repo" },
+    ]);
+    const [candidate] = (await memorySearch.searchCandidates("LinkToken", { excludeIds: [] })).filter((c) => c.person.id === person.id);
+    expect(candidate.evidence).toEqual([{ kind: "repo", title: "LinkToken repo" }]);
+    await memorySearch.ingestPerson(person, []);
+  });
+});
+
 describe("ask lifecycle", () => {
   it("counts a person once, removes only the resolved ask, and ignores late registration", async () => {
     const target = { ...people[0], id: "lifecycle-target", bio: "LifecycleUniqueTopic" };

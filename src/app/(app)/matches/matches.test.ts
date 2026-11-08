@@ -16,6 +16,7 @@ import {
 function match(over: Partial<MatchResult> & { rank: number }, person: Partial<MatchResult["person"]> = {}): MatchResult {
   return {
     highlights: [],
+    evidence: [],
     badges: [],
     mutual: false,
     explanation: "Maintains etcd's Raft library",
