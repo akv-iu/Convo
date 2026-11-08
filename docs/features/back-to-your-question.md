@@ -1,6 +1,6 @@
 # Feature: Back to your question
 
-Owner: Person A · PRs: the first PR of this feature
+Owner: Person A · PRs: #52
 
 ## What it covers
 
