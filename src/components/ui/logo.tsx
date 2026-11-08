@@ -32,52 +32,43 @@ export function Logo({ className = "" }: { className?: string }) {
  * badge hangs below as its tail. Sized in em, so it follows the heading's font size. Screen
  * readers get the plain word.
  */
-export function Wordmark({ className = "", variant = "tucked" }: { className?: string; variant?: "tucked" | "drop" }) {
+export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={className}>
       <span className="sr-only">Lanyard</span>
       <span aria-hidden="true" className="whitespace-nowrap">
         Lan
-        {variant === "drop" ? <DropY /> : <TuckedY />}
+        <LanyardY />
         ard
       </span>
     </span>
   );
 }
 
-/** The y with the badge tucked up under the strap's V, a little narrower than the arms. */
-function TuckedY() {
-  return (
-    <svg viewBox="0 0 60 92" focusable="false" className="mx-[0.01em] inline-block h-[0.9em] w-[0.6em] align-[-0.32em]">
-      {/* The strap: the y's two arms, meeting just above the badge. */}
-      <path d="M8 6 30 43 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-      {/* The badge: the y's tail. */}
-      <rect x="15" y="40" width="30" height="47" rx="6" fill="var(--accent)" />
-      <path d="M15 46a6 6 0 0 1 6-6h18a6 6 0 0 1 6 6v4H15z" fill="var(--logo-stripe)" />
-      <circle cx="25" cy="66" r="5" fill="var(--on-accent)" />
-      <rect x="33" y="62" width="8" height="3.6" rx="1.8" fill="var(--on-accent)" />
-      <rect x="33" y="69" width="6" height="3.6" rx="1.8" fill="var(--on-accent)" />
-    </svg>
-  );
-}
-
 /**
- * The y set lower: the same V as the tucked version, but its top sits below the tops of the other
- * letters, and the badge starts at the bottom of the V and swings out to the left like a y's tail.
+ * The y: the strap's V is the letter's top half, the strap carries on straight down from its point,
+ * and the badge hangs centred below the line (yellow top, blue body). The V's point sits on the
+ * baseline and its arms reach the tops of the other small letters.
  */
-function DropY() {
+function LanyardY() {
   return (
-    <svg viewBox="0 0 60 92" focusable="false" className="mx-[0.01em] inline-block h-[0.9em] w-[0.6em] align-[-0.46em]">
-      {/* The strap: the y's two arms, the same V as the tucked y. */}
-      <path d="M8 6 30 43 52 6" fill="none" stroke="currentColor" strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
-      {/* The badge starts at the bottom of the V and swings out to the left. */}
-      <g transform="rotate(20 30 42)">
-        <rect x="16" y="40" width="28" height="44" rx="6" fill="var(--accent)" />
-        <path d="M16 46a6 6 0 0 1 6-6h16a6 6 0 0 1 6 6v4H16z" fill="var(--logo-stripe)" />
-        <circle cx="25.5" cy="64" r="4.8" fill="var(--on-accent)" />
-        <rect x="33" y="60" width="7.5" height="3.4" rx="1.7" fill="var(--on-accent)" />
-        <rect x="33" y="66.5" width="5.5" height="3.4" rx="1.7" fill="var(--on-accent)" />
-      </g>
+    <svg viewBox="0 0 60 110" focusable="false" className="mx-[0.01em] inline-block h-[1.24em] w-[0.68em] align-[-0.65em]">
+      <defs>
+        {/* The strap's white turns into the badge's yellow where they meet. */}
+        <linearGradient id="lanyard-y-strap" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0.55" stopColor="currentColor" />
+          <stop offset="1" stopColor="var(--logo-stripe)" />
+        </linearGradient>
+      </defs>
+      {/* The V: the y's arms, meeting on the baseline. */}
+      <path d="M9 11 30 52 51 11" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+      {/* The strap's tail, straight down to the badge. */}
+      <rect x="24.5" y="44" width="11" height="26" fill="url(#lanyard-y-strap)" />
+      {/* The badge. */}
+      <rect x="14" y="66" width="32" height="40" rx="7" fill="var(--accent)" />
+      <path d="M14 73a7 7 0 0 1 7-7h18a7 7 0 0 1 7 7v8H14z" fill="var(--logo-stripe)" />
+      <circle cx="23.5" cy="92" r="4.5" fill="var(--badge-ink)" />
+      <rect x="31" y="90" width="9.5" height="4" rx="2" fill="var(--badge-ink)" />
     </svg>
   );
 }
