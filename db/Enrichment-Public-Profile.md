@@ -22,7 +22,7 @@ Supporting files: `safe-fetch.ts` (the network boundary) and `page-text.ts` (pur
 
 ## Reading the confirmed page
 
-- One URL, no crawling: robots.txt for the page's site, then the page. Redirects to another site also need that site's robots.txt. No scripts run, no embedded assets (images, frames, styles) are fetched, and no cookies are sent.
+- One URL, no crawling: robots.txt for the page's site, then the page. Every redirect target is checked against its own site's robots.txt **before** it is requested, so a move into a disallowed path, on the same site or another, is never fetched. Each site's robots.txt is read once per run. No scripts run, no embedded assets (images, frames, styles) are fetched, and no cookies are sent.
 - **Destinations.** HTTPS on port 443 only. The address check runs inside Node's connection lookup (`publicLookup`), so the connection goes to exactly the address that was checked; a later DNS answer can't be substituted (DNS rebinding). Every hop opens a new connection (`agent: false`) and is checked again. All of a hostname's answers must be public, so a mixed answer is refused. Refused: private, loopback, link-local (including 169.254.169.254 metadata), shared (100.64/10), benchmarking, documentation, multicast, reserved and broadcast IPv4; IPv6 outside global unicast (`2000::/3`), plus Teredo/IETF (`2001::/23`), documentation and 6to4. IPv4-mapped and NAT64 IPv6 forms are refused too. IP-literal hostnames skip DNS, so they are refused before connecting.
 - **Redirects.** At most three, each re-checked as above, including the protocol (no downgrade to HTTP), port, credentials and hostname.
 - **Limits.** One 10-second deadline per operation; the page body is limited to 1 MiB both on the wire and after decompression (gzip, deflate or br; any other encoding is refused). robots.txt is limited to 512 KiB. Accepted types: `text/html`, `application/xhtml+xml`, `text/plain`.
@@ -74,7 +74,7 @@ Each protection was also removed on purpose, and the tests failed every time. Th
 - the redirect limit;
 - checking redirect targets;
 - the wire-size and decoded-size limits;
-- the robots check;
+- the robots check, including the check before each redirect hop;
 - the login check.
 
 ## Deferred integration (Codex)

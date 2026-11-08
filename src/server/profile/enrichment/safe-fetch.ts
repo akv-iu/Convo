@@ -19,7 +19,8 @@ export const USER_AGENT = "Lanyard/1.0 (profile import requested by the page's o
 const MAX_REDIRECTS = 3;
 
 /** What went wrong, without the provider's text. The caller maps it to a contract reason. */
-export type FetchFailure = "unsafe" | "unavailable" | "timeout" | "too_large" | "unsupported";
+/** blocked: the caller's `allow` check refused a redirect target before it was requested. */
+export type FetchFailure = "unsafe" | "unavailable" | "timeout" | "too_large" | "unsupported" | "blocked";
 export class PageFetchError extends Error {
   constructor(readonly failure: FetchFailure) {
     super("The page could not be read.");
@@ -123,10 +124,13 @@ function open(url: URL, accept: string, signal: AbortSignal): Promise<IncomingMe
 }
 
 /**
- * GETs a URL, following at most three redirects, each re-checked. The body is
- * read only for a 2xx reply whose content type matches `types`.
+ * GETs a URL, following at most three redirects, each re-checked (and passed to `allow`, when given,
+ * before it is requested). The body is read only for a 2xx reply whose content type matches `types`.
  */
-export async function fetchPublic(start: URL, options: { accept: string; types: RegExp; maxBytes: number; signal: AbortSignal }): Promise<Fetched> {
+export async function fetchPublic(
+  start: URL,
+  options: { accept: string; types: RegExp; maxBytes: number; signal: AbortSignal; allow?: (url: URL) => Promise<boolean> },
+): Promise<Fetched> {
   let url: URL | null = safeUrl(start);
   if (!url) throw new PageFetchError("unsafe");
   let response: IncomingMessage | undefined;
@@ -140,6 +144,7 @@ export async function fetchPublic(start: URL, options: { accept: string; types: 
         if (hop === MAX_REDIRECTS) throw new PageFetchError("unavailable");
         url = safeUrl(location, url);
         if (!url) throw new PageFetchError("unsafe");
+        if (options.allow && !(await options.allow(url))) throw new PageFetchError("blocked");
         continue;
       }
       if (status < 200 || status > 299) return { url, status, headers: response.headers, body: null };

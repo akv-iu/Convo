@@ -229,6 +229,27 @@ it("follows at most three checked redirects and refuses unsafe ones", async () =
   await fails(collectPublicProfile(owner, { url: PROFILE }), "page_blocked");
 });
 
+it("checks robots.txt for every redirect target before requesting it", async () => {
+  const redirect = (to: string): Reply => ({ status: 302, headers: { location: to } });
+  const robots = (rules: string): Reply => ({ headers: { "content-type": "text/plain" }, body: `User-agent: *\n${rules}` });
+
+  // The same site: the page moves into a path its robots.txt disallows.
+  sites.set("https://people.uni.example/robots.txt", robots("Disallow: /private/"));
+  sites.set(PROFILE, redirect("/private/ada"));
+  sites.set("https://people.uni.example/private/ada", { headers: { "content-type": "text/html" }, body: "<p>Not for crawlers.</p>" });
+  await fails(collectPublicProfile(owner, { url: PROFILE }), "page_blocked");
+  expect(served).toEqual(["https://people.uni.example/robots.txt", PROFILE]);
+
+  // Another site: its robots.txt is read before the moved page is requested.
+  served = [];
+  dns.set("new.uni.example", ["198.51.99.11"]);
+  sites.set(PROFILE, redirect("https://new.uni.example/ada"));
+  sites.set("https://new.uni.example/robots.txt", robots("Disallow: /ada"));
+  sites.set("https://new.uni.example/ada", { headers: { "content-type": "text/html" }, body: "<p>Not for crawlers.</p>" });
+  await fails(collectPublicProfile(owner, { url: PROFILE }), "page_blocked");
+  expect(served).toEqual(["https://people.uni.example/robots.txt", PROFILE, "https://new.uni.example/robots.txt"]);
+});
+
 it("stops oversized, wrongly typed and undecodable bodies", async () => {
   sites.set(PROFILE, { headers: { "content-type": "text/html", "content-length": String(2 * 1024 * 1024) }, body: "<p>x</p>" });
   await fails(collectPublicProfile(owner, { url: PROFILE }), "page_unavailable");

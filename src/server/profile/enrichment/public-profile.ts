@@ -113,14 +113,29 @@ export async function findPublicProfilePages(input: RouteBody<"discoverEnrichmen
   return candidates.sort((a, b) => own(a) - own(b)).slice(0, MAX_CANDIDATES);
 }
 
-const pageFailure = { unsafe: "page_unavailable", unavailable: "page_unavailable", too_large: "page_unavailable", unsupported: "page_unavailable", timeout: "timeout" } as const;
+const pageFailure = {
+  unsafe: ["page_unavailable", 502], unavailable: ["page_unavailable", 502], too_large: ["page_unavailable", 502],
+  unsupported: ["page_unavailable", 502], timeout: ["timeout", 503], blocked: ["page_blocked", 422],
+} as const;
 
-/** robots.txt for this URL's site, per RFC 9309: 4xx means no rules; 5xx or no answer means not now. */
-async function robotsPermit(page: URL, signal: AbortSignal): Promise<boolean> {
-  const robots = await fetchPublic(new URL("/robots.txt", page), { accept: "text/plain", types: /^/, maxBytes: MAX_ROBOTS_BYTES, signal });
-  if (robots.status >= 400 && robots.status < 500) return true;
-  if (!robots.body) enrichmentError("page_unavailable", 502);
-  return robotsAllows(decodePage(robots.body, robots.headers["content-type"]), `${page.pathname}${page.search}`, ROBOTS_TOKEN);
+/**
+ * A run's robots.txt check, per RFC 9309: each site's file is read once; 4xx means no rules,
+ * 5xx or no answer means not now. Used for the confirmed page and before every redirect hop.
+ */
+function robotsCheck(signal: AbortSignal): (url: URL) => Promise<boolean> {
+  const sites = new Map<string, Promise<string | null>>();
+  const rules = async (url: URL): Promise<string | null> => {
+    const robots = await fetchPublic(new URL("/robots.txt", url), { accept: "text/plain", types: /^/, maxBytes: MAX_ROBOTS_BYTES, signal });
+    if (robots.status >= 400 && robots.status < 500) return null;
+    if (!robots.body) enrichmentError("page_unavailable", 502);
+    return decodePage(robots.body, robots.headers["content-type"]);
+  };
+  return async (url) => {
+    let site = sites.get(url.origin);
+    if (!site) sites.set(url.origin, (site = rules(url)));
+    const text = await site;
+    return text === null || robotsAllows(text, `${url.pathname}${url.search}`, ROBOTS_TOKEN);
+  };
 }
 
 function pageEvidence(owner: string, confirmed: URL, fetched: Fetched): Evidence {
@@ -160,20 +175,23 @@ export async function collectPublicProfile(owner: string, choice: { url: string 
   if (!page) enrichmentError("page_unavailable", 422);
   const signal = AbortSignal.timeout(DEADLINE_MS);
   try {
-    if (!(await robotsPermit(page, signal))) enrichmentError("page_blocked", 422);
+    // robots.txt applies to the page and to every redirect target, each checked before it's requested.
+    const allow = robotsCheck(signal);
+    if (!(await allow(page))) enrichmentError("page_blocked", 422);
     const fetched = await fetchPublic(page, {
       accept: "text/html,application/xhtml+xml;q=0.9,text/plain;q=0.5", types: /^(text\/html|application\/xhtml\+xml|text\/plain)\b/i,
-      maxBytes: MAX_PAGE_BYTES, signal,
+      maxBytes: MAX_PAGE_BYTES, signal, allow,
     });
     if ([401, 403, 407, 451].includes(fetched.status)) enrichmentError("page_blocked", 422);
     if (fetched.status === 429) enrichmentError("rate_limited", 429, retryHint(new Headers({ "Retry-After": String(fetched.headers["retry-after"] ?? "") })));
     if (!fetched.body) enrichmentError("page_unavailable", 502);
-    // A redirect to another site is also bound by that site's robots.txt.
-    if (fetched.url.origin !== page.origin && !(await robotsPermit(fetched.url, signal))) enrichmentError("page_blocked", 422);
     return pageEvidence(owner, page, fetched);
   } catch (error) {
     if (error instanceof StateError) throw error;
-    if (error instanceof PageFetchError) enrichmentError(pageFailure[error.failure], error.failure === "timeout" ? 503 : 502);
+    if (error instanceof PageFetchError) {
+      const [code, status] = pageFailure[error.failure];
+      enrichmentError(code, status);
+    }
     enrichmentError("page_unavailable", 502);
   }
 }
