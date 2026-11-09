@@ -29,6 +29,11 @@ export function badgesFor(person: Person): string[] {
 /** How many people one match shows. */
 const SHOWN = 10;
 /**
+ * The request matcher keeps only people within reach of the best match: a candidate scoring under
+ * this share of the top score shares little of the question (a word or two of a long ask).
+ */
+const RELEVANCE = 0.3;
+/**
  * How many people are ranked every time, however many are hidden: Elasticsearch's whole window.
  * Growing the pool per hidden person let a mutual match from further down jump above people
  * already ranked, moving them. ponytail: after 40 hidden people fewer than ten show; widen it then.
@@ -59,14 +64,16 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const refined = await step("understand", async () => input.ask.refined ?? ai.refineAsk(input.ask.rawText, input.requester));
 
   const hide = new Set(input.hideIds);
-  // The box can name a country or a place (see ./narrow); a country isn't a topic, so it isn't searched for.
+  // The person finder (see ./narrow) filters the request matcher's list; it is not part of the search.
   const narrowing = readNarrowing(input.query ?? "");
-  const candidates = await step("search", () =>
-    search.searchCandidates(narrowing.rest ? `${refined.text} ${narrowing.rest}` : refined.text, {
+  const found = await step("search", () =>
+    search.searchCandidates(refined.text, {
       excludeIds: [input.requester.id, ...input.excludeIds],
       freeTimes: input.requester.freeTimes,
     }, POOL),
   );
+  const best = Math.max(0, ...found.map((c) => c.score));
+  const candidates = found.filter((c) => c.score >= RELEVANCE * best);
 
   // Mutual: the candidate's own asks match the requester. One reverse search covers every candidate.
   const mutual = await step("mutual", async () => new Set(await search.whoIsLookingFor(input.requester)));
@@ -77,7 +84,7 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   // Rank first, then hide, so ranks don't shift as people are passed on or sent a request.
   // Hidden results are never shown, so they are never explained (or paid for).
   // A country or place in the search box narrows who's shown, after ranking, so ranks stay the same.
-  const fits = narrowTo(ranked.map((c) => c.person), narrowing);
+  const fits = narrowTo(narrowing);
   const shown = ranked
     .map((c, rank) => ({ ...c, rank }))
     .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank) && fits(c.person))
