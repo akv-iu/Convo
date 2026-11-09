@@ -30,8 +30,9 @@ export const cannedAi: AiService = {
   },
 
   async explain(ask, candidates) {
-    return candidates.map((c) =>
-      c.highlights.length ? `Evidence: ${c.highlights[0]}.` : `Profile mentions what you're asking about.`,
-    );
+    // No fit: only the model judges it, so the fake API and fallbacks never drop anyone.
+    return candidates.map((c) => ({
+      why: c.highlights.length ? `Evidence: ${c.highlights[0]}.` : `Profile mentions what you're asking about.`,
+    }));
   },
 };

@@ -71,6 +71,14 @@ export function withinCutoff(matches: MatchResult[], hiddenBelowRank: number | n
   return hiddenBelowRank === null ? matches : matches.filter((m) => m.rank < hiddenBelowRank);
 }
 
+/**
+ * True when the AI judged these cards and none fits strongly: the list then says they're the nearest
+ * people, not a match. Unjudged cards (fake API, AI unavailable) never trigger it.
+ */
+export function onlyNearest(matches: MatchResult[]): boolean {
+  return matches.some((m) => m.fit) && !matches.some((m) => m.fit === "strong");
+}
+
 /** A failed PUT /api/soft-blocker. Safe to repeat, so the user can just try again. */
 export function blockerFailure(status: number, body: unknown): Failure {
   if (status === 401) return { message: "Your sign-in has expired.", action: signIn };

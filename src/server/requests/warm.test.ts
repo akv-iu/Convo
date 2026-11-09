@@ -29,7 +29,7 @@ const reply = (value: unknown) =>
 const answer = async (request: ModelRequest) => {
   if (request.text.format.name === "refined_ask") return reply({ text: "How does preemption work in the Kubernetes scheduler?", type: "knowledge" });
   const { people: sent } = JSON.parse(request.input) as { people: { ref: number }[] };
-  return reply({ lines: sent.map(({ ref }) => ({ ref, why: `Explained card ${ref}.` })) });
+  return reply({ lines: sent.map(({ ref }) => ({ ref, why: `Explained card ${ref}.`, fit: "strong" })) });
 };
 const explainCalls = () => create.mock.calls.filter(([request]) => request.text.format.name === "explanations").length;
 const aiLinesOnEveryCardWithEvidence = (cards: { highlights: string[]; explanation: string }[]) => {
