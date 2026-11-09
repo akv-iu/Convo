@@ -86,7 +86,7 @@ const AUDIT: { raw: string; topic: RegExp; hiring?: boolean }[] = [
   { raw: "I need a data engineer with Spark experience", topic: /spark|data engineer/i, hiring: false },
   { raw: "I want to build an open-source observability tool with OpenTelemetry together", topic: /opentelemetry|observability|tracing/i },
   { raw: "Looking for a co-author for climate modelling research", topic: /climate/i },
-  { raw: "How do I map EHR data to the OMOP common data model?", topic: /omop|ehr|electronic health record/i },
+  { raw: "How do I map EHR data to the OMOP common data model?", topic: /omop|\behr\b|electronic health record/i },
   { raw: "Who can explain FHIR subscriptions for hospital integrations?", topic: /fhir|hl7/i },
   { raw: "I need help segmenting tumours in CT scans with nnU-Net", topic: /segment|nnu-net|monai/i },
   { raw: "Looking for a collaborator on single-cell RNA-seq cell type annotation", topic: /single-cell|scrna|scanpy|seurat/i },
