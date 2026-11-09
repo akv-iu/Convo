@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { AskForm } from "./ask-form";
 import { LookingForYou } from "./looking-for-you";
@@ -13,7 +14,10 @@ export default function AskPage() {
         <BackLink href="/onboarding/profile" label="Back to Your details" />
       </div>
       <LookingForYou />
-      <AskForm />
+      {/* The form reads ?ask= (a saved question to show) on the client. */}
+      <Suspense fallback={null}>
+        <AskForm />
+      </Suspense>
     </>
   );
 }

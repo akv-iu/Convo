@@ -31,6 +31,9 @@ import { BadgeCountry, BadgeLines } from "../_components/badge-lines";
 import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
 import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
 import { clearDraft, readDraft } from "../_components/draft";
+import { ENRICHMENT_RETURN_PATH } from "@/contracts/enrichment";
+import type { RouteResponse } from "@/contracts/routes";
+import { enrichmentApi, type Result } from "../signin/sources/api";
 import {
   aboutFromProfile,
   missingAnswers,
@@ -60,9 +63,36 @@ type Load =
 
 const sections = VISIBILITY_SECTIONS;
 
+/**
+ * With profile enrichment: step 1's answers from the account's saved identity, the handle from its GitHub
+ * connection. The saved profile (colour, picture, visibility, hiring) must load or be confirmed missing (409):
+ * starting from defaults after a failed read would save them over the person's choices.
+ */
+function fromIdentity(owner: Result<RouteResponse<"enrichmentState">>, profile: Person | null, profileStatus: number): Load {
+  if (!owner.ok) return { state: "failed", status: owner.status };
+  if (!profile && profileStatus !== 409) return { state: "failed", status: profileStatus };
+  const { identity, github } = owner.data;
+  if (!identity) return { state: "start" };
+  return {
+    state: "ready",
+    about: aboutFromProfile({ name: identity.name, filters: identity, workplaceName: identity.workplaceName }),
+    handle: github.connected ? github.login : null,
+    hiring: profile?.filters.hiring ?? null,
+  };
+}
 
-export function BadgeForm() {
+
+/**
+ * With profile enrichment on (`enrichment`), step 1's answers are the identity
+ * page two saved for this account, not this tab's draft: after it's saved
+ * the account's copy wins, so an older tab can't write its name back. The
+ * handle is the connected GitHub, or none. The draft stays, because page two
+ * keeps its source choices there for back navigation.
+ */
+export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
   const router = useRouter();
+  // Sign-in lives on page two when profile enrichment is on.
+  const signIn = enrichment ? ENRICHMENT_RETURN_PATH : "/signin";
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [hiring, setHiring] = useState<boolean | null>(null);
@@ -86,16 +116,15 @@ export function BadgeForm() {
   useEffect(() => {
     let live = true;
     void (async () => {
-      const draft = readDraft();
+      const draft = enrichment ? null : readDraft();
       let profile: Person | null = null;
       let status = 0;
-      try {
-        const res = await fetch("/api/me", { cache: "no-store" });
-        status = res.status;
-        if (res.ok) profile = (await res.json()) as Person;
-      } catch {
-        status = 0;
-      }
+      const [me, owner] = await Promise.all([
+        fetch("/api/me", { cache: "no-store" }).catch(() => null),
+        enrichment ? enrichmentApi.state() : null,
+      ]);
+      status = me?.status ?? 0;
+      if (me?.ok) profile = (await me.json().catch(() => null)) as Person | null;
       if (!live) return;
       // The saved profile's colour is the truth; before there is one, the cookie preview is all we have.
       setColour(profile ? showSavedColour(profile.badgeColour) : readBadgePrefs().colour);
@@ -103,7 +132,11 @@ export function BadgeForm() {
       setAvatar(profile?.avatar ?? null);
       setAvatarColour(profile?.avatarColour ?? null);
 
-      if (draft) {
+      if (owner) {
+        const next = fromIdentity(owner, profile, status);
+        if (next.state === "ready") setHiring(next.hiring);
+        setLoad(next);
+      } else if (draft) {
         // Step 1 just ran in this tab; the profile only adds the GitHub handle and any saved hiring answer.
         setHiring(profile?.filters.hiring ?? null);
         setLoad({ state: "ready", about: draft, handle: profile?.githubLogin, hiring: profile?.filters.hiring ?? null });
@@ -119,7 +152,7 @@ export function BadgeForm() {
     return () => {
       live = false;
     };
-  }, [attempt]);
+  }, [attempt, enrichment]);
 
   if (load.state === "loading") {
     return (
@@ -148,7 +181,7 @@ export function BadgeForm() {
           {load.state === "start" ? (
             <Button href="/signin">Go to About you</Button>
           ) : expired ? (
-            <Button href="/signin">Sign in again</Button>
+            <Button href={signIn}>Sign in again</Button>
           ) : (
             <Button onClick={() => (setLoad({ state: "loading" }), setAttempt((n) => n + 1))}>Try again</Button>
           )}
@@ -187,7 +220,7 @@ export function BadgeForm() {
       }
       const saved = (await res.json().catch(() => null)) as Person | null;
       writeBadgePrefs({ colour: saved?.badgeColour ?? badgeColour });
-      clearDraft();
+      if (!enrichment) clearDraft(); // page two still needs it for back navigation
       router.push(NEXT_STEP);
     } catch {
       setSaveError(saveErrorMessage(0, null));
@@ -416,7 +449,7 @@ export function BadgeForm() {
             {saveError.startsWith("Your sign-in has expired") && (
               <>
                 {" "}
-                <a href="/signin" className="underline underline-offset-4">
+                <a href={signIn} className="underline underline-offset-4">
                   Sign in again
                 </a>
               </>

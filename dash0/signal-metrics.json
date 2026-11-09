@@ -29,6 +29,11 @@
             {
               "key": "gen_ai.usage.input_tokens",
               "operator": "is_set"
+            },
+            {
+              "key": "convo.ai.kind",
+              "operator": "is_one_of",
+              "values": ["refine", "explain"]
             }
           ]
         },
@@ -86,6 +91,11 @@
             {
               "key": "gen_ai.usage.output_tokens",
               "operator": "is_set"
+            },
+            {
+              "key": "convo.ai.kind",
+              "operator": "is_one_of",
+              "values": ["refine", "explain"]
             }
           ]
         },

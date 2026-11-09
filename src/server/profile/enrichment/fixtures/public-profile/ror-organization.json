@@ -1,0 +1,7 @@
+{
+  "id": "https://ror.org/03yrm5c26",
+  "status": "active",
+  "names": [{ "value": "Example University", "types": ["ror_display", "label"] }],
+  "domains": ["uni.example"],
+  "links": [{ "type": "website", "value": "https://www.uni.example/" }, { "type": "wikipedia", "value": "https://en.wikipedia.example/wiki/Example_University" }]
+}

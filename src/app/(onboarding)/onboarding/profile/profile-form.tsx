@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
 import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
+import { clearOnboardingTab } from "../../_components/draft";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { aboutFromProfile, saveErrorMessage, SHOW_ALL, workplaceLabel } from "../answers";
 import { colourHex } from "@/components/ui/badge-colours";
@@ -214,6 +215,7 @@ export function ProfileForm() {
         }
         setMustResend(false);
       }
+      clearOnboardingTab(); // onboarding is done
       router.push(NEXT_STEP);
     } catch {
       setMustResend(true);
@@ -285,7 +287,7 @@ export function ProfileForm() {
         <ContactSection contact={contact} />
         <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button
-            onClick={() => void contact.save().then((ok) => ok && router.push(NEXT_STEP))}
+            onClick={() => void contact.save().then((ok) => ok && (clearOnboardingTab(), router.push(NEXT_STEP)))}
             disabled={contact.saving}
             className="text-lg sm:px-8"
           >
