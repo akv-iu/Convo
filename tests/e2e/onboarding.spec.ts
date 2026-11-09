@@ -233,15 +233,16 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
-  test("the switches sit beside the badge, level with the top of the card", async ({ page, isMobile }) => {
-    test.skip(isMobile, "on phones the switches stack under the badge");
+  test("the switches and colours panel sits beside the badge, lined up with the card top and bottom", async ({ page, isMobile }) => {
+    test.skip(isMobile, "on phones the panel stacks under the badge");
     await openWithDraft(page, "p_003");
     const card = await page.locator("[data-badge]:visible [data-badge-stripe]").locator("..").boundingBox();
-    const switches = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
-    expect(card && switches).toBeTruthy();
+    const panel = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
+    expect(card && panel).toBeTruthy();
     // The card hangs at a slight tilt on laptops, so its box reaches a few pixels past its edges.
-    expect(Math.abs(card!.y - switches!.y)).toBeLessThanOrEqual(12);
-    expect(switches!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
+    expect(Math.abs(card!.y - panel!.y)).toBeLessThanOrEqual(12);
+    expect(Math.abs(card!.y + card!.height - (panel!.y + panel!.height))).toBeLessThanOrEqual(12);
+    expect(panel!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
   });
 
   test("each eraser sits right after the text it removes", async ({ page }) => {
