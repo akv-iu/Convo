@@ -348,11 +348,12 @@ export function SourcesForm({
         </h1>
         {reason && <HowToFix reason={reason} />}
         <p className="text-lg text-muted">
-          Signing in only creates or opens your Lanyard account. Nothing is imported until you choose your sources and press
-          Continue.
+          Signing in only creates or opens your Lanyard account. Use whichever account you
+          have. Nothing is imported until you choose your sources and press Continue.
         </p>
+        {/* Two equal choices: neither account is required, so neither button looks like the default. */}
         <form action={signInWithGoogle}>
-          <Button type="submit" className="w-full text-lg">
+          <Button type="submit" variant="secondary" className="w-full text-lg">
             Continue with Google
           </Button>
         </form>
