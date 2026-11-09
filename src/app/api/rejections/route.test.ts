@@ -169,8 +169,11 @@ it("returns sanitized503 on database failures for both real write routes", async
 it("hides both attendees until the rejecting attendee disables or resolves every active blocking ask", async () => {
   const first = { ...ask, id: "two-way-first" };
   const second = { ...ask, id: "two-way-second" };
-  const other = { ...ask, id: "two-way-other", userId: DEMO_USER_B };
-  const unrelated = { ...ask, id: "two-way-unrelated", userId: "p_001" };
+  // B's and the unrelated attendee's asks are about A's own field, so A is a strong match for both:
+  // only the two-way blocker could hide them.
+  const aboutA = "platform engineering and kubernetes internals";
+  const other = { ...ask, id: "two-way-other", userId: DEMO_USER_B, rawText: aboutA };
+  const unrelated = { ...ask, id: "two-way-unrelated", userId: "p_001", rawText: aboutA };
   const saved = new Map([first, second, other, unrelated].map(value => [value.id, value]));
   const rejected: { askId: string; personId: string; rank: number }[] = [];
   const row = (value: Ask) => [value.id, value.userId, value.rawText, null, value.status, value.softBlocker, value.createdAt];
