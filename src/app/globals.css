@@ -3,6 +3,8 @@
 /* Design tokens. A sets these once; every screen uses the names, never raw colours.
    All pairs below meet WCAG AA contrast on their backgrounds. */
 :root {
+  /* Lanyard is light only: no dark theme, whatever the device setting. */
+  color-scheme: light;
   --background: #ffffff;
   --surface: #f5f5f4;
   --foreground: #0f172a;
@@ -17,21 +19,6 @@
   --on-success: #ffffff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #141414;
-    --surface: #212121;
-    --foreground: #f5f5f4;
-    --muted: #c2bfba;
-    --border: #3a3a3a;
-    --accent: #60a5fa;
-    --accent-hover: #93c5fd;
-    --on-accent: #141414;
-    --accent-2: #5eead4;
-    --success: #4ade80;
-    --on-success: #052e16;
-  }
-}
 
 @theme inline {
   --color-background: var(--background);
