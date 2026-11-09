@@ -79,6 +79,20 @@
   30% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
 }
 
+/* The empty Meetings calendar (calendar-wait.tsx): days light up in turn, the open slot pulses,
+   the clock's hand goes round. Used only through motion-safe:. */
+@keyframes cal-day {
+  0%, 30%, 100% { fill: var(--border); }
+  12% { fill: var(--accent); }
+}
+@keyframes cal-slot {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+@keyframes cal-hand {
+  to { transform: rotate(360deg); }
+}
+
 /* Confirmations (toast.tsx) and a request-sent card (matches) arrive with a small lift. Used only through motion-safe:. */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(12px); }

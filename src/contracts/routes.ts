@@ -11,6 +11,7 @@ import {
 import {
   Ask,
   AskType,
+  CardPerson,
   ContactDetails,
   MatchResult,
   Person,
@@ -281,6 +282,15 @@ export const routes = {
     description: "How many people have an open ask that this user could answer.",
     usedBy: "A1",
     response: z.object({ count: z.number().int().nonnegative() }),
+  }),
+  findPeople: def({
+    method: "GET",
+    path: "/api/find?q=",
+    description:
+      "The person finder (Find tab): everyone who shows a country, workplace, organisation or skill, without a question. " +
+      "A strict filter, no AI; only what each person shows counts. Empty q returns [].",
+    usedBy: "A2",
+    response: z.array(CardPerson).max(50),
   }),
 } as const;
 

@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { DEMO_USER_A, DEMO_USER_B, sampleAsks } from "@/contracts/fixtures";
 import { search } from "@/server/search";
+import { countryName } from "@/components/ui/countries";
 import { routes, type Api, type Ctx, type RouteName } from "@/contracts/routes";
 import { fake } from "./handlers";
 import { store } from "./store";
@@ -118,6 +119,21 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     expect(results.every((r) => r.evidence.length <= 5 && r.evidence.every((e) => !e.url || e.url.startsWith("https://")))).toBe(true);
     const b = results.find((r) => r.person.id === DEMO_USER_B);
     expect(b?.evidence[0]).toMatchObject({ kind: "commit_area", url: expect.stringMatching(/^https:\/\/github\.com\//) });
+  });
+
+  it("finds everyone who shows a country, never the asker or a hidden country (Find tab)", async () => {
+    const find = async (userId: string, q: string) =>
+      routes.findPeople.response.parse(await api.findPeople(ctx(userId, undefined, {}, `q=${encodeURIComponent(q)}`)));
+    expect(await find(DEMO_USER_A, "  ")).toEqual([]);
+
+    const b = await api.getMe(ctx(DEMO_USER_B));
+    const country = countryName(b.filters.country ?? "US");
+    expect((await find(DEMO_USER_A, country)).map((p) => p.id)).toContain(DEMO_USER_B);
+    expect((await find(DEMO_USER_B, country)).map((p) => p.id)).not.toContain(DEMO_USER_B); // never yourself
+
+    // Hidden: searching for it can't find (or reveal) it.
+    await api.putMe(ctx(DEMO_USER_B, { visibility: { country: false, workplace: true, hiring: true } }));
+    expect((await find(DEMO_USER_A, country)).map((p) => p.id)).not.toContain(DEMO_USER_B);
   });
 
   it("marks mutual interest and counts who is looking for you", async () => {

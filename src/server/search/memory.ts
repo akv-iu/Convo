@@ -50,6 +50,10 @@ export const memorySearch: SearchService = {
     return ids.flatMap((id) => getPerson(id) ?? []);
   },
 
+  async listPeople() {
+    return [...people.values()];
+  },
+
   async ingestPerson(person, docs, revision) {
     if (docs) checkEvidence(person.id, docs, revision !== undefined);
     const current = revisions.get(person.id);

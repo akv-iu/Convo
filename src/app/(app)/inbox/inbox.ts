@@ -136,11 +136,19 @@ const summaryWord: Record<RequestStatus, string> = {
 
 /** "3 people · 1 replied · 2 waiting": who it went to and where each stands, in a fixed order. */
 export function groupSummary(requests: Pick<Request, "status">[]): string {
-  const people = `${requests.length} ${requests.length === 1 ? "person" : "people"}`;
+  return [peopleLabel(requests.length), ...groupCounts(requests).map((c) => c.text)].join(" · ");
+}
+
+/** "3 people". */
+export function peopleLabel(n: number): string {
+  return `${n} ${n === 1 ? "person" : "people"}`;
+}
+
+/** Each status that has requests, in groupSummary's order, with its text ("2 waiting"), for a symbol beside each. */
+export function groupCounts(requests: Pick<Request, "status">[]): { status: RequestStatus; text: string }[] {
   const order: RequestStatus[] = ["scheduled", "accepted", "answered", "declined", "sent"];
-  const counts = order.flatMap((status) => {
+  return order.flatMap((status) => {
     const n = requests.filter((r) => r.status === status).length;
-    return n ? [`${n} ${summaryWord[status]}`] : [];
+    return n ? [{ status, text: `${n} ${summaryWord[status]}` }] : [];
   });
-  return [people, ...counts].join(" · ");
 }
