@@ -37,6 +37,7 @@ import {
   totalLabel,
   VENUE_LABEL,
 } from "./blocks";
+import { ImportStatus } from "./import-status";
 
 export const NEXT_STEP = "/onboarding/profile";
 
@@ -60,7 +61,8 @@ function saveProblem(status: number, body: unknown): string {
   return "Your free times weren't saved. Try again.";
 }
 
-export function FreeTimeForm() {
+/** With profile enrichment on (`enrichment`), the import's progress shows above the grid; it never blocks Continue. */
+export function FreeTimeForm({ enrichment = false }: { enrichment?: boolean }) {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -235,6 +237,7 @@ export function FreeTimeForm() {
         <p className="mt-3 max-w-md text-lg text-muted">
           Tap the times you could meet on Monday 9 November. People can only book you then.
         </p>
+        {enrichment && <ImportStatus />}
 
         <div className="mt-8" role="group" aria-label="Quick picks">
           <div className="flex flex-wrap gap-2">

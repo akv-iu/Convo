@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { approvedByOther, checklist, completes, verdict } from "./feature-signoff.mjs";
+import { approvedByOther, checklist, completes, screenOnly, verdict } from "./feature-signoff.mjs";
 
 describe("feature sign-off", () => {
   it("counts ticked and open boxes, nested or not, and nothing else in brackets", () => {
     expect(checklist("- [x] Screen\n- [ ] Tests\n  * [X] Nested\n- [ ]\nsee [ ] and [x] in a sentence")).toEqual({ done: 2, open: 2 });
     expect(checklist("# No checklist")).toEqual({ done: 0, open: 0 });
+  });
+
+  it("treats a PR as screen-only only when every changed file is a screen file", () => {
+    const file = (filename, previous_filename) => ({ filename, previous_filename });
+    expect(screenOnly([
+      file("src/app/(app)/ask/ask-form.tsx"), file("src/app/(onboarding)/onboarding/badge-form.tsx"), file("src/app/page.tsx"),
+      file("src/components/ui/logo.tsx"), file("tests/e2e/ask.spec.ts"), file("public/icon.png"), file("docs/features/thing.md"),
+    ])).toBe(true);
+    for (const other of ["src/contracts/types.ts", "src/server/real.ts", "src/app/api/asks/route.ts", "db/schema/index.ts",
+      ".github/workflows/ci.yml", "AGENTS.md", "src/app/layout.tsx", "package.json", "src/app/(app)/../api/x.ts"]) {
+      expect(screenOnly([file("src/components/ui/logo.tsx"), file(other)]), other).toBe(false);
+    }
+    expect(screenOnly([file("src/components/ui/moved.tsx", "src/server/old.ts")])).toBe(false); // moved out of the backend
+    expect(screenOnly([])).toBe(false);
   });
 
   it("needs sign-off only from the PR that ticks the last box", () => {

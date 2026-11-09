@@ -2,13 +2,13 @@
 title: "Needs the other person's approval"
 description: "Label PRs that finish a feature or change something both people must agree on, so the Feature sign-off check waits for the other person"
 type: check
-when: "A PR ticks the last open box of a feature file under docs/features/; or makes a breaking change to src/contracts/ (removes or renames a route or field, makes a field required, or changes a status code or what a field means); or adds a migration that drops or rewrites existing columns or rows; or changes sign-in, sessions, the GitHub token, source consent, or what other users can see about a person; or is opened by anyone other than akv-iu and starts reading a new environment variable; or changes .github/, .gitar/, AGENTS.md, sonar-project.properties or vitest.config.mts"
+when: "A PR ticks the last open box of a feature file under docs/features/ and changes any file outside the screen files (src/app/(onboarding)/, src/app/(app)/, src/app/page.tsx, src/components/ui/, tests/e2e/, public/, docs/features/); or makes a breaking change to src/contracts/ (removes or renames a route or field, makes a field required, or changes a status code or what a field means); or adds a migration that drops or rewrites existing columns or rows; or changes sign-in, sessions, the GitHub token, source consent, or what other users can see about a person; or is opened by anyone other than akv-iu and starts reading a new environment variable; or changes .github/, .gitar/, AGENTS.md, sonar-project.properties or vitest.config.mts"
 actions: "Add the needs-approval label and post one comment naming which case applies and what the other person should check"
 ---
 
 # Needs the other person's approval
 
-Each person ships features end to end and merges their own PRs. The other person is needed only in the cases below. The `needs-approval` label makes the required `Feature sign-off` check wait for an approval from someone other than the PR's author. That check also waits on its own when a PR completes a feature file.
+Each person ships features end to end and merges their own PRs. The other person is needed only in the cases below. The `needs-approval` label makes the required `Feature sign-off` check wait for an approval from someone other than the PR's author. That check also waits on its own when a PR completes a feature file and changes more than screen files. A screen-only PR completes its feature alone, unless it changes what other users can see about a person, which still gets the label.
 
 When one of these applies:
 

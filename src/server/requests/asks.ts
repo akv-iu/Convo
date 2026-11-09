@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { db } from "../../../db";
 import { asks, rejections, requests, users } from "../../../db/schema";
@@ -142,7 +142,7 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     getProfile(userId),
     getExclusions(askId),
     Promise.resolve(db().select({ id: users.id }).from(users)
-      .where(and(eq(users.githubEvidencePending, true), isNotNull(users.filters)))
+      .where(and(eq(sql<boolean>`(${users.githubEvidencePending} or ${users.profileEvidencePending})`, true), isNotNull(users.filters)))
       // An attendee's active rejection also hides that attendee from the rejected person's matches.
       .union(db().select({ id: asks.userId }).from(asks)
         .innerJoin(rejections, eq(rejections.askId, asks.id))
@@ -164,10 +164,11 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
     });
     if (!matches.length) return [];
     // Read current privacy settings even when search still has an older profile.
-    const saved = await db().select({ id: users.id, visibility: users.visibility, githubEvidencePending: users.githubEvidencePending }).from(users)
+    const saved = await db().select({ id: users.id, visibility: users.visibility,
+      evidencePending: sql<boolean>`(${users.githubEvidencePending} or ${users.profileEvidencePending})` }).from(users)
       .where(inArray(users.id, matches.map(match => match.person.id)));
     // Do not expose old repository highlights or explanations while a refresh/revocation is pending.
-    const pending = new Set(saved.filter(person => person.githubEvidencePending).map(person => person.id));
+    const pending = new Set(saved.filter(person => person.evidencePending).map(person => person.id));
     const visibility = new Map(saved.map(person => [person.id, ProfileVisibility.parse(person.visibility)]));
     return routes.match.response.parse(matches.filter(match => !pending.has(match.person.id)).map(match => visibleCard(match,
       visibility.get(match.person.id) ?? (match.person.synthetic ? match.person.visibility :
