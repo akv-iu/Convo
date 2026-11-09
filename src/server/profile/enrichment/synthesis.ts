@@ -5,7 +5,7 @@ import { EnrichmentDraft, type EnrichmentIdentity } from "@/contracts/enrichment
 import type { ApprovedEvidence } from "../evidence";
 import { enrichmentError, profileCachePrefix } from "./model";
 import { ensureLease, fingerprint } from "./state";
-import { professionalText, sanitizeEvidence } from "./professional-text";
+import { hasPersonalDetails, sanitizeEvidence } from "./professional-text";
 import { readSynthesisCache, writeSynthesisCache } from "./synthesis-cache";
 
 const MODEL = "gpt-5.4-mini";
@@ -16,11 +16,31 @@ Do not name the person, use gendered pronouns, invent facts, or claim expert/mai
 Never state country, workplace/employer, current employment, hiring/job-seeking, contact details, referees or unrelated sensitive information.
 Use only supported professional work, methods and research topics. If evidence is weak, describe only what it shows.
 Every nonempty bio and expertise label must cite one or more supplied evidence IDs. Never invent IDs.
+Never put evidence IDs, brackets or citations in the bio or label text: list them only in bioEvidenceIds and evidenceIds.
 Return only the requested JSON. The owner reviews this draft before anything is published.`;
 export const Proposal = EnrichmentDraft.pick({ bio: true, bioEvidenceIds: true, expertise: true });
 export type Proposal = z.infer<typeof Proposal>;
 const tracer = trace.getTracer("convo");
 let client: OpenAI | undefined;
+
+/**
+ * The model sees short refs ("ev1", "ev2", …) instead of evidence IDs. Live answers miscopied long IDs (a Google
+ * owner's 21 digits) and repeated them in the text, where those digits read as a phone number: every draft was
+ * rejected. Map refs back to IDs, and drop refs the text repeats ("… retrieval. [ev2][ev3]") with their brackets.
+ */
+function fromRefs(value: unknown, ids: string[]): unknown {
+  if (!value || typeof value !== "object") return value;
+  const toId = (ref: unknown) => typeof ref === "string" && /^ev[1-9]\d*$/.test(ref) ? ids[Number(ref.slice(2)) - 1] ?? ref : ref;
+  const toIds = (refs: unknown) => Array.isArray(refs) ? refs.map(toId) : refs;
+  const clean = (text: unknown) => typeof text !== "string" ? text : text.replace(/\bev[1-9]\d*\b/g, ref => toId(ref) === ref ? ref : "")
+    .replace(/[[(][\s,;]*[\])]/g, "").replace(/\s{2,}/g, " ").replace(/ ([.,;:])/g, "$1").trim();
+  const { bio, bioEvidenceIds, expertise } = value as { bio?: unknown; bioEvidenceIds?: unknown; expertise?: unknown };
+  return { ...value, bio: clean(bio), bioEvidenceIds: toIds(bioEvidenceIds), expertise: Array.isArray(expertise) ? expertise.map(e => {
+    if (!e || typeof e !== "object") return e;
+    const { label, evidenceIds } = e as { label?: unknown; evidenceIds?: unknown };
+    return { ...e, label: clean(label), evidenceIds: toIds(evidenceIds) };
+  }) : expertise };
+}
 
 function validate(value: unknown, evidence: ApprovedEvidence[], identity: z.infer<typeof EnrichmentIdentity>): Proposal | undefined {
   const parsed = Proposal.safeParse(value);
@@ -33,7 +53,7 @@ function validate(value: unknown, evidence: ApprovedEvidence[], identity: z.infe
   const mentions = (term: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "iu").test(text);
   if ((proposal.bio.trim() && !proposal.bioEvidenceIds.length) || proposal.expertise.some(e => !e.evidenceIds.length)
     || references.some(id => !evidence.some(e => e.id === id)) || excluded.some(mentions)
-    || professionalText(text) !== text.trim() || /\b(?:hiring|job[- ]seeking|seeking employment|open to work)\b/i.test(text)
+    || hasPersonalDetails(text) || /\b(?:hiring|job[- ]seeking|seeking employment|open to work)\b/i.test(text)
     || new Set(proposal.expertise.map(e => e.label.toLowerCase())).size !== proposal.expertise.length) return;
   return proposal;
 }
@@ -43,7 +63,7 @@ export async function synthesize(owner: string, job: string, token: string, gene
   const evidence = sanitizeEvidence(input);
   if (evidence.some(e => e.personId !== owner)) enrichmentError("invalid_input", 400);
   if (!evidence.length) return { bio: "", bioEvidenceIds: [], expertise: [] };
-  const batch = evidence.map(({ id, source, kind, title, excerpt }) => ({ id, source, kind, title, excerpt }));
+  const batch = evidence.map(({ source, kind, title, excerpt }, i) => ({ id: `ev${i + 1}`, source, kind, title, excerpt }));
   const key = `${profileCachePrefix(owner)}${fingerprint([MODEL, PROFILE_PROMPT, generation, batch])}`;
   const hit = validate(await readSynthesisCache(owner, job, token, key), evidence, identity);
   return tracer.startActiveSpan("profile.synthesize", async parent => {
@@ -63,7 +83,7 @@ export async function synthesize(owner: string, job: string, token: string, gene
           }, { timeout: 20_000, maxRetries: 0 });
           if (reply.usage) span.setAttributes({ "gen_ai.usage.input_tokens": reply.usage.input_tokens, "gen_ai.usage.output_tokens": reply.usage.output_tokens });
           if (reply.status !== "completed") enrichmentError("provider_down", 503);
-          const value = validate(JSON.parse(reply.output_text), evidence, identity);
+          const value = validate(fromRefs(JSON.parse(reply.output_text), evidence.map(e => e.id)), evidence, identity);
           if (!value) enrichmentError("provider_down", 503);
           return value;
         } catch {

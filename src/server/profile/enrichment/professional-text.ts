@@ -5,14 +5,25 @@ const personal = /\b(?:date of birth|dob|marital status|nationality|citizenship|
 const contact = /^\s*(?:e-?mail|phone|tel(?:ephone)?|mobile|contact|address|gender|referees?|references)\b/i;
 const email = /(?<![^\s@])[^\s@]+@\.*[^\s@.]+(?:\.+[^\s@.]+)+/; // dots and the rest never compete: linear time
 const address = /\b\d+\s+[\p{L}\s]{1,60}\b(?:street|st|road|rd|avenue|ave|lane|drive|boulevard)\b\.?/iu;
+/** A run of digits a phone number could be, once year ranges ("2019 - 2023") are set aside. */
+const phone = (text: string) => /\+?\d[\d(). -]{6,}\d/.test(text.replace(/\b(?:19|20)\d{2}\s*[-–]\s*(?:19|20)\d{2}\b/g, ""));
 
 /** Conservative line filtering, not a guarantee against obfuscated personal information. */
 export function professionalText(text: string): string {
-  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").split(/\r?\n/).map(s => s.trim()).filter(line => {
-    const withoutYears = line.replace(/\b(?:19|20)\d{2}\s*[-–]\s*(?:19|20)\d{2}\b/g, "");
-    return !personal.test(line) && !contact.test(line) && !email.test(line) && !address.test(line)
-      && !/\+?\d[\d(). -]{6,}\d/.test(withoutYears);
-  }).join("\n").trim();
+  return text.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, " ").split(/\r?\n/).map(s => s.trim()).filter(line =>
+    !personal.test(line) && !contact.test(line) && !email.test(line) && !address.test(line) && !phone(line),
+  ).join("\n").trim();
+}
+
+// For generated text, not CV lines: personal data, never topics. "Mobile robotics", "Contact tracing", "religion and
+// technology" or "robots that drive" are professional; dropping a whole draft for them failed the import.
+const personalData = /\b(?:date of birth|dob|marital status|passport|social security|ssn|sexual orientation)\b/i;
+// House number, one to four capitalised words, then a capitalised street type ("12 Main Street", "4 Elm Ave").
+const streetAddress = /\b\d{1,5}(?: [A-Z][\p{L}'-]*){1,4} (?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)\b/u;
+
+/** Contact or personal details in a generated bio or label (emails, phone numbers, street addresses, ID documents). */
+export function hasPersonalDetails(text: string): boolean {
+  return personalData.test(text) || email.test(text) || streetAddress.test(text) || phone(text);
 }
 
 export function sanitizeEvidence(input: unknown): ApprovedEvidence[] {
