@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEMO_USER_A, DEMO_USER_B, people } from "@/contracts/fixtures";
+import { EvidenceKind, type EvidenceDoc } from "@/contracts/types";
 import { memorySearch } from "./memory";
 
 const byId = (id: string) => {
@@ -7,6 +8,86 @@ const byId = (id: string) => {
   if (!person) throw new Error(`no fixture ${id}`);
   return person;
 };
+
+// The enrichment contract adds the profile_page and cv kinds; until it's on main the type doesn't list them.
+const kind = (name: string) => name as EvidenceDoc["kind"];
+// A match lists only the kinds the contract knows, so expectations follow it before and after that merge.
+const listed = (name: string) => (EvidenceKind.options as readonly string[]).includes(name);
+const matchedIds = async (query: string) => (await memorySearch.searchCandidates(query, { excludeIds: [] })).map((c) => c.person.id);
+
+describe("one index for every route", () => {
+  it("shares people, evidence and asks with a separately bundled copy of this module", async () => {
+    vi.resetModules();
+    const other = (await import("./memory")).memorySearch;
+    expect(other).not.toBe(memorySearch); // a second module instance, as another route's bundle gets
+    const person = { ...structuredClone(people[0]), id: "shared-index-test", bio: "" };
+    await other.ingestPerson(person, [{ id: "shared-index-test:repo:x", personId: person.id, kind: "repo", title: "SharedIndexToken", text: "" }], 1);
+    expect(await memorySearch.getPerson(person.id)).toEqual(person);
+    expect(await matchedIds("SharedIndexToken")).toEqual([person.id]);
+    await other.registerAsk("shared-index-ask", "shared-index-asker", "SharedIndexToken");
+    expect(await memorySearch.whoIsLookingFor(person)).toContain("shared-index-asker");
+  });
+});
+
+describe("approved expertise", () => {
+  it("is matched and read by reverse search, and a stale save can't bring it back once withdrawn", async () => {
+    const researcher = { ...structuredClone(people[0]), id: "expertise-test", bio: "", organisations: [], expertise: ["Qubit calibration"] };
+    await memorySearch.ingestPerson(researcher, [], 1);
+    expect(await matchedIds("qubit calibration")).toContain(researcher.id);
+    await memorySearch.registerAsk("expertise-ask", "expertise-asker", "qubit calibration");
+    expect(await memorySearch.whoIsLookingFor(researcher)).toContain("expertise-asker");
+
+    const withdrawn = { ...researcher, expertise: [] };
+    await memorySearch.ingestPerson(withdrawn, [], 2);
+    await memorySearch.ingestPerson(researcher, [], 1); // the older save, arriving late
+    expect(await matchedIds("qubit calibration")).not.toContain(researcher.id);
+  });
+});
+
+describe("approved evidence from every source", () => {
+  it("matches papers, profile pages, pasted profile text and CV excerpts, and a withdrawn CV stays withdrawn", async () => {
+    const person = { ...structuredClone(people[0]), id: "sources-test", bio: "" };
+    const doc = (k: string, external: string, title: string, text: string, url?: string): EvidenceDoc =>
+      ({ id: `${person.id}:${k}:${external}`, personId: person.id, kind: kind(k), title, text, ...(url ? { url } : {}) });
+    const paper = doc("paper", "W1", "Calibrating qubits", "PaperSourceToken", "https://openalex.org/W1");
+    const page = doc("profile_page", "page", "Ada at Example University", "PageSourceToken", "https://example.edu/people/ada");
+    const pasted = doc("profile_page", "text", "Profile text", "PastedSourceToken"); // pasted text has no link
+    const cv = doc("cv", "upload-1", "Postdoctoral researcher", "CvSourceToken"); // nor does a CV
+    await memorySearch.ingestPerson(person, [paper, page, pasted, cv], 2);
+    const hit = (await memorySearch.searchCandidates("PaperSourceToken PageSourceToken PastedSourceToken CvSourceToken", { excludeIds: [] }))
+      .find((c) => c.person.id === person.id);
+    expect(hit?.evidence).toEqual([paper, page, pasted, cv].filter((d) => listed(d.kind))
+      .map(({ kind: k, title, url }) => (url ? { kind: k, title, url } : { kind: k, title })));
+
+    await memorySearch.ingestPerson(person, [paper, page, pasted], 3); // the CV is withdrawn
+    await memorySearch.ingestPerson(person, [paper, page, pasted, cv], 2); // the older save, retried late
+    expect(await matchedIds("CvSourceToken")).not.toContain(person.id);
+    expect(await matchedIds("PastedSourceToken")).toContain(person.id);
+  });
+});
+
+describe("evidence IDs", () => {
+  it("refuses evidence that isn't this person's, takes the generated profile's ID or, in a real save, lacks its namespace", async () => {
+    const person = { ...structuredClone(people[0]), id: "namespace-test", bio: "" };
+    const good: EvidenceDoc = { id: "namespace-test:repo:ok", personId: person.id, kind: "repo", title: "NamespaceToken", text: "" };
+    const refused: [EvidenceDoc, number | undefined][] = [
+      [{ ...good, personId: "someone-else" }, 1],
+      [{ ...good, id: "namespace-test:profile" }, undefined], // reserved, even for fixtures
+      [{ ...good, id: "ok" }, 1], // real saves name the owner, kind and source ID
+      [{ ...good, id: "someone-else:repo:ok" }, 1],
+      [{ ...good, id: "namespace-test:paper:ok" }, 1], // the wrong kind
+      [{ ...good, id: "namespace-test:repo:" }, 1], // no source ID
+    ];
+    for (const [doc, revision] of refused) {
+      await expect(memorySearch.ingestPerson(person, [good, doc], revision)).rejects.toThrow(/^Evidence /);
+    }
+    expect(await memorySearch.getPerson(person.id)).toBeUndefined(); // nothing was written
+
+    await memorySearch.ingestPerson(person, [{ ...good, id: "fixture-style-id" }]); // fixtures and synthetic people predate namespaces
+    await memorySearch.ingestPerson(person, [good], 1);
+    expect(await matchedIds("NamespaceToken")).toEqual([person.id]);
+  });
+});
 
 describe("fixture mutual interest", () => {
   it("lists the people looking for someone like the given user, not the people that user wants", async () => {
@@ -109,7 +190,7 @@ describe("person updates without replacing evidence", () => {
 
   it("ignores older and unversioned writes after a versioned write, including their evidence", async () => {
     const person = { ...structuredClone(people[0]), id: "versioned-profile-test", bio: "RevisionToken" };
-    const docs = [{ id: "versioned-doc", personId: person.id, kind: "repo" as const, title: "RevisionEvidence", text: "" }];
+    const docs = [{ id: "versioned-profile-test:repo:doc", personId: person.id, kind: "repo" as const, title: "RevisionEvidence", text: "" }];
     await memorySearch.ingestPerson(person, docs, 2);
     const stale = { ...person, name: "Stale name" };
     await memorySearch.ingestPerson(stale, [], 1);

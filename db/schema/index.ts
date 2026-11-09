@@ -2,12 +2,13 @@
  * Postgres schema (B2). Source records are durable here; Elasticsearch is
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { ApprovedEvidence, ProfileSource } from "../../src/server/profile/evidence";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // Auth.js user id
-  githubLogin: text("github_login").notNull(),
+  githubLogin: text("github_login"),
   name: text("name").notNull(),
   bio: text("bio").notNull().default(""),
   languages: jsonb("languages").$type<string[]>().notNull().default([]),
@@ -21,9 +22,42 @@ export const users = pgTable("users", {
   visibility: jsonb("visibility").$type<ProfileVisibility>().notNull().default({ country: true, workplace: true, hiring: true }),
   githubEvidence: jsonb("github_evidence").$type<EvidenceDoc[]>().notNull().default([]),
   githubEvidencePending: boolean("github_evidence_pending").notNull().default(false),
-  /** A built-in picture (Person.avatar); null shows initials. Last, so existing row reads keep their column order. */
+  /** A built-in picture (Person.avatar); null shows initials. */
   avatar: text("avatar").$type<AvatarId>(),
+  profileEvidence: jsonb("profile_evidence").$type<ApprovedEvidence[]>(),
+  profileSources: jsonb("profile_sources").$type<ProfileSource[]>().notNull().default([]),
+  profileEvidencePending: boolean("profile_evidence_pending").notNull().default(false),
+  expertise: jsonb("expertise").$type<string[]>(),
+  textVersion: integer("text_version").notNull().default(0),
 });
+
+/** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */
+export const authIdentities = pgTable("auth_identities", {
+  provider: text("provider", { enum: ["github", "google"] }).notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  userId: text("user_id").notNull().references(() => users.id),
+}, table => [
+  primaryKey({ columns: [table.provider, table.providerAccountId] }),
+  uniqueIndex("auth_identities_user_provider_idx").on(table.userId, table.provider),
+]);
+
+/** Short-lived linking attempts contain no provider credential or imported profile text. */
+export const authLinkAttempts = pgTable("auth_link_attempts", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  sessionHash: text("session_hash").notNull(),
+  stateHash: text("state_hash"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+}, table => [uniqueIndex("auth_link_attempts_state_idx").on(table.stateHash)]);
+
+/** Owner-only temporary inputs and resumable job state, separate from searchable profiles. */
+export const profileEnrichmentStates = pgTable("profile_enrichment_states", {
+  userId: text("user_id").primaryKey().references(() => users.id),
+  version: integer("version").notNull().default(0),
+  document: jsonb("document").notNull(),
+  nextSweepAt: timestamp("next_sweep_at", { withTimezone: true }),
+}, table => [index("profile_enrichment_states_sweep_idx").on(table.nextSweepAt)]);
 
 export const asks = pgTable(
   "asks",
@@ -79,7 +113,7 @@ export const aiCache = pgTable(
   "ai_cache",
   {
     key: text("key").primaryKey(),
-    kind: text("kind", { enum: ["refine", "explain", "moderate"] }).notNull(),
+    kind: text("kind", { enum: ["refine", "explain", "moderate", "profile"] }).notNull(),
     value: jsonb("value").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
