@@ -92,8 +92,9 @@ async function docxText(bytes: Uint8Array): Promise<{ text: string; truncated: b
 
 async function pdfText(bytes: Uint8Array): Promise<{ text: string; truncated: boolean }> {
   const pdf = await getDocumentProxy(bytes, {
-    // isEvalSupported: false keeps pdf.js from compiling font programs with new Function on untrusted input.
-    verbosity: 0, useSystemFonts: false, disableFontFace: true, enableXfa: false, isEvalSupported: false, maxImageSize: 16_777_216,
+    // No eval option: the bundled pdf.js (6.4) has no font-compiling eval path at all (no new Function in it), so the
+    // untrusted-font risk isEvalSupported once guarded against (CVE-2024-4367) can't arise, and the option no longer exists.
+    verbosity: 0, useSystemFonts: false, disableFontFace: true, enableXfa: false, maxImageSize: 16_777_216,
   }).catch((error: unknown) => {
     // A user password is needed; an owner-only password (copy/print restrictions) still opens.
     throw new Failure(error instanceof Error && error.name === "PasswordException" ? "cv_encrypted" : "cv_unreadable");
