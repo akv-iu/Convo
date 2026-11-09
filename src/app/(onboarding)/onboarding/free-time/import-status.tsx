@@ -37,20 +37,23 @@ export function ImportStatus() {
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // A failed read keeps what's on screen and tries again a little later; it never stops for good.
-    const again = (jobId: string | null) => (timer = setTimeout(() => void read(jobId), RETRY_MS));
+    // A failed read keeps what's on screen. A temporary failure (offline, timeout, rate limit, server error) tries
+    // again a little later; a permanent one (signed out, not found, switched off) stops reading. Page five explains.
+    const again = (jobId: string | null, status: number) => {
+      if (status === 0 || status === 408 || status === 429 || status >= 500) timer = setTimeout(() => void read(jobId), RETRY_MS);
+    };
     async function read(jobId: string | null) {
       let id = jobId;
       if (!id) {
         const owner = await enrichmentApi.state();
         if (!live) return;
-        if (!owner.ok) return again(null);
+        if (!owner.ok) return again(null, owner.status);
         id = owner.data.job?.jobId ?? null;
         if (!id) return; // no import: nothing to show
       }
       const current = await enrichmentApi.job(id);
       if (!live) return;
-      if (!current.ok) return again(id);
+      if (!current.ok) return again(id, current.status);
       setJob({ jobId: current.data.jobId, state: current.data.state });
       if (WORKING.has(current.data.state)) timer = setTimeout(() => void read(id), POLL_MS);
     }

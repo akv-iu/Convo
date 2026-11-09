@@ -243,6 +243,29 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(page).toHaveURL(/\/onboarding$/);
   });
 
+  test("after an import starts, Back, a change and Continue start a new one instead of sticking on Starting…", async ({ page }) => {
+    const user = await asNewGoogleUser(page);
+    await fillDetails(page);
+    await toggle(page, "GitHub");
+    await toSources(page);
+    const profile = region(page, "Public profile page");
+    const link = profile.getByRole("textbox", { name: "Link to your public profile page" });
+    await profile.getByRole("radio", { name: "Use a different link" }).check();
+    await link.fill("https://example.org/ada");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page).toHaveURL(/\/onboarding$/);
+    const first = (await api(page, user)).job.jobId;
+
+    // Client-side Back reveals the page-two instance Next kept hidden (cacheComponents), with its old state.
+    await page.getByRole("link", { name: "Back to Sign in and sources" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Choose what Lanyard reads");
+    await link.fill("https://example.org/ada-lovelace");
+    await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeVisible(); // not "Starting…"
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page).toHaveURL(/\/onboarding$/);
+    expect((await api(page, user)).job.jobId).not.toBe(first);
+  });
+
   test("CV problems get specific help, and removing or switching off discards the upload", async ({ page }) => {
     const user = await asNewGoogleUser(page);
     await fillDetails(page);

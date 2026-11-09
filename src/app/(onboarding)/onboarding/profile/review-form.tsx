@@ -129,9 +129,9 @@ export function ReviewForm() {
     const result = await enrichmentApi.retry(id);
     setBusy(null);
     if (result.ok) return setStage({ kind: "job", job: result.data });
-    setProblem(result.code === "running"
-      ? "Your sources are already being read. This page will update when they're done."
-      : "Lanyard couldn't start again. Try again in a moment.");
+    // Already retried (another tab): load the running import so this page follows it, keeping kept edits.
+    if (result.code === "running") return (setStage({ kind: "loading" }), setAttempt((n) => n + 1));
+    setProblem("Lanyard couldn't start again. Try again in a moment.");
   }
 
   async function discard(id: string) {

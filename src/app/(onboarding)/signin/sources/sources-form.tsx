@@ -215,6 +215,10 @@ export function SourcesForm({
     const result = await enrichmentApi.discover({ source, name, workplaceName, rorId, orcid });
     if (run !== searches.current[source]) return; // a newer search replaced this one
     set(result.ok ? { state: "done", value: result.data } : { state: "failed", failure: result });
+    // A pick survives a new search only if the new results still offer it (Back re-runs discovery on this kept page).
+    const offered = (id: string) => result.ok && result.data.candidates.some((c) => c.id === id);
+    if (source === "research") setAuthor((a) => (a && a !== "none" && !offered(a) ? null : a));
+    else setProfileMode((m) => (m && typeof m === "object" && !offered(m.candidateId) ? null : m));
   }, []);
 
   const apply = useCallback(
@@ -452,12 +456,14 @@ export function SourcesForm({
     setStartFailure(null);
     setNotice(null);
     const result = await enrichmentApi.start({ ...body, idempotencyKey: key.current.key });
+    // Reset on success too: Next keeps this page mounted while hidden, and Back shows it again as it was.
+    // A second tap during navigation reuses the same idempotency key, so it can't start another import.
+    setStarting(false);
     if (result.ok) {
       rememberStart(startRecord(result.data.jobId, unpickedRequest(identity, sources, cvUpload?.uploadId ?? null)));
       router.push(NEXT_PAGE);
       return;
     }
-    setStarting(false);
     if (result.status === 401) return setLoad({ state: "signed-out" });
     if (result.code === "selection_stale" || result.code === "github_not_connected") {
       // Details changed in another tab, a suggestion expired, or GitHub was disconnected: reload and look again.
