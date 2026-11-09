@@ -82,15 +82,19 @@ export function FreeTimeForm() {
   // only leave the placeholder badge.
   useEffect(() => {
     let live = true;
-    fetch("/api/me", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<Person>) : null))
-      .catch(() => null)
-      .then((p) => {
-        if (!live) return;
-        if (p) showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
-        const details = badgeDetails(p, readDraft());
-        if (details) setWho(details);
-      });
+    void (async () => {
+      let p: Person | null = null;
+      try {
+        const r = await fetch("/api/me", { cache: "no-store" });
+        p = r.ok ? ((await r.json()) as Person) : null;
+      } catch {
+        p = null; // the placeholder badge stays
+      }
+      if (!live) return;
+      if (p) showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
+      const details = badgeDetails(p, readDraft());
+      if (details) setWho(details);
+    })();
     return () => {
       live = false;
     };
