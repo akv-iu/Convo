@@ -71,10 +71,12 @@ describe("profile persistence through Drizzle", () => {
   it("refreshes only the GitHub login and imported evidence on conflict, preserving edits and onboarding", async () => {
     await initializeGitHubProfile("101", { ...fixtures[0].profile, login: "renamed-example" }, "test-token", consentSources);
     const [sql, params] = query.mock.calls[0];
-    expect(sql).toMatch(/on conflict \("id"\) do update set "github_login" = \$\d+, "revision" = "users"\."revision" \+ 1, "github_evidence" = \$\d+, "github_evidence_pending" = "users"\."github_evidence_pending" or "users"\."github_evidence" is distinct from \$\d+::jsonb returning/);
-    expect(params.at(-3)).toBe("renamed-example");
-    expect(params.at(-2)).toBe(params[6]);
-    expect(params.at(-1)).toBe(params[6]);
+    expect(sql).toMatch(/on conflict \("id"\) do update set "github_login" = \$\d+, "revision" = "users"\."revision" \+ 1, "github_evidence" = \$\d+, "github_evidence_pending" = "users"\."github_evidence_pending" or "users"\."github_evidence" is distinct from \$\d+::jsonb/);
+    expect(params[8]).toBe("renamed-example");
+    expect(params[9]).toBe(params[6]);
+    expect(params[10]).toBe(params[6]);
+    expect(sql).toContain('jsonb_array_elements("users"."profile_evidence")');
+    expect(sql).toContain("e->>'source' <> 'github'");
     expect(sql.split("do update set")[1].split(" returning ")[0]).not.toMatch(/name"|bio|languages|organisations|filters|free_times|workplace_name|badge_colour|visibility/);
   });
 
@@ -90,7 +92,7 @@ describe("profile persistence through Drizzle", () => {
     query.mockResolvedValueOnce(result(savedPerson.filters, [], 9));
     await initializeGitHubProfile("101", fixtures[0].profile, "test-token", []);
     expect(query.mock.calls[0][1][6]).toBe("[]");
-    expect(query.mock.calls[0][1].at(-1)).toBe("[]");
+    expect(query.mock.calls[0][1][10]).toBe("[]");
     expect(ingestPerson).toHaveBeenCalledExactlyOnceWith(savedPerson, [], 9);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -120,7 +122,7 @@ describe("profile persistence through Drizzle", () => {
     await expect(initializeGitHubProfile("101", fixtures[0].profile, "test-token", consentSources)).resolves.toBeUndefined();
     const [sql, params] = query.mock.calls[0];
     expect(sql).toContain('"github_evidence_pending" = "users"."github_evidence_pending" or "users"."github_evidence" is distinct from');
-    expect(params.at(-1)).toBe(params[6]);
+    expect(params[10]).toBe(params[6]);
     expect(query).toHaveBeenCalledOnce();
   });
 

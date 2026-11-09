@@ -21,13 +21,13 @@ Shared services: either person applies migrations to Neon (`npm run db:migrate`)
 - A new user-facing feature gets a feature file: copy `docs/features/TEMPLATE.md` to `docs/features/<feature>.md` in its first PR. Each PR of the feature ticks what it finished. Bug fixes, refactors, tests and docs don't need one.
 - A PR merges once the checks pass; its author merges it (auto-merge is fine). Fix or answer Gitar's findings first.
 - The other person must approve a PR only when:
-  1. it ticks the last box of a feature file (they try the feature on the preview first);
+  1. it ticks the last box of a feature file and changes anything outside the screen files (they try the feature on the preview first). Screen files are `src/app/(onboarding)/`, `src/app/(app)/`, `src/app/page.tsx`, `src/components/ui/`, `tests/e2e/`, `public/` and `docs/features/`; a PR that only changes those completes its feature alone;
   2. it makes a breaking contract change (removes or renames a route or field, makes a field required, or changes a status code or meaning);
   3. it adds a migration that drops or rewrites data;
   4. it changes sign-in, sessions, the GitHub token, source consent, or what other users can see about a person;
   5. it is Person A's and needs a new environment variable (Person B sets it in Vercel);
   6. it changes the gates (`.github/`, `.gitar/`, `sonar-project.properties`, `vitest.config.mts`, this file).
-- Gitar adds the `needs-approval` label for these. The `Feature sign-off` check waits for an approval from someone other than the author on PRs with that label and on PRs that complete a feature file.
+- Gitar adds the `needs-approval` label for these. The `Feature sign-off` check waits for an approval from someone other than the author on PRs with that label and on PRs that complete a feature file outside the screen files.
 
 ## The contract rule
 
@@ -55,7 +55,7 @@ Playwright (`npm run test:e2e`) for anything that changes a screen. Tests come w
 
 - **SonarQube Cloud** applies the default "Sonar way" gate to new code: at least 80% test coverage, at most 3% duplication, no new bugs or vulnerabilities, a maintainability rating of A (fix-up effort under 5% of the new code), and every security hotspot reviewed. Coverage and duplication count once a PR has 20 or more new lines. Screens are excluded from coverage because Playwright tests them. When the gate fails, the `Why the quality gate failed` CI step lists the conditions, issues and files with untested lines.
 - **Gitar** reviews every PR against this file and `.gitar/review/`, runs the rules in `.gitar/rules/`, and explains CI failures. Its findings don't block the merge by themselves, so fix blocking findings or reply to them with the reason before merging. Comment `gitar auto-apply:on` to let it push fixes within `.gitar/config/apply.md`. Never use the `gitar-skip` label to get past a review.
-- **Feature sign-off** passes at once unless the PR completes a feature file or has the `needs-approval` label; then it waits for the other person's approval.
+- **Feature sign-off** passes at once unless the PR completes a feature file and changes more than screen files, or has the `needs-approval` label; then it waits for the other person's approval.
 - Never silence a gate to get a merge: see `.gitar/instructions/keep-the-gates-honest.md`.
 - Base every PR on `main`: PRs based on another branch get CI and Gitar but no Sonar scan.
 

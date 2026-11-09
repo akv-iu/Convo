@@ -2,9 +2,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../../db";
 import { users } from "../../../db/schema";
 import { routes, type RouteBody } from "@/contracts/routes";
-import { EvidenceDoc, Person, type TimeBlock } from "@/contracts/types";
+import { Person, type TimeBlock } from "@/contracts/types";
 import { search, type SearchService } from "@/server/search";
-import { MAX_REPO_EVIDENCE } from "./index";
+import { indexedEvidence, sourceRecords } from "./evidence";
 
 type User = typeof users.$inferSelect;
 type ProfilePatch = RouteBody<"putMe">;
@@ -13,7 +13,7 @@ class ProfileError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
-async function readUser(userId: string): Promise<User> {
+export async function readUser(userId: string): Promise<User> {
   let rows: User[];
   try {
     rows = await db().select().from(users).where(eq(users.id, userId)).limit(1);
@@ -34,6 +34,7 @@ async function writeUser(userId: string, changes: ProfilePatch): Promise<User> {
         workplaceName: sql`case when ${users.filters}->>'rorId' is distinct from ${changes.filters.rorId}::text then null else ${users.workplaceName} end`,
       } : {}),
       revision: sql`${users.revision} + 1`,
+      ...(changes.bio !== undefined ? { textVersion: sql`${users.textVersion} + case when ${users.bio} is distinct from ${changes.bio} then 1 else 0 end` } : {}),
     })
       .where(eq(users.id, userId)).returning();
   } catch {
@@ -45,7 +46,8 @@ async function writeUser(userId: string, changes: ProfilePatch): Promise<User> {
 
 export function toPerson(user: User): Person {
   if (user.filters === null) throw new ProfileError("Complete onboarding first: save country, workplace and hiring answers.", 409);
-  const parsed = Person.safeParse({ ...user, synthetic: false });
+  const { expertise, ...fields } = user;
+  const parsed = Person.safeParse({ ...fields, ...(expertise == null ? {} : { expertise }), synthetic: false });
   if (!parsed.success) throw new ProfileError("Stored profile is invalid.", 503);
   return parsed.data;
 }
@@ -59,15 +61,14 @@ function validateTimes(times: TimeBlock[]): void {
 /** `target` lets the seed write to Elasticsearch whatever the app's search switch says. */
 export async function syncProfile(user: User, target: SearchService = search): Promise<Person> {
   const person = toPerson(user);
-  const evidence = EvidenceDoc.array().max(MAX_REPO_EVIDENCE).safeParse(user.githubEvidence);
-  if (!evidence.success || evidence.data.some(doc => doc.personId !== user.id || doc.kind !== "repo")) {
-    throw new ProfileError("Saved repository evidence is invalid. Sign in again to refresh it.", 503);
-  }
+  const evidence = indexedEvidence(user);
+  sourceRecords(user);
   try {
-    await target.ingestPerson(person, evidence.data, user.revision);
-    if (user.githubEvidencePending) {
+    await target.ingestPerson(person, evidence, user.revision);
+    if (user.githubEvidencePending || user.profileEvidencePending) {
       // Only this exact snapshot can confirm that stale repository evidence was replaced.
-      await db().update(users).set({ githubEvidencePending: false })
+      await db().update(users).set({ ...(user.githubEvidencePending ? { githubEvidencePending: false } : {}),
+        ...(user.profileEvidencePending ? { profileEvidencePending: false } : {}) })
         .where(and(eq(users.id, user.id), eq(users.revision, user.revision)));
     }
   } catch {
@@ -83,6 +84,7 @@ export async function getProfile(userId: string): Promise<Person> {
 }
 
 export async function updateProfile(userId: string, changes: ProfilePatch): Promise<Person> {
+  changes = routes.putMe.body.parse(changes); // Server-owned identity fields never reach a write.
   if (changes.freeTimes) validateTimes(changes.freeTimes);
   const existing = await readUser(userId);
   toPerson({ ...existing, ...changes }); // Validate onboarding before writing any fields.

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
 import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
+import { clearOnboardingTab } from "../../_components/draft";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { aboutFromProfile, saveErrorMessage, SHOW_ALL, workplaceLabel } from "../answers";
 import { countryName } from "@/components/ui/countries";
@@ -211,6 +212,7 @@ export function ProfileForm() {
         }
         setMustResend(false);
       }
+      clearOnboardingTab(); // onboarding is done
       router.push(NEXT_STEP);
     } catch {
       setMustResend(true);
@@ -274,7 +276,7 @@ export function ProfileForm() {
           <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
           <div className="mt-8 lg:hidden">{badge}</div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button onClick={() => router.push(NEXT_STEP)} className="text-lg sm:px-8">
+            <Button onClick={() => (clearOnboardingTab(), router.push(NEXT_STEP))} className="text-lg sm:px-8">
               Yes, that&apos;s me
             </Button>
             <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">

@@ -6,6 +6,10 @@
  */
 import { z } from "zod";
 
+export const SourceUrl = z.url({ protocol: /^https$/ }).max(2048).refine(value => {
+  try { const url = new URL(value); return !url.username && !url.password; } catch { return false; }
+}, "Use an HTTPS URL without credentials");
+
 export const AskType = z.enum(["knowledge", "career", "collaboration", "hiring"]);
 export type AskType = z.infer<typeof AskType>;
 
@@ -30,8 +34,14 @@ export type Slot = TimeBlock;
 export const BadgeColour = z.enum(["sunflower", "mint", "sky", "lilac", "coral"]);
 export type BadgeColour = z.infer<typeof BadgeColour>;
 
-/** The built-in pictures a person can choose for their badge (original art in src/components/ui/avatars.tsx). */
-export const AvatarId = z.enum(["star", "moon", "sun", "leaf", "wave", "peak", "bolt", "heart", "flower", "cloud", "gem", "spark"]);
+/**
+ * The built-in pictures a person can choose for their badge: twelve shapes and ten illustrated
+ * faces (the homepage's attendees). Original art in src/components/ui/avatars.tsx and hero-faces.tsx.
+ */
+export const AvatarId = z.enum([
+  "star", "moon", "sun", "leaf", "wave", "peak", "bolt", "heart", "flower", "cloud", "gem", "spark",
+  "face-amara", "face-hiroshi", "face-fatima", "face-gurpreet", "face-sofia", "face-liam", "face-kwame", "face-leilani", "face-mei", "face-zawadi",
+]);
 export type AvatarId = z.infer<typeof AvatarId>;
 
 export const ProfileVisibility = z.object({
@@ -44,9 +54,11 @@ export type ProfileVisibility = z.infer<typeof ProfileVisibility>;
 export const Person = z.object({
   id: z.string(),
   name: z.string(),
-  githubLogin: z.string(),
+  githubLogin: z.string().nullable(),
   bio: z.string(),
   languages: z.array(z.string()),
+  /** Professional/research topics; absent on older profiles. */
+  expertise: z.array(z.string().trim().min(1).max(60)).max(8).optional(),
   organisations: z.array(z.string()),
   filters: HardFilters,
   /** Display name for either a listed or unlisted workplace; null clears it. */
@@ -72,7 +84,7 @@ export const CardPerson = Person.extend({
 });
 export type CardPerson = z.infer<typeof CardPerson>;
 
-export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract"]);
+export const EvidenceKind = z.enum(["repo", "commit_area", "paper", "talk", "abstract", "profile_page", "cv"]);
 
 export const EvidenceDoc = z.object({
   id: z.string(),
@@ -80,7 +92,7 @@ export const EvidenceDoc = z.object({
   kind: EvidenceKind,
   title: z.string(),
   text: z.string(),
-  url: z.string().url().optional(),
+  url: SourceUrl.optional(),
 });
 export type EvidenceDoc = z.infer<typeof EvidenceDoc>;
 

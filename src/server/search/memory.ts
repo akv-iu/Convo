@@ -4,17 +4,26 @@
  */
 import * as fixtures from "@/contracts/fixtures";
 import type { EvidenceDoc, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
-import { addEvidence } from "./evidence";
+import { addEvidence, checkEvidence, expertiseOf } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
-const people = new Map<string, Person>(fixtures.people.map((p) => [p.id, p]));
-const evidence = new Map<string, EvidenceDoc[]>();
-const revisions = new Map<string, number>();
-for (const e of fixtures.evidence) {
-  evidence.set(e.personId, [...(evidence.get(e.personId) ?? []), e]);
+interface MemoryIndex {
+  people: Map<string, Person>;
+  evidence: Map<string, EvidenceDoc[]>;
+  revisions: Map<string, number>;
+  asks: Map<string, { userId: string; text: string }>;
+  resolved: Set<string>;
 }
-const asks = new Map<string, { userId: string; text: string }>();
-const resolved = new Set<string>();
+
+function freshIndex(): MemoryIndex {
+  const evidence = new Map<string, EvidenceDoc[]>();
+  for (const e of fixtures.evidence) evidence.set(e.personId, [...(evidence.get(e.personId) ?? []), e]);
+  return { people: new Map(fixtures.people.map((p) => [p.id, p])), evidence, revisions: new Map(), asks: new Map(), resolved: new Set() };
+}
+
+// Next can bundle each route separately; every route must still read and write one index.
+const runtime = globalThis as typeof globalThis & { convoMemorySearch?: MemoryIndex };
+const { people, evidence, revisions, asks, resolved } = (runtime.convoMemorySearch ??= freshIndex());
 
 const STOP = new Set(["i", "a", "an", "the", "to", "at", "in", "on", "of", "how", "want", "works", "work", "does", "do", "with", "and", "for", "is", "it", "my", "me", "get", "specifically", "what", "about"]);
 
@@ -45,6 +54,7 @@ export const memorySearch: SearchService = {
   },
 
   async ingestPerson(person, docs, revision) {
+    if (docs) checkEvidence(person.id, docs, revision !== undefined);
     const current = revisions.get(person.id);
     if (current !== undefined && (revision === undefined || revision < current)) return;
     people.set(person.id, person);
@@ -69,7 +79,7 @@ export const memorySearch: SearchService = {
           addEvidence(found, doc);
         }
       }
-      const bioHits = tokens(`${person.bio} ${person.organisations.join(" ")}`).filter((t) => q.has(t));
+      const bioHits = tokens(`${person.bio} ${person.organisations.join(" ")} ${expertiseOf(person).join(" ")}`).filter((t) => q.has(t));
       score += new Set(bioHits).size * 0.5;
       if (score === 0) continue;
       if (filters.freeTimes && overlaps(filters.freeTimes, person.freeTimes)) score += 0.5;
@@ -90,7 +100,7 @@ export const memorySearch: SearchService = {
   async whoIsLookingFor(person) {
     // fixtures.lookingFor[user] lists the people looking for someone like that user.
     const fromFixtures = fixtures.lookingFor[person.id] ?? [];
-    const profile = new Set(tokens(`${person.bio} ${(evidence.get(person.id) ?? []).map((e) => e.title).join(" ")}`));
+    const profile = new Set(tokens(`${person.bio} ${expertiseOf(person).join(" ")} ${(evidence.get(person.id) ?? []).map((e) => e.title).join(" ")}`));
     const fromAsks = [...asks.values()]
       .filter(({ userId, text }) => userId !== person.id && tokens(text).some(w => profile.has(w)))
       .map(({ userId }) => userId);

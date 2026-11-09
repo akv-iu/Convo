@@ -5,10 +5,16 @@ import { buildProfile } from "./index";
 import { githubUserId, loadGitHubProfile } from "./github";
 import type { GitHubConsent } from "./consent";
 import { syncProfile } from "./service";
+import { approvedSnapshot } from "./evidence";
 
 export async function initializeGitHubProfile(accountId: string, profile: unknown, accessToken: string, consent: GitHubConsent): Promise<void> {
   const github = await loadGitHubProfile(accountId, profile, accessToken, consent);
   const { person, evidence } = buildProfile(githubUserId(accountId), github);
+  const retrievedAt = new Date();
+  const refreshed = approvedSnapshot({ id: person.id, githubLogin: person.githubLogin, createdAt: retrievedAt, githubEvidence: evidence });
+  const source = [{ id: `${person.id}:github`, source: "github", label: "GitHub", url: `https://github.com/${github.login}`,
+    evidenceCount: refreshed.length, approvedAt: retrievedAt.toISOString(), removed: !refreshed.length }];
+  const unchanged = sql`${users.githubEvidence} = ${JSON.stringify(evidence)}::jsonb`;
   const [saved] = await db().insert(users).values({
     id: person.id, githubLogin: person.githubLogin, name: person.name, bio: person.bio,
     languages: person.languages, organisations: person.organisations, githubEvidence: evidence, githubEvidencePending: evidence.length > 0,
@@ -20,6 +26,12 @@ export async function initializeGitHubProfile(accountId: string, profile: unknow
       githubLogin: person.githubLogin, githubEvidence: evidence,
       githubEvidencePending: sql`${users.githubEvidencePending} or ${users.githubEvidence} is distinct from ${JSON.stringify(evidence)}::jsonb`,
       revision: sql`${users.revision} + 1`,
+      // The legacy flow refreshes only GitHub; approved research/page/CV evidence stays intact.
+      profileEvidence: sql`case when ${users.profileEvidence} is null or ${unchanged} then ${users.profileEvidence}
+        else (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(${users.profileEvidence}) e where e->>'source' <> 'github') || ${JSON.stringify(refreshed)}::jsonb end`,
+      profileSources: sql`case when ${users.profileEvidence} is null or ${unchanged} then ${users.profileSources}
+        else (select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(${users.profileSources}) e where e->>'source' <> 'github') || ${JSON.stringify(source)}::jsonb end`,
+      profileEvidencePending: sql`${users.profileEvidencePending} or (${users.profileEvidence} is not null and not (${unchanged}))`,
     },
   }).returning();
   if (!saved) throw new Error("Profile storage did not confirm the save. Retry sign-in.");
