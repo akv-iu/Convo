@@ -42,3 +42,20 @@ it("does not start a model call after cancellation or expiry invalidates its lea
   mocks.lease.mockRejectedValue(new Error("revoked"));
   await expect(run()).rejects.toMatchObject({code:"provider_down",status:503});expect(mocks.create).not.toHaveBeenCalled();expect(mocks.write).not.toHaveBeenCalled();
 });
+it("gives the model short refs, maps them back, and drops refs the text repeats (a Google owner's ID never reaches it)",async()=>{
+  // Live gpt-5.4-mini answers (2026-11-09) miscopied long IDs and repeated them in the bio, where a Google
+  // sign-in's 21-digit subject read as a phone number: every draft was rejected.
+  const owner="google:108765432109876543210";
+  const docs=Array.from({length:10},(_,i)=>({...doc,id:`${owner}:cv:excerpt-${i+1}`,personId:owner,sourceId:`${owner}:cv`,source:"cv" as const,kind:"cv" as const,url:undefined,excerpt:`Builds compilers ${i+1}`}));
+  mocks.create.mockResolvedValue({status:"completed",output_text:JSON.stringify({
+    bio:"Builds compilers and CI pipelines [ev1]. Also works on build tools. [ev1][ev10] (ev2, ev10)",bioEvidenceIds:["ev1","ev10"],
+    expertise:[{label:"Compilers [ev2]",evidenceIds:["ev2"]},{label:"e2e testing",evidenceIds:["ev10"]}]})});
+  expect(await synthesize(owner,"job","token",2,docs,identity)).toEqual({bio:"Builds compilers and CI pipelines. Also works on build tools.",
+    bioEvidenceIds:[docs[0].id,docs[9].id],expertise:[{label:"Compilers",evidenceIds:[docs[1].id]},{label:"e2e testing",evidenceIds:[docs[9].id]}]});
+  const body=mocks.create.mock.calls[0][0];
+  expect(body.input).not.toContain(owner); expect(JSON.parse(body.input).map((e:{id:string})=>e.id)).toEqual(docs.map((_,i)=>`ev${i+1}`));
+});
+it("rejects a ref the batch doesn't have",async()=>{
+  mocks.create.mockResolvedValue({status:"completed",output_text:JSON.stringify({...proposal,bioEvidenceIds:["ev2"]})});
+  await expect(run()).rejects.toMatchObject({code:"provider_down",status:503});
+});
