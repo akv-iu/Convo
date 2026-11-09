@@ -34,6 +34,7 @@ import {
   blockerFailure,
   loadAsk,
   matchFailure,
+  onlyNearest,
   passFailure,
   resolveFailure,
   sendFailure,
@@ -585,8 +586,15 @@ function AskMatches({ askId }: { askId: string }) {
         {load.state === "ready" && matches.length > 0 && (
           <>
             <p id="matches-count" tabIndex={-1} className="mb-3 text-xl font-extrabold tracking-tight focus:outline-none">
-              {matches.length} {matches.length === 1 ? "person" : "people"} found
+              {onlyNearest(matches)
+                ? `No close match. ${matches.length === 1 ? "The nearest person" : `The ${matches.length} nearest people`}`
+                : `${matches.length} ${matches.length === 1 ? "person" : "people"} found`}
             </p>
+            {onlyNearest(matches) && (
+              <p className="mb-3 text-muted">
+                No one here works on exactly this. {matches.length === 1 ? "This person does" : "These people do"} related work and may still help.
+              </p>
+            )}
             {cutoffNote && (
               <p className="mb-3 rounded-xl border-2 border-border px-4 py-3 text-sm">
                 You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.

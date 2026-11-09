@@ -203,3 +203,14 @@ describe("person updates without replacing evidence", () => {
     expect(await memorySearch.searchCandidates("RevisionEvidence", { excludeIds: [] })).toEqual([]);
   });
 });
+
+describe("workplace", () => {
+  it("is matched only when the person shows it", async () => {
+    const atStripe = { ...structuredClone(people[0]), id: "workplace-test", bio: "", organisations: [], workplaceName: "Stripe",
+      visibility: { country: true, workplace: true, hiring: true } };
+    await memorySearch.ingestPerson(atStripe, [], 1);
+    expect(await matchedIds("stripe")).toContain(atStripe.id);
+    await memorySearch.ingestPerson({ ...atStripe, visibility: { ...atStripe.visibility, workplace: false } }, [], 2);
+    expect(await matchedIds("stripe")).not.toContain(atStripe.id);
+  });
+});

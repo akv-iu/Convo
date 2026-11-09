@@ -108,6 +108,19 @@ describe.each(implementations)("$name API", ({ api, reset }) => {
     }
   });
 
+  it("rates fit only when judged: an ordinary ask has none, \"[demo:nearest]\" shows the three nearest as partial", async () => {
+    const plain = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
+    const judged = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId: plain.askId })));
+    expect(judged.length).toBeGreaterThan(0);
+    expect(judged.every((r) => !("fit" in r))).toBe(true);
+
+    const nearest = await api.refine(ctx(DEMO_USER_A, { text: `${sampleAsks[0].raw} [demo:nearest]` }));
+    const results = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId: nearest.askId })));
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(3);
+    expect(results.every((r) => r.fit === "partial")).toBe(true);
+  });
+
   it("lists each match's evidence, best first, with only https links", async () => {
     const { askId } = await api.refine(ctx(DEMO_USER_A, { text: sampleAsks[0].raw }));
     const results = routes.match.response.parse(await api.match(ctx(DEMO_USER_A, { askId })));

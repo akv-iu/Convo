@@ -4,7 +4,7 @@
  */
 import * as fixtures from "@/contracts/fixtures";
 import type { EvidenceDoc, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
-import { addEvidence, checkEvidence, expertiseOf } from "./evidence";
+import { addEvidence, checkEvidence, expertiseOf, shownWorkplace } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
 interface MemoryIndex {
@@ -79,7 +79,7 @@ export const memorySearch: SearchService = {
           addEvidence(found, doc);
         }
       }
-      const bioHits = tokens(`${person.bio} ${person.organisations.join(" ")} ${expertiseOf(person).join(" ")}`).filter((t) => q.has(t));
+      const bioHits = tokens(`${person.bio} ${shownWorkplace(person)} ${person.organisations.join(" ")} ${expertiseOf(person).join(" ")}`).filter((t) => q.has(t));
       score += new Set(bioHits).size * 0.5;
       if (score === 0) continue;
       if (filters.freeTimes && overlaps(filters.freeTimes, person.freeTimes)) score += 0.5;

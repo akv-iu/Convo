@@ -190,6 +190,30 @@ describe("searchCandidates", () => {
   ];
   const lookup = (id: string) => ({ ...structuredClone(people[0]), id });
 
+  it("indexes the workplace with the profile only when the person shows it", async () => {
+    const shown = { ...person, workplaceName: "Stripe", visibility: { country: true, workplace: true, hiring: true } };
+    await elasticSearch.ingestPerson(shown, [repo], 3);
+    expect(call(es.index).document.profile).toContain("Stripe");
+    expect(call(es.bulk).operations[3].text).toContain("Stripe");
+
+    vi.clearAllMocks();
+    es.bulk.mockResolvedValue({ errors: false, items: [] });
+    es.deleteByQuery.mockResolvedValue({ deleted: 0, version_conflicts: 0, failures: [] });
+    es.get.mockResolvedValue({ _source: { revision: 4 } });
+    await elasticSearch.ingestPerson({ ...shown, visibility: { country: true, workplace: false, hiring: true } }, [repo], 4);
+    expect(call(es.index).document.profile).not.toContain("Stripe");
+    expect(JSON.stringify(call(es.bulk).operations)).not.toContain("Stripe");
+  });
+
+  it("matches the keyword half on the ask's topic words, most of them required", async () => {
+    es.search.mockResolvedValueOnce({ hits: { hits: [] } });
+    await elasticSearch.searchCandidates("I want to meet a potential employer from healthcare. What kind of roles are you hiring for?", { excludeIds: [] });
+    const [keyword, semantic] = call(es.search).retriever.text_similarity_reranker.retriever.rrf.retrievers;
+    expect(keyword.standard.query.bool.must[0].multi_match).toMatchObject({ query: "healthcare", minimum_should_match: "2<70%" });
+    expect(semantic.standard.query.bool.must[0].semantic.query).toContain("What kind of roles"); // the semantic half reads it all
+    expect(call(es.search).highlight.highlight_query.multi_match.query).toBe("healthcare");
+  });
+
   it("fuses keyword and semantic search per person, filtered, boosted and reranked", async () => {
     es.search.mockResolvedValueOnce({ hits: { hits } });
     es.mget.mockResolvedValueOnce({ docs: [
