@@ -96,7 +96,7 @@ describe("refusing requests before touching storage", () => {
   it("fails closed when the secret is not configured", async () => {
     await stageCv("google:1");
     db.calls = 0;
-    for (const unset of [undefined, ""]) {
+    for (const unset of [undefined, "", "fifteen-chars!!"]) { // under 16 characters counts as unset
       await load({ CRON_SECRET: unset });
       const result = await body(await call(`Bearer ${SECRET}`));
       expect(result).toMatchObject({ status: 503, json: { status: "not_configured" }, cache: "no-store" });

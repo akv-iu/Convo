@@ -27,7 +27,7 @@ Expired input is already unreadable before cleanup runs, because every owner rea
 
 ### Authentication
 
-- **No secret configured:** if `CRON_SECRET` is unset or empty, every request gets 503 `not_configured`.
+- **No secret configured:** if `CRON_SECRET` is unset, empty or shorter than 16 characters, every request gets 503 `not_configured`.
 - **Header check:** otherwise, the `Authorization` header must equal `Bearer <CRON_SECRET>` exactly. The comparison is constant-time over SHA-256 digests, so the secret's length doesn't leak.
 - **Refused before storage:** both checks happen before any storage call. Tests prove that refused requests make no storage calls at all.
 - **Production only:** Vercel sends this header itself when the project has a `CRON_SECRET` environment variable, and it calls only the production deployment.

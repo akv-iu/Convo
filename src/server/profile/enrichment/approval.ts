@@ -38,7 +38,8 @@ export async function acceptEnrichment(owner: string, id: string, input: RouteBo
     if (fingerprint(draft.evidence) !== fingerprint(job.collected)) enrichmentError("provider_down", 503);
     if (draft.evidence.some(e => !job.value.sources.some(s => s.source === e.source && s.sourceId === e.sourceId && s.status === "done"))
       || job.value.sources.some(s => s.items !== draft.evidence.filter(e => e.source === s.source).length)) enrichmentError("provider_down", 503);
-    const replaced = new Set(job.value.sources.filter(s => ["done", "empty"].includes(s.status)).map(s => s.source));
+    // Only a source that returned evidence replaces its approved snapshot; an empty result (often transient) keeps it, as the fake does.
+    const replaced = new Set(job.value.sources.filter(s => s.status === "done").map(s => s.source));
     const sources = sourceRecords(user).filter(s => !replaced.has(s.source));
     const docs = [...approvedSnapshot(user).filter(e => !replaced.has(e.source)), ...draft.evidence.filter(e => body.evidenceIds.includes(e.id))];
     user.profileEvidence = approvedSnapshot({ ...user, profileEvidence: docs });
