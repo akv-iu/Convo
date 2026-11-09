@@ -8,11 +8,12 @@
  *   FAKE_API=0 npm run try-search -- --audit
  *                                           match quality: varied asks through the whole match pipeline
  *                                           (refine, search, explain, fit); counts off-topic cards
- * Uses Elasticsearch unless FAKES includes "search", and OpenAI unless FAKES includes "ai".
+ * Uses Elasticsearch unless FAKES includes "search" (then the in-memory search, loaded with the fixtures and
+ * the synthetic attendees, as the seed loads Elasticsearch), and OpenAI unless FAKES includes "ai".
  */
 import { readFileSync } from "node:fs";
 import { DEMO_USER_A, evidence as fixtureEvidence, people, sampleAsks } from "@/contracts/fixtures";
-import type { MatchResult, Person, RefinedAsk } from "@/contracts/types";
+import type { EvidenceDoc, MatchResult, Person, RefinedAsk } from "@/contracts/types";
 import type { Explanation } from "@/server/ai";
 import { cannedAi } from "@/server/ai/canned";
 import { openAi } from "@/server/ai/openai";
@@ -25,6 +26,13 @@ const search = config.fakeSearch ? memorySearch : elasticSearch;
 const ai = config.fakeAi ? cannedAi : openAi;
 const useAi = process.argv.includes("--ai");
 const requester = people.find((p) => p.id === DEMO_USER_A) ?? people[0];
+const SYNTHETIC = "scripts/synthetic/people.json";
+
+/** The in-memory search starts with only the fixtures: add the synthetic attendees, as the seed does for Elasticsearch. */
+async function loadSynthetic(): Promise<void> {
+  const file = JSON.parse(readFileSync(SYNTHETIC, "utf8")) as { people: Person[]; evidence: EvidenceDoc[] };
+  for (const person of file.people) await memorySearch.ingestPerson(person, file.evidence.filter((e) => e.personId === person.id));
+}
 
 async function timed<T>(fn: () => Promise<T>): Promise<[T, number]> {
   const started = performance.now();
@@ -78,12 +86,18 @@ const AUDIT: { raw: string; topic: RegExp; hiring?: boolean }[] = [
   { raw: "I need a data engineer with Spark experience", topic: /spark|data engineer/i, hiring: false },
   { raw: "I want to build an open-source observability tool with OpenTelemetry together", topic: /opentelemetry|observability|tracing/i },
   { raw: "Looking for a co-author for climate modelling research", topic: /climate/i },
+  { raw: "How do I map EHR data to the OMOP common data model?", topic: /omop|ehr|electronic health record/i },
+  { raw: "Who can explain FHIR subscriptions for hospital integrations?", topic: /fhir|hl7/i },
+  { raw: "I need help segmenting tumours in CT scans with nnU-Net", topic: /segment|nnu-net|monai/i },
+  { raw: "Looking for a collaborator on single-cell RNA-seq cell type annotation", topic: /single-cell|scrna|scanpy|seurat/i },
+  { raw: "How do you validate a sepsis prediction model before deployment?", topic: /sepsis|early warning|deterioration/i },
+  { raw: "How do I estimate the reproduction number during an outbreak?", topic: /outbreak|transmission|reproduction number/i },
   { raw: "best sourdough bread recipe", topic: /bread|sourdough|baking/i },
 ];
 
 /** Everyone the audit could find, with their evidence text, to count who could answer each ask. */
 function auditPeople(): { person: Person; text: string }[] {
-  const synthetic = JSON.parse(readFileSync("scripts/synthetic/people.json", "utf8")) as { people: Person[]; evidence: { personId: string }[] };
+  const synthetic = JSON.parse(readFileSync(SYNTHETIC, "utf8")) as { people: Person[]; evidence: { personId: string }[] };
   const evidenceText = new Map<string, string>();
   for (const e of [...synthetic.evidence, ...fixtureEvidence]) evidenceText.set(e.personId, `${evidenceText.get(e.personId) ?? ""} ${JSON.stringify(e)}`);
   return [...synthetic.people, ...people].filter((p) => p.id !== requester.id)
@@ -121,6 +135,7 @@ Total off-topic cards: ${offTopic}. Asks nobody can answer that still showed car
 async function main() {
   const aiLabel = useAi ? `, AI: ${config.fakeAi ? "canned" : "OpenAI"}` : "";
   console.log(`search: ${config.fakeSearch ? "in-memory" : "Elasticsearch"}${aiLabel}`);
+  if (config.fakeSearch) await loadSynthetic();
   if (process.argv.includes("--audit")) return audit();
   if (process.argv.includes("--samples")) {
     if (!(await samples())) process.exitCode = 1;

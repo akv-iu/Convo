@@ -29,6 +29,21 @@ describe("one index for every route", () => {
   });
 });
 
+describe("ranking", () => {
+  it("ranks one precise piece of evidence above many that each share one word, and lists the best match first", async () => {
+    const base = { ...structuredClone(people[0]), bio: "", organisations: [], expertise: [] };
+    const precise = { ...base, id: "rank-precise" };
+    const broad = { ...base, id: "rank-broad" };
+    const doc = (personId: string, n: number, title: string): EvidenceDoc => ({ id: `${personId}:repo:${n}`, personId, kind: "repo", title, text: "" });
+    await memorySearch.ingestPerson(precise, [doc(precise.id, 1, "Zebrafish husbandry"), doc(precise.id, 2, "Zebrafish retina tracing")], 1);
+    await memorySearch.ingestPerson(broad, Array.from({ length: 8 }, (_, n) => doc(broad.id, n, `Zebrafish note ${n}`)), 1);
+
+    const found = await memorySearch.searchCandidates("zebrafish retina tracing", { excludeIds: [] });
+    expect(found.map((c) => c.person.id).slice(0, 2)).toEqual([precise.id, broad.id]);
+    expect(found[0].highlights).toEqual(["Zebrafish retina tracing", "Zebrafish husbandry"]);
+  });
+});
+
 describe("approved expertise", () => {
   it("is matched and read by reverse search, and a stale save can't bring it back once withdrawn", async () => {
     const researcher = { ...structuredClone(people[0]), id: "expertise-test", bio: "", organisations: [], expertise: ["Qubit calibration"] };
