@@ -115,7 +115,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
     await expect(page.getByText(`${expected.length} ${expected.length === 1 ? "person" : "people"} found`)).toBeVisible();
     await expect(card(page)).toContainText(first.explanation);
-    if (first.person.synthetic) await expect(card(page)).toContainText("Synthetic profile");
+    if (first.person.synthetic) await expect(card(page)).toContainText("Demo profile");
   });
 
   test("Send request sends the question to that person, and they get it", async ({ page }) => {
@@ -188,7 +188,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await passButton(page).click();
     await expect(c.getByRole("heading", { level: 2 })).toHaveText("Person 2");
     const row = rows(page).nth(0); // Person 1 left the list
-    await expect(row).toContainText("Synthetic profile");
+    await expect(row).toContainText("Demo profile");
     await expect(row).toContainText("Looking for someone like you too");
     await expect(row).toContainText("Hiring");
     await expect(row).toContainText("United States");
@@ -203,7 +203,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(c.getByRole("heading", { level: 2 })).toHaveText("Person 2");
     await expect(c.getByRole("heading", { level: 2 })).toHaveClass(/sr-only/);
     await expect(c.locator("[data-avatar]")).toHaveCount(0);
-    for (const repeated of ["Synthetic profile", "Looking for someone like you too", "United States"]) {
+    for (const repeated of ["Demo profile", "Looking for someone like you too", "United States"]) {
       await expect(c.getByText(repeated)).toHaveCount(0);
     }
     await expect(c.getByRole("link", { name: /Their GitHub profile/ })).toHaveAttribute("href", "https://github.com/person2");

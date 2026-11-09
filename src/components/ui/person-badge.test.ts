@@ -20,7 +20,7 @@ describe("shared person badge", () => {
     expect(html).toContain("Ada &lt;script&gt;");
     expect(html).toContain("&lt;img src=x&gt;");
     expect(html).toContain('href="https://github.com/a%2Fb%3Fc"');
-    expect(html).toContain("Synthetic profile");
+    expect(html).toContain("Demo profile");
     expect(html).toContain("Rust");
     expect(html).not.toContain("Not hiring");
   });

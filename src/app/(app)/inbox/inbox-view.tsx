@@ -13,7 +13,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ScanRadar } from "@/components/ui/scan-radar";
+import { useToast } from "@/components/ui/toast";
+import { CardSkeleton, EmptyState, pageTitleClass } from "@/components/ui/page";
 import { SharedContactCard } from "@/components/ui/shared-contact";
 import { MeetingBooked } from "@/components/ui/meeting-booked";
 import type { Request, RequestView } from "@/contracts/types";
@@ -32,8 +33,7 @@ import {
   type Failure,
 } from "./inbox";
 
-const headingClass =
-  "text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl";
+const headingClass = pageTitleClass;
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Load = { state: "loading" } | { state: "ready"; requests: RequestView[] } | { state: "failed"; failure: Failure };
@@ -43,6 +43,7 @@ export function InboxView() {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [announce, setAnnounce] = useState("");
+  const toast = useToast();
 
   useEffect(() => {
     let live = true;
@@ -69,6 +70,10 @@ export function InboxView() {
 
   function saved(updated: Request, message: string) {
     setAnnounce(message);
+    toast(
+      updated.status === "accepted" ? "Accepted: you can now see each other's contact details" : message.replace(/\.$/, ""),
+      updated.status === "declined" ? "neutral" : "done",
+    );
     // Answers and bookings return a plain request: keep the asker's badge and the ask type already shown.
     setLoad((cur) =>
       cur.state === "ready"
@@ -112,9 +117,7 @@ export function InboxView() {
 
       <div className="mt-8">
         {load.state === "loading" && (
-          <p role="status" aria-busy="true" className="text-muted">
-            Loading your requests…
-          </p>
+          <CardSkeleton label="Loading your requests…" />
         )}
 
         {load.state === "failed" && (
@@ -133,18 +136,16 @@ export function InboxView() {
         )}
 
         {load.state === "ready" && load.requests.length === 0 && (
-          <div className="flex flex-col items-center rounded-2xl border-2 border-border bg-surface p-6 text-center sm:flex-row sm:gap-8 sm:text-left">
-            <ScanRadar className="w-32 shrink-0 sm:w-36" />
-            <div className="mt-5 sm:mt-0">
-            <h2 className="text-2xl font-extrabold tracking-tight">No requests yet</h2>
-            <p className="mt-2 text-muted">Lanyard is looking for people your skills can help. When someone sends you their question, it shows up here.</p>
-            <div className="mt-5">
+          <EmptyState
+            title="No requests yet"
+            action={
               <Button href="/ask" variant="secondary">
                 Ask your own question
               </Button>
-            </div>
-            </div>
-          </div>
+            }
+          >
+            Lanyard is looking for people your skills can help. When someone sends you their question, it shows up here.
+          </EmptyState>
         )}
 
         {load.state === "ready" && load.requests.length > 0 && (
@@ -248,11 +249,11 @@ function RequestCard({
         </p>
       )}
       {request.status === "scheduled" && request.slot && (
-        <MeetingBooked when={venueRange(request.slot)} />
+        <MeetingBooked id={request.id} when={venueRange(request.slot)} slot={request.slot} withName={request.person?.name ?? "them"} question={request.question} />
       )}
       {request.status === "declined" && <p className="mt-3 text-muted">You declined this one.</p>}
       {(request.status === "accepted" || request.status === "scheduled") && request.contact && (
-        <SharedContactCard contact={request.contact} name={request.person?.name ?? "them"} />
+        <SharedContactCard contact={request.contact} name={request.person?.name ?? "them"} question={request.question} />
       )}
       {request.status === "accepted" && !request.slot && (
         <SlotPicker request={request} onBooked={(r) => onSaved(r, `Meeting booked: ${r.slot ? venueRange(r.slot) : ""}`)} onReload={onReload} />

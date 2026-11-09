@@ -21,6 +21,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { pageTitleClass } from "@/components/ui/page";
 import type { Ask, RefinedAsk } from "@/contracts/types";
 import { loadAsk } from "../matches/matches";
 import {
@@ -34,8 +35,7 @@ import {
   recallAsk,
 } from "./asks";
 
-const headingClass =
-  "text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
+const headingClass = pageTitleClass;
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Result = { askId: string; rawText: string; refined: RefinedAsk; resolved?: boolean };
