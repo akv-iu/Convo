@@ -16,9 +16,10 @@ function result(value: Person = person, filters: Person["filters"] | null = valu
     JSON.stringify(value.languages), JSON.stringify(value.organisations),
     filters === null ? null : JSON.stringify(filters), JSON.stringify(value.freeTimes), "2026-11-05T00:00:00Z", revision,
     value.workplaceName ?? null, value.badgeColour ?? "sunflower", JSON.stringify(value.visibility ?? { country: true, workplace: true, hiring: true }), JSON.stringify(evidence), pending,
-    // The avatar column is last; rows from before it existed simply end earlier.
+    // Newer columns come after; rows from before they existed simply end earlier.
     ...(value.avatar === undefined && value.avatarColour === undefined ? [] : [value.avatar ?? null]),
-    ...(value.avatarColour === undefined ? [] : [value.avatarColour])]] };
+    // Profile enrichment's columns (evidence, sources, pending, expertise, text version), then the picture's colour.
+    ...(value.avatarColour === undefined ? [] : [null, "[]", false, null, 0, value.avatarColour])]] };
 }
 const evidence: EvidenceDoc[] = [{ id: `${person.id}:repo:durable`, personId: person.id,
   kind: "repo", title: "DurableRepository", text: "Repository evidence", url: "https://github.com/example/durable" }];
@@ -30,13 +31,43 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("real profile and availability services", () => {
+  it("increments the text version only for a changed bio, leaving cosmetic/availability saves independent", async () => {
+    query.mockResolvedValueOnce(result()).mockResolvedValueOnce(result({ ...person, bio: "Edited during import" }));
+    await updateProfile(person.id, { bio: "Edited during import" });
+    expect(query.mock.calls[1][0]).toContain('"text_version" = "users"."text_version" + case when "users"."bio" is distinct from');
+    query.mockClear().mockResolvedValue(result());
+    await updateProfile(person.id, { badgeColour: "mint" });
+    expect(query.mock.calls[1][0].split(" returning ")[0]).not.toContain('"text_version"');
+    query.mockClear().mockResolvedValue(result()); await saveAvailability(person.id, person.freeTimes);
+    expect(query.mock.calls[0][0].split(" returning ")[0]).not.toContain('"text_version"');
+  });
+  it("indexes the approved complete snapshot rather than legacy GitHub evidence", async () => {
+    const doc = { id: `${person.id}:paper:approved`, personId: person.id, sourceId: `${person.id}:research`, source: "research", kind: "paper", title: "Paper", excerpt: "Approved research", url: "https://example.org/paper", retrievedAt: "2026-11-07T12:00:00.000Z" };
+    const user = { ...person, createdAt: new Date(), revision: 10, githubEvidence: evidence, profileEvidence: [doc], profileEvidencePending: true, expertise: ["Scheduling"],
+      profileSources: [{ id: doc.sourceId, source: "research", label: "Research", approvedAt: doc.retrievedAt, evidenceCount: 1 }] };
+    await syncProfile(user as never);
+    expect(ingestPerson).toHaveBeenCalledWith(expect.objectContaining({ expertise: ["Scheduling"] }), [expect.objectContaining({ id: doc.id, text: doc.excerpt })], 10);
+    expect(query.mock.calls[0][0]).toContain('"profile_evidence_pending"');
+    expect(query.mock.calls[0][1]).toEqual([false, person.id, 10]);
+  });
+  it("never falls back to withdrawn legacy GitHub evidence after approval is empty", async () => {
+    await syncProfile({ ...person, createdAt: new Date(), revision: 11, githubEvidence: evidence, profileEvidence: [] } as never);
+    expect(ingestPerson).toHaveBeenCalledWith(person, [], 11);
+  });
+  it("does not write caller-supplied GitHub identity, even when invoked without the HTTP parser", async () => {
+    const saved = await updateProfile(person.id, { githubLogin: "another-person" } as never);
+    expect(saved.githubLogin).toBe(person.githubLogin);
+    expect(query).toHaveBeenCalledOnce();
+    expect(String(query.mock.calls[0][0])).not.toContain('update "users"');
+  });
   it("syncs to the search it is given, and acknowledges only that write", async () => {
     const target = { ingestPerson: vi.fn().mockResolvedValue(undefined) };
     const user = {
       ...person, createdAt: new Date("2026-11-05T00:00:00Z"), revision: 4, workplaceName: null,
       badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
-      githubEvidence: evidence, githubEvidencePending: true, avatar: null, avatarColour: null,
-      contactEmail: null, contactPhone: null, contactShare: "email" as const,
+      githubEvidence: evidence, githubEvidencePending: true, avatar: null,
+      profileEvidence: null, profileSources: [], profileEvidencePending: false, expertise: null, textVersion: 0,
+      avatarColour: null, contactEmail: null, contactPhone: null, contactShare: "email" as const,
     };
     const synced = { ...person, avatar: null, avatarColour: null }; // no picture chosen: initials on the badge colour
 

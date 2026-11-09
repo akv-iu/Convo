@@ -26,13 +26,13 @@ Updated 7 November 2026. Phase 1, building the demo, is done. In phase 2 each of
 2. In the first PR, copy [`docs/features/TEMPLATE.md`](features/TEMPLATE.md) to `docs/features/<feature>.md` and list what the feature covers. Delete template lines that don't apply.
 3. Build it in as many PRs as you like. Each one ticks the items it finished.
 4. Wait for the checks, fix or answer Gitar's findings, and merge.
-5. The PR that ticks the last box waits. Ask the other person to try the feature on that PR's Vercel preview, following "How to try it", and approve. Their approval turns `Feature sign-off` green.
+5. The PR that ticks the last box waits, unless every file it changes is a screen file (`src/app/(onboarding)/`, `src/app/(app)/`, `src/app/page.tsx`, `src/components/ui/`, `tests/e2e/`, `public/` and `docs/features/`): a screen-only PR completes its feature alone, but still waits if it has the `needs-approval` label. Ask the other person to try the feature on that PR's Vercel preview, following "How to try it", and approve. Their approval turns `Feature sign-off` green.
 
 Bug fixes, refactors, tests and docs don't need a feature file.
 
 ## When the other person must approve
 
-1. **A feature is complete:** the PR ticks the last box of its feature file.
+1. **A feature is complete:** the PR ticks the last box of its feature file and changes more than screen files.
 2. **A breaking contract change:** a route or field removed or renamed, a field made required, or a status code or meaning changed. Adding an optional field or a route doesn't count.
 3. **A migration that drops or rewrites data.** Adding columns, tables or indexes doesn't count.
 4. **Sign-in, consent or privacy:** sessions, the GitHub token, source consent, or what other users can see about a person.
@@ -69,7 +69,7 @@ An AI reviewer that knows our rules.
 [`.github/workflows/feature-signoff.yml`](../.github/workflows/feature-signoff.yml) runs [`.github/scripts/feature-signoff.mjs`](../.github/scripts/feature-signoff.mjs).
 
 - It passes at once for most PRs.
-- It waits for an approval from someone other than the author when the PR completes a feature file or has the `needs-approval` label.
+- It waits for an approval from someone other than the author when the PR completes a feature file and changes more than screen files, or has the `needs-approval` label.
 - It runs again whenever a review is submitted or dismissed.
 - It shows up as a status named `Feature sign-off`, set by a job called `Evaluate sign-off`. Each run replaces the last verdict, so an approval turns the same entry green. The job itself goes red only if the script breaks; a run that breaks partway leaves the status pending, so the PR stays blocked until it runs again.
 

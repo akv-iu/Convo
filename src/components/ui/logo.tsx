@@ -26,3 +26,49 @@ export function Logo({ className = "", nameClassName = "" }: { className?: strin
     </span>
   );
 }
+
+/**
+ * "Lanyard" with the logo as its y: a thicker strap makes the V of the letter's top half, and the
+ * badge hangs below as its tail. Sized in em, so it follows the heading's font size. Screen
+ * readers get the plain word.
+ */
+export function Wordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={className}>
+      <span className="sr-only">Lanyard</span>
+      <span aria-hidden="true" className="whitespace-nowrap">
+        Lan
+        <LanyardY />
+        ard
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The y: the strap's V is the letter's top half, the strap carries on straight down from its point,
+ * and the badge hangs centred below the line (yellow top, blue body). The V's point sits on the
+ * baseline and its arms reach the tops of the other small letters.
+ */
+function LanyardY() {
+  return (
+    <svg viewBox="0 0 60 110" focusable="false" className="mx-[0.01em] inline-block h-[1.24em] w-[0.68em] align-[-0.65em]">
+      <defs>
+        {/* The strap's white turns into the badge's yellow where they meet. */}
+        <linearGradient id="lanyard-y-strap" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0.55" stopColor="currentColor" />
+          <stop offset="1" stopColor="var(--logo-stripe)" />
+        </linearGradient>
+      </defs>
+      {/* The V: the y's arms, meeting on the baseline. */}
+      <path d="M9 11 30 52 51 11" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+      {/* The strap's tail, straight down to the badge. */}
+      <rect x="24.5" y="44" width="11" height="26" fill="url(#lanyard-y-strap)" />
+      {/* The badge. */}
+      <rect x="14" y="66" width="32" height="40" rx="7" fill="var(--accent)" />
+      <path d="M14 73a7 7 0 0 1 7-7h18a7 7 0 0 1 7 7v8H14z" fill="var(--logo-stripe)" />
+      <circle cx="23.5" cy="92" r="4.5" fill="var(--badge-ink)" />
+      <rect x="31" y="90" width="9.5" height="4" rx="2" fill="var(--badge-ink)" />
+    </svg>
+  );
+}

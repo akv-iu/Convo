@@ -281,7 +281,7 @@ test.describe("your badge (step 2)", () => {
     await plus.click();
     await expect(plus).toHaveAttribute("aria-expanded", "true");
     const picker = page.getByRole("group", { name: "Your picture" });
-    await expect(picker.getByRole("radio")).toHaveCount(13); // initials and twelve pictures
+    await expect(picker.getByRole("radio")).toHaveCount(23); // initials, ten faces and twelve shapes
     await expect(picker.getByRole("radio", { name: "Initials" })).toBeChecked();
     if (!isMobile) await expect(picker.getByRole("radio", { name: "Initials" })).toBeFocused();
     // Tap the visible picture, as a person would.

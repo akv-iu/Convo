@@ -34,6 +34,8 @@ export interface SearchService {
    * Omit evidence to preserve it, or pass a list to replace it.
    * Atomically ignore older revisions (and unversioned writes after versioned ones).
    * Equal revisions may retry. Unversioned writes are for fixtures before a real save.
+   * Evidence must be this person's and never "<personId>:profile" (the generated profile document);
+   * a versioned write also names each ID "<personId>:<kind>:<source ID>". Anything else throws before writing.
    */
   ingestPerson(person: Person, evidence?: EvidenceDoc[], revision?: number): Promise<void>;
   /** Hybrid search over evidence, collapsed to one result per person, with highlights. */

@@ -1,0 +1,69 @@
+{
+  "type": "search",
+  "query": { "original": "\"Ada Example\" Example University" },
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Ada Example on <strong>LinkedIn</strong>",
+        "url": "https://www.linkedin.com/in/ada-example",
+        "description": "Login-walled profile.",
+        "meta_url": { "hostname": "www.linkedin.com" }
+      },
+      {
+        "title": "Ada Example &amp; the <strong>Systems</strong> Lab",
+        "url": "https://blog.ada.example/about/",
+        "description": "Personal site of <strong>Ada Example</strong>, who writes about reliable systems.\u0007",
+        "meta_url": { "hostname": "blog.ada.example" }
+      },
+      {
+        "title": "Ada Example – Staff profile",
+        "url": "https://people.uni.example/staff/ada-example#publications",
+        "description": "Professor of Computer Science at Example University.",
+        "meta_url": { "hostname": "people.uni.example" }
+      },
+      {
+        "title": "Duplicate of the staff page",
+        "url": "https://people.uni.example/staff/ada-example/",
+        "description": "Same page with a trailing slash.",
+        "meta_url": { "hostname": "people.uni.example" }
+      },
+      {
+        "title": "Insecure mirror",
+        "url": "http://mirror.example/ada",
+        "description": "Plain HTTP is not offered.",
+        "meta_url": { "hostname": "mirror.example" }
+      },
+      {
+        "title": "Internal host",
+        "url": "https://127.0.0.1/ada",
+        "description": "An IP literal is not offered.",
+        "meta_url": { "hostname": "127.0.0.1" }
+      },
+      {
+        "title": "Ada Example CV (PDF)",
+        "url": "https://files.uni.example/ada-cv.pdf",
+        "description": "A file download, not a page.",
+        "meta_url": { "hostname": "files.uni.example" }
+      },
+      {
+        "title": "Ada Example speaks at Conf",
+        "url": "https://conf.example/speakers/ada",
+        "description": "Speaker biography.",
+        "meta_url": { "hostname": "conf.example" }
+      },
+      {
+        "title": "Ada Example - Research group",
+        "url": "https://group.example/members/ada",
+        "description": "Group member page.",
+        "meta_url": { "hostname": "group.example" }
+      },
+      {
+        "title": "A fifth eligible page",
+        "url": "https://news.example/ada",
+        "description": "Beyond the four-candidate limit.",
+        "meta_url": { "hostname": "news.example" }
+      }
+    ]
+  }
+}

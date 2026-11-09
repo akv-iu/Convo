@@ -1,15 +1,17 @@
 /**
  * The built-in badge pictures (Person.avatar): twelve simple, original shapes drawn for Lanyard
- * on a 24 × 24 grid, in the badge's ink colour on its badge colour. No copied or licensed art,
- * and no GitHub photos (demo handles may belong to real people).
+ * on a 24 × 24 grid, in the badge's ink colour on its badge colour, and the ten illustrated
+ * faces from the homepage animation (hero-faces.tsx), on the wearer's badge colour. No copied or
+ * licensed art, and no GitHub photos (demo handles may belong to real people).
  */
 import type { CSSProperties, ReactNode } from "react";
 import type { AvatarId } from "@/contracts/types";
+import { HeroFace, heroPeople, type HeroPerson } from "./hero-faces";
 
 const fill = { fill: "currentColor" } as const;
 const line = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
-export const avatars: readonly { id: AvatarId; name: string; art: ReactNode }[] = [
+export const shapes: readonly { id: AvatarId; name: string; art: ReactNode }[] = [
   { id: "star", name: "Star", art: <path {...fill} d="M12 2.5l2.9 6.1 6.6.7-4.9 4.5 1.4 6.5L12 17l-6 3.3 1.4-6.5-4.9-4.5 6.6-.7z" /> },
   { id: "moon", name: "Moon", art: <path {...fill} d="M14.5 3A9 9 0 1 0 21 17.5 7.5 7.5 0 0 1 14.5 3z" /> },
   {
@@ -63,6 +65,16 @@ export const avatars: readonly { id: AvatarId; name: string; art: ReactNode }[] 
   { id: "spark", name: "Spark", art: <path {...fill} d="M12 1.5c.7 6 2.6 8.4 9.5 10.5-6.9 2.1-8.8 4.5-9.5 10.5-.7-6-2.6-8.4-9.5-10.5C9.4 9.9 11.3 7.5 12 1.5z" /> },
 ];
 
+/** The illustrated faces, by first name (the picker's label), e.g. "Amara (nurse)". */
+export const faces: readonly { id: AvatarId; name: string; person: HeroPerson }[] = heroPeople.map((person) => ({
+  id: person.avatar,
+  name: `${person.name.split(" ")[0]} (${person.role.toLowerCase()})`,
+  person,
+}));
+
+/** Every built-in picture, faces first, as the step 2 picker lists them. */
+export const avatars: readonly { id: AvatarId; name: string }[] = [...faces, ...shapes];
+
 /** Up to two initials from a name ("Ada Lovelace" → "AL"), for someone without a picture. */
 export function initials(name: string): string {
   const letters = name
@@ -92,7 +104,8 @@ export function Avatar({
   /** A CSS colour for the background; defaults to var(--badge) from the surrounding element. */
   colour?: string;
 }) {
-  const art = avatar ? avatars.find((a) => a.id === avatar)?.art : undefined;
+  const art = avatar ? shapes.find((a) => a.id === avatar)?.art : undefined;
+  const face = avatar ? faces.find((a) => a.id === avatar)?.person : undefined;
   const style = colour ? ({ "--badge": colour } as CSSProperties) : undefined;
   return (
     <span
@@ -101,7 +114,9 @@ export function Avatar({
       style={style}
       className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--badge)] text-[var(--badge-ink)] [container-type:inline-size] ${className}`}
     >
-      {art ? (
+      {face ? (
+        <HeroFace person={face} background="var(--badge)" className="size-full" />
+      ) : art ? (
         <svg viewBox="0 0 24 24" className="size-[62%]" focusable="false">
           {art}
         </svg>

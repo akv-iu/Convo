@@ -42,8 +42,7 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await sender.goto("/ask");
     await sender.getByRole("textbox", { name: "What do you want to ask?" }).fill("how does the Kubernetes scheduler do preemption");
     await sender.getByRole("button", { name: "Send", exact: true }).click();
-    const question = (await sender.locator("blockquote").textContent())!.trim();
-    await sender.getByRole("link", { name: "Find people" }).click();
+    const question = "how does the Kubernetes scheduler do preemption"; // saved as written; Send opens the matches
     const firstRow = sender.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
     await firstRow.click({ timeout: AFTER_SUBMIT });
     const sending = sender.waitForResponse((r) => r.url().endsWith("/api/requests") && r.request().method() === "POST");

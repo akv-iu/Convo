@@ -10,7 +10,7 @@
  */
 import { Client, errors, type estypes } from "@elastic/elasticsearch";
 import { Person, type EvidenceDoc, type MatchEvidence, type TimeBlock } from "@/contracts/types";
-import { addEvidence } from "./evidence";
+import { addEvidence, checkEvidence, expertiseOf, profileDocId } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
 export const INDEX = { people: "people", evidence: "evidence", asks: "asks" } as const;
@@ -44,9 +44,10 @@ function parsePerson(value: unknown): Person | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Bio, organisations and languages; empty when the person has none of them. */
+/** Bio, organisations, languages and approved expertise; empty when the person has none of them. */
 function profileText(person: Person): string {
-  return [person.bio.trim(), person.organisations.join(", "), person.languages.join(", ")].filter(Boolean).join(" · ");
+  return [person.bio.trim(), person.organisations.join(", "), person.languages.join(", "), expertiseOf(person).join(", ")]
+    .filter(Boolean).join(" · ");
 }
 
 /** What asks are matched against: the profile plus every piece of evidence. */
@@ -67,7 +68,7 @@ function evidenceSource(person: Person, doc: IndexedDoc, revision: number) {
 
 async function storedEvidence(es: Client, personId: string): Promise<EvidenceDoc[]> {
   const result = await es.search<EvidenceSource>({
-    // ponytail: profiles carry at most 20 repos plus a few talks; page this if a person ever passes 100.
+    // ponytail: profiles carry at most 20 repos and 36 approved enrichment items; page this if one ever passes 100.
     index: INDEX.evidence, size: 100, _source: ["kind", "title", "text", "url"], allow_partial_search_results: false,
     query: { bool: { filter: [{ term: { person_id: personId } }], must_not: [{ term: { kind: "profile" } }] } },
   });
@@ -242,11 +243,12 @@ export const elasticSearch: SearchService = {
   },
 
   async ingestPerson(person, evidence, revision) {
+    if (evidence) checkEvidence(person.id, evidence, revision !== undefined);
     const es = client();
     const version = revision ?? 0;
     const docs = evidence ?? await storedEvidence(es, person.id);
     // A profile that is only a name is no evidence of anything, so it gets no document.
-    const profileId = `${person.id}:profile`;
+    const profileId = profileDocId(person.id);
     const profile = profileText(person);
     const indexed: IndexedDoc[] = [
       ...docs.map(({ id, kind, title, text, url }) => ({ id, kind, title, text, url })),

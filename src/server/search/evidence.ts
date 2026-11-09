@@ -1,9 +1,9 @@
 /**
- * The evidence list behind a match (shown on the open profile): each person's distinct
- * evidence in search order, at most five, with only https links kept. Shared by the
- * Elasticsearch and in-memory search so both build it the same way.
+ * What the Elasticsearch and in-memory search share, so both behave the same: the evidence
+ * list behind a match (each person's distinct evidence in search order, at most five, with
+ * only https links kept), the checks on evidence they're given, and approved expertise.
  */
-import { EvidenceKind, type MatchEvidence } from "@/contracts/types";
+import { EvidenceKind, type EvidenceDoc, type MatchEvidence, type Person } from "@/contracts/types";
 
 export const MAX_EVIDENCE = 5;
 
@@ -32,4 +32,29 @@ export function addEvidence(list: MatchEvidence[], doc: { kind: string; title: s
   const url = httpsLink(doc.url);
   if (list.some((e) => e.kind === kind.data && e.title === doc.title && e.url === url)) return;
   list.push(url ? { kind: kind.data, title: doc.title, url } : { kind: kind.data, title: doc.title });
+}
+
+/** The ID of the document search generates from a person's profile. No evidence may take it. */
+export const profileDocId = (personId: string) => `${personId}:profile`;
+
+/**
+ * Refuse evidence that could overwrite another document: each item must be this person's and must
+ * not take the generated profile's ID. A real save (one with a revision) also names every ID
+ * "<personId>:<kind>:<source ID>", so two people's copies of one paper stay apart; fixtures and
+ * synthetic people predate that.
+ */
+export function checkEvidence(personId: string, docs: readonly EvidenceDoc[], realSave: boolean): void {
+  for (const doc of docs) {
+    const namespace = `${personId}:${doc.kind}:`;
+    if (doc.personId !== personId) throw new Error(`Evidence ${doc.id} belongs to ${doc.personId}, not ${personId}.`);
+    if (doc.id === profileDocId(personId)) throw new Error(`Evidence ${doc.id} takes the generated profile's ID.`);
+    if (realSave && (!doc.id.startsWith(namespace) || doc.id.length === namespace.length)) {
+      throw new Error(`Evidence ${doc.id} needs an ID of the form ${namespace}<source ID>.`);
+    }
+  }
+}
+
+/** Approved expertise labels. Typed loosely until the enrichment contract adds Person.expertise to main. */
+export function expertiseOf(person: Person): readonly string[] {
+  return (person as Person & { expertise?: readonly string[] }).expertise ?? [];
 }

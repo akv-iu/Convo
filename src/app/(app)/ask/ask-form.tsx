@@ -2,20 +2,27 @@
 
 /**
  * A1 step 5: the ask box. Send saves the question exactly as written
- * (POST /api/asks), with the kind of question the asker picked (Learn
- * something unless they change it) and a 5-minute chat. "Sharpen with AI"
+ * (POST /api/asks); the server gives it its default kind and a 5-minute
+ * chat (there's no picker: askers needn't classify their own question). "Sharpen with AI"
  * is optional: it asks for a suggestion (POST /api/refine/preview, which
  * saves and registers nothing) and puts it in the box, where it can be
  * edited, or swapped back for the asker's own words, before sending. Only
- * what's sent is saved. Ctrl/Cmd+Enter sends what's in the box.
+ * what's sent is saved. Ctrl/Cmd+Enter sends what's in the box. Sending
+ * goes straight to the matches; the asker chose their wording in the box.
+ *
+ * /ask?ask=<id> (the matches' "Back to your question") reads a saved
+ * question back as the "Current request", with Find people and Ask
+ * something else.
  *
  * There's no route to edit a saved ask, so changing one means asking again
  * (a new ask). A blocked ask (422) shows the server's message and nothing is
  * saved. Only one request is in flight at a time.
  */
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useTransition, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { AskType, type Ask, type RefinedAsk } from "@/contracts/types";
+import type { Ask, RefinedAsk } from "@/contracts/types";
+import { loadAsk } from "../matches/matches";
 import {
   ASK_MAX,
   askProblem,
@@ -23,23 +30,44 @@ import {
   rememberAsk,
   sendFailure,
   sharpenFailure,
-  typeLabel,
   type RefineFailure,
+  recallAsk,
 } from "./asks";
 
 const headingClass =
   "text-[2.4rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-6xl";
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
-type Result = { askId: string; rawText: string; refined: RefinedAsk };
+type Result = { askId: string; rawText: string; refined: RefinedAsk; resolved?: boolean };
+
+/** A saved ask as the result screen shows it; an unrefined one shows its raw text. */
+function asResult(ask: Ask): Result {
+  return {
+    askId: ask.id,
+    rawText: ask.rawText,
+    refined: ask.refined ?? { text: ask.rawText, type: "knowledge", minutes: 5 },
+    resolved: ask.status === "resolved",
+  };
+}
 
 export function AskForm() {
+  const router = useRouter();
+  /** /ask?ask=<id>: show that saved question (from matches' Back link, a reload or a shared link). */
+  const askParam = useSearchParams().get("ask");
+  const [readBack, setReadBack] = useState<"loading" | "missing" | "failed" | null>(askParam ? "loading" : null);
+  const [readAttempt, setReadAttempt] = useState(0);
+  /** The current read-back load; anything else bumping it makes an older reply stale. */
+  const readGen = useRef(0);
   const [text, setText] = useState("");
   /** The asker's own words while the box holds an AI suggestion; null when it holds their own. */
   const [original, setOriginal] = useState<string | null>(null);
-  const [type, setType] = useState<AskType>("knowledge");
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState<"send" | "sharpen" | null>(null);
+  /**
+   * True while Send's move to the matches is in progress: the buttons stay unavailable (no second
+   * send), and it ends by itself, so a screen kept by browser Back comes back unlocked.
+   */
+  const [leaving, startLeaving] = useTransition();
   const busyRef = useRef(false);
   const [failure, setFailure] = useState<RefineFailure | null>(null);
   const [announce, setAnnounce] = useState("");
@@ -48,6 +76,36 @@ export function AskForm() {
   const resultRef = useRef<HTMLHeadingElement>(null);
 
   const problem = tried ? askProblem(text) : null;
+
+  // Read the saved question back: this tab's copy at once, then the server's (the truth).
+  // Each load has a generation: Ask something else bumps it at once, so a reply still on its way
+  // (the address only changes when the navigation commits) can't bring the old question back.
+  useEffect(() => {
+    if (!askParam) return; // nothing to read back
+    const gen = ++readGen.current;
+    let live = true; // false once this effect is replaced or the screen goes away
+    const current = () => live && readGen.current === gen;
+    void (async () => {
+      if (!current()) return;
+      const kept = recallAsk(askParam);
+      if (kept) setResult(kept);
+      else setReadBack("loading");
+      const ask = await loadAsk(askParam);
+      if (!current()) return;
+      if (typeof ask === "number") {
+        // Someone else's ask, or one that's gone, is a 404 (401 when signed out): start fresh.
+        const missing = ask === 404 || ask === 401;
+        setReadBack(missing ? "missing" : "failed");
+        if (missing) setResult(null);
+        return;
+      }
+      setReadBack(null);
+      setResult(asResult(ask));
+    })();
+    return () => {
+      live = false;
+    };
+  }, [askParam, readAttempt]);
 
   // Move focus to the result's heading once it's on screen, so screen readers announce it.
   useEffect(() => {
@@ -58,7 +116,7 @@ export function AskForm() {
   function start(kind: "send" | "sharpen"): boolean {
     setTried(true);
     setFailure(null);
-    if (busyRef.current) return false;
+    if (busyRef.current || leaving) return false;
     if (askProblem(text)) {
       boxRef.current?.focus();
       return false;
@@ -80,7 +138,7 @@ export function AskForm() {
       const res = await fetch("/api/asks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: question, type }),
+        body: JSON.stringify({ text: question }), // no kind: the server defaults it
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
@@ -90,9 +148,10 @@ export function AskForm() {
       }
       const saved = body as { askId: string; ask: Ask };
       // Saved as written, so its refined text is exactly what was sent.
-      const done = { askId: saved.askId, rawText: original ?? question, refined: saved.ask.refined ?? { text: question, type, minutes: 5 } };
-      rememberAsk(done);
-      setResult(done);
+      const done = { askId: saved.askId, rawText: original ?? question, refined: saved.ask.refined ?? { text: question, type: "knowledge", minutes: 5 } };
+      rememberAsk(done); // the matches screen shows the question from this at once
+      // Straight to the people who can help. `leaving` holds the buttons until the move finishes.
+      startLeaving(() => router.push(`/matches?ask=${encodeURIComponent(done.askId)}`));
     } catch {
       setFailure(sendFailure(0, null));
     } finally {
@@ -117,7 +176,6 @@ export function AskForm() {
       const suggestion = (body as { refined: RefinedAsk }).refined;
       setOriginal((kept) => kept ?? text); // sharpening a suggestion again still reverts to the asker's words
       setText(suggestion.text);
-      setType(suggestion.type);
       setAnnounce("Sharpened. Edit the suggestion, use your original, or send it.");
       boxRef.current?.focus();
     } catch {
@@ -149,12 +207,16 @@ export function AskForm() {
     }
   }
 
-  /** Back to the box with the sent text kept, as the asker's own words to start a new question from. */
+  /** Back to an empty box for a new question; the one shown stays saved. */
   function askAgain() {
+    readGen.current++; // drop a read-back reply still on its way, before the address changes
+    setText("");
     setResult(null);
     setTried(false);
     setOriginal(null);
     setAnnounce("");
+    setReadBack(null);
+    if (askParam) router.replace("/ask", { scroll: false });
     setTimeout(() => boxRef.current?.focus(), 0);
   }
 
@@ -171,10 +233,6 @@ export function AskForm() {
             {result.refined.text}
           </blockquote>
           <figcaption className="mt-5 flex flex-wrap gap-2">
-            <span className="rounded-full bg-accent/15 px-3 py-1 text-sm font-semibold">
-              <span className="sr-only">Type: </span>
-              {typeLabel[result.refined.type]}
-            </span>
             <span className="rounded-full bg-[var(--skeleton)] px-3 py-1 text-sm font-semibold">
               <span className="sr-only">Length: </span>
               {lengthLabel(result.refined.minutes)}
@@ -187,10 +245,18 @@ export function AskForm() {
           </p>
         )}
 
+        {result.resolved && (
+          <p className="mt-4 rounded-xl border-2 border-border px-4 py-3 font-medium">
+            You marked this question as answered, so Lanyard no longer matches it with anyone new.
+          </p>
+        )}
+
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button href={`/matches?ask=${encodeURIComponent(result.askId)}`} className="text-lg sm:px-8">
-            Find people
-          </Button>
+          {!result.resolved && (
+            <Button href={`/matches?ask=${encodeURIComponent(result.askId)}`} className="text-lg sm:px-8">
+              Find people
+            </Button>
+          )}
           <Button variant="alternate" onClick={askAgain} className="text-lg">
             Ask something else
           </Button>
@@ -200,9 +266,34 @@ export function AskForm() {
     );
   }
 
+  if (readBack === "loading") {
+    return (
+      <p role="status" className="mx-auto max-w-2xl text-lg">
+        Loading your question…
+      </p>
+    );
+  }
+
   const sharpened = original !== null;
   return (
-    <form onSubmit={onSubmit} noValidate className="mx-auto flex max-w-2xl flex-col" aria-busy={busy !== null}>
+    <form onSubmit={onSubmit} noValidate className="mx-auto flex max-w-2xl flex-col" aria-busy={busy !== null || leaving}>
+      {readBack === "missing" && (
+        <p role="alert" className={`mb-4 ${errorClass}`}>
+          That question isn&apos;t one of yours, or it no longer exists. Ask a new one below.
+        </p>
+      )}
+      {readBack === "failed" && (
+        <p role="alert" className={`mb-4 ${errorClass}`}>
+          Your question didn&apos;t load.{" "}
+          <button
+            type="button"
+            onClick={() => setReadAttempt((n) => n + 1)}
+            className="underline underline-offset-4"
+          >
+            Try again
+          </button>
+        </p>
+      )}
       {/* One prompt: the heading is the box's label. */}
       <h1 className={headingClass}>
         <label htmlFor="ask-text">What do you want to ask?</label>
@@ -238,32 +329,14 @@ export function AskForm() {
           </button>
         </p>
       )}
-      <p id="ask-hint" className="mt-2 flex justify-between gap-3 text-sm text-muted">
-        <span>Press Ctrl+Enter to send it as it is.</span>
-        <span>
-          {text.trim().length} of {ASK_MAX}
-        </span>
+      <p id="ask-hint" className="mt-2 text-right text-sm text-muted">
+        {text.trim().length} of {ASK_MAX}
       </p>
       {problem && (
         <p id="ask-problem" className={`mt-1 ${errorClass}`}>
           {problem}
         </p>
       )}
-
-      <fieldset className="mt-6 border-0 p-0">
-        <legend className="mb-2 text-base font-semibold">What kind of question is it?</legend>
-        <div className="flex flex-wrap gap-2">
-          {AskType.options.map((t) => (
-            <label
-              key={t}
-              className="flex min-h-11 cursor-pointer items-center rounded-full border-2 border-border bg-surface px-4 font-semibold transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent has-[:checked]:text-on-accent has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent motion-reduce:transition-none"
-            >
-              <input type="radio" name="type" value={t} checked={type === t} onChange={() => setType(t)} className="sr-only" />
-              {typeLabel[t]}
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       <p role="status" aria-live="polite" className="sr-only">
         {announce}
@@ -286,15 +359,15 @@ export function AskForm() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             type="submit"
-            aria-disabled={busy !== null}
+            aria-disabled={busy !== null || leaving}
             className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-60 sm:px-8"
           >
-            {busy === "send" ? "Sending…" : "Send"}
+            {busy === "send" || leaving ? "Sending…" : "Send"}
           </Button>
           <Button
             variant="secondary"
             onClick={() => void sharpen()}
-            aria-disabled={busy !== null}
+            aria-disabled={busy !== null || leaving}
             className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
           >
             {busy === "sharpen" ? "Sharpening…" : sharpened ? "Sharpen again" : "Sharpen with AI"}
