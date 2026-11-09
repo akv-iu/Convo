@@ -30,9 +30,12 @@ export const cannedAi: AiService = {
   },
 
   async explain(ask, candidates) {
-    // No fit: only the model judges it, so the fake API and fallbacks never drop anyone.
+    // No fit, so the fake API and fallbacks never drop anyone; except "[demo:nearest]" in the ask, which rates
+    // everyone a partial fit so screens can show "no close match" (the real model judges each person).
+    const nearest = ask.text.includes("[demo:nearest]");
     return candidates.map((c) => ({
       why: c.highlights.length ? `Evidence: ${c.highlights[0]}.` : `Profile mentions what you're asking about.`,
+      ...(nearest ? { fit: "partial" as const } : {}),
     }));
   },
 };

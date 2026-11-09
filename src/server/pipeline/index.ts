@@ -58,8 +58,12 @@ const HIRING_PREFERENCE = 0.75;
 /** A career ask wants people who are hiring; a hiring ask wants people who aren't; others don't mind. */
 const WANTS_HIRING: Partial<Record<AskType, boolean>> = { career: true, hiring: false };
 
-/** Hiring, and willing to show it: a hidden flag never changes anyone's rank. */
-const openlyHiring = (person: Person) => person.filters.hiring && person.visibility?.hiring !== false;
+/**
+ * Whether this person gets the hiring preference. Only a shown flag counts, either way: a hidden flag
+ * must never change rank, not even by reading as "not hiring" for a hiring ask.
+ */
+const hiringPreferred = (person: Person, wantsHiring: boolean | undefined) =>
+  wantsHiring !== undefined && person.visibility?.hiring !== false && person.filters.hiring === wantsHiring;
 
 /** Evidence without Elasticsearch's <em> marks, for the model (and its cache keys). */
 const plain = (highlight: string) => highlight.replace(/<\/?em>/g, "");
@@ -81,7 +85,7 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const wantsHiring = WANTS_HIRING[refined.type];
   const ranked = candidates
     .map((c) => ({ ...c, score: c.score + (mutual.has(c.person.id) ? 1 : 0)
-      + (wantsHiring !== undefined && openlyHiring(c.person) === wantsHiring ? HIRING_PREFERENCE : 0) }))
+      + (hiringPreferred(c.person, wantsHiring) ? HIRING_PREFERENCE : 0) }))
     .sort((a, b) => b.score - a.score);
   // Rank first, then hide, so ranks don't shift as people are passed on or sent a request.
   // Hidden results are never shown, so they are never explained (or paid for).

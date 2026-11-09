@@ -181,9 +181,14 @@ describe("hiring preference", () => {
     expect(await match("knowledge")).toEqual([onlyWanted.id, alsoLooking.id]);
   });
 
-  it("never lets a hidden hiring flag change the order", async () => {
-    const list = ranked();
-    list[1].person.visibility = { country: true, workplace: true, hiring: false };
-    expect(await match("career", list)).toEqual([onlyWanted.id, alsoLooking.id]);
+  it("never lets a hidden hiring flag change the order, for a career or a hiring ask", async () => {
+    const hiddenHiring = ranked();
+    hiddenHiring[1].person.visibility = { country: true, workplace: true, hiring: false };
+    expect(await match("career", hiddenHiring)).toEqual([onlyWanted.id, alsoLooking.id]);
+
+    // A hidden "not hiring" must not read as "not hiring" either: no boost for a hiring ask.
+    const hiddenNotHiring = ranked().reverse().map((c, i) => ({ ...c, score: 3 - i * 0.5 }));
+    hiddenNotHiring[1].person.visibility = { country: true, workplace: true, hiring: false };
+    expect(await match("hiring", hiddenNotHiring)).toEqual([alsoLooking.id, onlyWanted.id]);
   });
 });
