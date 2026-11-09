@@ -54,15 +54,43 @@
     {
       "idx": 7,
       "version": "7",
-      "when": 1794113159246,
-      "tag": "0007_avatar_colour",
+      "when": 1794107165922,
+      "tag": "0007_provider-identities",
       "breakpoints": true
     },
     {
       "idx": 8,
       "version": "7",
-      "when": 1794129928021,
-      "tag": "0008_request_message",
+      "when": 1794107288534,
+      "tag": "0008_auth-link-attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794107396644,
+      "tag": "0009_enrichment_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794110231095,
+      "tag": "0010_approved_profile_evidence",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794193765334,
+      "tag": "0011_avatar_colour",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794194077879,
+      "tag": "0012_request_message",
       "breakpoints": true
     }
   ]

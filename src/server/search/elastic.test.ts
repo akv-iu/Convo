@@ -139,6 +139,40 @@ describe("ingestPerson", () => {
     expect(es.deleteByQuery).not.toHaveBeenCalled();
   });
 
+  it("indexes approved expertise with the profile, even when it is the only profile text", async () => {
+    const researcher = { ...person, bio: " ", organisations: [], languages: [], expertise: ["Qubit calibration", "Cryogenic control"] };
+    await elasticSearch.ingestPerson(researcher, [repo], 3);
+    expect(call(es.index).document.profile).toContain("Qubit calibration, Cryogenic control"); // what asks are matched against
+    expect(call(es.index).document.evidence_ids).toEqual(["p_test:repo:sched", "p_test:profile"]);
+    expect(call(es.bulk).operations[3]).toMatchObject({ kind: "profile", text: "Qubit calibration, Cryogenic control" });
+  });
+
+  it("indexes paper, profile page and CV evidence under their own kinds, with links only where they have one", async () => {
+    // The enrichment contract adds the profile_page and cv kinds; until it's on main the type doesn't list them.
+    const doc = (kind: string, external: string, url?: string): EvidenceDoc =>
+      ({ id: `p_test:${kind}:${external}`, personId: "p_test", kind: kind as EvidenceDoc["kind"], title: kind, text: `${kind} excerpt`, ...(url ? { url } : {}) });
+    const docs = [doc("paper", "W1", "https://openalex.org/W1"), doc("profile_page", "text"), doc("cv", "upload-1")];
+    await elasticSearch.ingestPerson(person, docs, 4);
+    const sources = call(es.bulk).operations.filter((_: unknown, i: number) => i % 2 === 1);
+    expect(sources.map((s: { kind: string; url?: string }) => [s.kind, s.url])).toEqual([
+      ["paper", "https://openalex.org/W1"], ["profile_page", undefined], ["cv", undefined], ["profile", undefined],
+    ]);
+    expect(call(es.deleteByQuery).query.bool.must_not).toEqual([{ ids: { values: [...docs.map((d) => d.id), "p_test:profile"] } }]);
+  });
+
+  it("refuses evidence that would overwrite someone else's or the profile document, before writing anything", async () => {
+    const refused: [EvidenceDoc, number | undefined][] = [
+      [{ ...repo, personId: "someone-else" }, 2],
+      [{ ...repo, id: "p_test:profile" }, undefined],
+      [{ ...repo, id: "sched" }, 2], // a real save names the owner, kind and source ID
+    ];
+    for (const [doc, revision] of refused) {
+      await expect(elasticSearch.ingestPerson(person, [doc], revision)).rejects.toThrow(/^Evidence /);
+    }
+    expect(es.index).not.toHaveBeenCalled();
+    expect(es.bulk).not.toHaveBeenCalled();
+  });
+
   it("fails when evidence indexing fails, but tolerates documents a newer save already wrote", async () => {
     es.bulk.mockResolvedValueOnce({ errors: true, items: [{ index: { status: 409 } }, { index: { status: 201 } }] });
     await expect(elasticSearch.ingestPerson(person, [repo], 5)).resolves.toBeUndefined();

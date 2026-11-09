@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { addChip, LIMITS, removeChip } from "./edits";
+import { addChip, LIMITS, removeChip, type ChipLimits } from "./edits";
 
 /**
  * A list of short values (skills, organisations) as removable chips plus
@@ -22,6 +22,7 @@ export function ChipEditor({
   onTextChange,
   problem,
   onProblemChange,
+  limits = LIMITS,
 }: {
   id: string;
   legend: string;
@@ -35,9 +36,11 @@ export function ChipEditor({
   onTextChange: (text: string) => void;
   problem: string | null;
   onProblemChange: (problem: string | null) => void;
+  /** Defaults to the badge chips' limits. */
+  limits?: ChipLimits;
 }) {
   function add() {
-    const result = addChip(values, text);
+    const result = addChip(values, text, limits);
     onProblemChange(result.problem);
     if (result.list !== values) {
       onChange(result.list);
@@ -87,7 +90,7 @@ export function ChipEditor({
           id={id}
           type="text"
           value={text}
-          maxLength={LIMITS.chip + 10}
+          maxLength={limits.chip + 10}
           placeholder={placeholder}
           aria-label={addLabel}
           aria-invalid={problem ? true : undefined}

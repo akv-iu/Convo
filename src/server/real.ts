@@ -10,8 +10,29 @@ import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
+import { beginGitHubConnection } from "@/server/profile/connection";
+import { enrichmentState, saveEnrichmentIdentity, startEnrichment, getEnrichment, retryEnrichment } from "@/server/profile/enrichment/service";
+import { cancelJob, removeCv, stageCvText } from "@/server/profile/enrichment/state";
+import { acceptEnrichment, enrichmentSources, removeEnrichmentSource } from "@/server/profile/enrichment/approval";
+import { discoverEnrichment } from "@/server/profile/enrichment/discovery";
+import { config } from "@/server/config";
 
 export const real: Api = {
+  enrichmentState: ({ userId }) => enrichmentState(userId),
+  saveEnrichmentIdentity: ({ userId, body }) => saveEnrichmentIdentity(userId, body),
+  connectGitHub: ({ userId }) => beginGitHubConnection(userId),
+  discoverEnrichment: ({ userId, body }) => discoverEnrichment(userId, body, {
+    openAlexApiKey: config.openAlexApiKey, braveSearchApiKey: config.braveSearchApiKey,
+  }),
+  uploadCv: ({ userId, body }) => stageCvText(userId, body),
+  removeCv: ({ userId, params }) => removeCv(userId, params.id),
+  startEnrichment: ({ userId, body }) => startEnrichment(userId, body),
+  getEnrichment: ({ userId, params }) => getEnrichment(userId, params.id),
+  retryEnrichment: ({ userId, params }) => retryEnrichment(userId, params.id),
+  acceptEnrichment: ({ userId, params, body }) => acceptEnrichment(userId, params.id, body),
+  cancelEnrichment: ({ userId, params }) => cancelJob(userId, params.id),
+  enrichmentSources: ({ userId }) => enrichmentSources(userId),
+  removeEnrichmentSource: ({ userId, params }) => removeEnrichmentSource(userId, params.id),
   getMe: ({ userId }) => getProfile(userId),
   putMe: ({ userId, body }) => updateProfile(userId, body),
   searchRor: ({ query }) => searchWorkplaces(query.get("q") ?? ""),

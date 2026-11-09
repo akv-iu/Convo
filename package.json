@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18.0"
   },
   "scripts": {
     "dev": "next dev",
@@ -26,11 +26,13 @@
     "@opentelemetry/api": "^1.9.1",
     "@vercel/otel": "^2.2.1",
     "drizzle-orm": "^0.45.4",
+    "mammoth": "1.13.0",
     "next": "16.4.5",
     "next-auth": "^5.0.0-beta.32",
     "openai": "^7.51.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "unpdf": "1.9.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
