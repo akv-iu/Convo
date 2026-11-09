@@ -59,3 +59,18 @@ it("rejects a ref the batch doesn't have",async()=>{
   mocks.create.mockResolvedValue({status:"completed",output_text:JSON.stringify({...proposal,bioEvidenceIds:["ev2"]})});
   await expect(run()).rejects.toMatchObject({code:"provider_down",status:503});
 });
+it.each([
+  {label:"Mobile robotics"},{label:"Contact tracing systems"},{label:"Address space layout"},{label:"Religion and technology"},
+  {label:"References and citation tooling"},{bio:"Builds 3 robots that drive through warehouses, tested from 2019 to 2024."},
+  {bio:"Mobile-first web development with React and Next.js."},
+])("accepts professional wording the CV line filter would drop: %o",async change=>{
+  const ok={...proposal,...(change.bio?{bio:change.bio}:{}),...(change.label?{expertise:[{label:change.label,evidenceIds:[doc.id]}]}:{})};
+  mocks.create.mockResolvedValue({status:"completed",output_text:JSON.stringify(ok)});
+  expect(await run()).toEqual(ok);
+});
+it.each([
+  "Call +1 930 904 3423 to talk.","Reach me at ada@example.org.","Based at 12 Main Street.","Date of birth 1 Jan 1990.","Passport holder.",
+])("still rejects contact or personal details: %s",async bio=>{
+  mocks.create.mockResolvedValue({status:"completed",output_text:JSON.stringify({...proposal,bio})});
+  await expect(run()).rejects.toMatchObject({code:"provider_down",status:503});
+});

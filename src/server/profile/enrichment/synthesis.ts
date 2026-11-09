@@ -5,7 +5,7 @@ import { EnrichmentDraft, type EnrichmentIdentity } from "@/contracts/enrichment
 import type { ApprovedEvidence } from "../evidence";
 import { enrichmentError, profileCachePrefix } from "./model";
 import { ensureLease, fingerprint } from "./state";
-import { professionalText, sanitizeEvidence } from "./professional-text";
+import { hasPersonalDetails, sanitizeEvidence } from "./professional-text";
 import { readSynthesisCache, writeSynthesisCache } from "./synthesis-cache";
 
 const MODEL = "gpt-5.4-mini";
@@ -53,7 +53,7 @@ function validate(value: unknown, evidence: ApprovedEvidence[], identity: z.infe
   const mentions = (term: string) => new RegExp(`(^|[^\\p{L}\\p{N}])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "iu").test(text);
   if ((proposal.bio.trim() && !proposal.bioEvidenceIds.length) || proposal.expertise.some(e => !e.evidenceIds.length)
     || references.some(id => !evidence.some(e => e.id === id)) || excluded.some(mentions)
-    || professionalText(text) !== text.trim() || /\b(?:hiring|job[- ]seeking|seeking employment|open to work)\b/i.test(text)
+    || hasPersonalDetails(text) || /\b(?:hiring|job[- ]seeking|seeking employment|open to work)\b/i.test(text)
     || new Set(proposal.expertise.map(e => e.label.toLowerCase())).size !== proposal.expertise.length) return;
   return proposal;
 }
