@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { RequestView } from "@/contracts/types";
+import { ACTIVITY_EVENT } from "./toast";
 
 const TABS = [
   { href: "/ask", label: "Ask", match: ["/ask", "/matches"] },
@@ -46,9 +47,11 @@ export function AppNav() {
     const refresh = () => void readCounts().then((c) => live && setCounts(c));
     refresh();
     const timer = setInterval(refresh, 60_000);
+    window.addEventListener(ACTIVITY_EVENT, refresh);
     return () => {
       live = false;
       clearInterval(timer);
+      window.removeEventListener(ACTIVITY_EVENT, refresh);
     };
   }, [pathname]);
 

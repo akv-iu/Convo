@@ -16,6 +16,8 @@ export function useToast() {
 }
 
 const SHOW_MS = 3500;
+/** Fired on every confirmation, so other parts of the page (the header's counts) can refresh. */
+export const ACTIVITY_EVENT = "lanyard:activity";
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null);
@@ -23,6 +25,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((message: string, tone: Toast["tone"] = "done") => {
     next.current += 1;
     setToast({ id: next.current, message, tone });
+    // Something changed (a request answered, a meeting booked): the header's counts read again.
+    window.dispatchEvent(new Event(ACTIVITY_EVENT));
   }, []);
 
   useEffect(() => {
