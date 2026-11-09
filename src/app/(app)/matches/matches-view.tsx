@@ -4,7 +4,7 @@
  * A2 steps 1 and 2: the people Lanyard found for an ask, as a short list.
  * Each row shows who they are and why they were picked; tapping it opens
  * their full profile with Pass and Send request. After either, the next
- * person opens. A search box narrows the list.
+ * person opens. (Finding people by country or workplace is the Find tab.)
  *
  * Saves follow db/Rejections.md and db/Requests.md: one at a time, never
  * retried automatically, and a failed pass locks that person's actions
@@ -22,7 +22,7 @@
  * the people sent requests from this screen, via their public GitHub.
  */
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackLink } from "@/components/ui/back-link";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -77,18 +77,14 @@ export function MatchesView() {
 }
 
 function AskMatches({ askId }: { askId: string }) {
-  const [query, setQuery] = useState("");
-  const [applied, setApplied] = useState("");
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   /** The person whose full profile is open (one at a time), or null. */
   const [openId, setOpenId] = useState<string | null>(null);
-  /** Notes being written to people found by searching, by person. */
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   /**
    * Set after a pass or send: keep the keyboard's place once the list updates. It runs once per
    * action (not on every change of the open row), and only if focus is still on the person acted on,
-   * or was lost because their buttons went away; if the user moved on (another row, the search box),
+   * or was lost because their buttons went away; if the user moved on (another row),
    * it leaves focus alone.
    */
   const [focusRequest, setFocusRequest] = useState<{ actedId: string; n: number } | null>(null);
@@ -122,7 +118,7 @@ function AskMatches({ askId }: { askId: string }) {
   const [passedIds, setPassedIds] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * Set by a successful pass: an emptied list then means "you've seen everyone",
-   * not "no one matches". A new search starts a new list, so it clears this.
+   * not "no one matches". A new list clears this.
    */
   const [passedAny, setPassedAny] = useState(false);
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
@@ -205,7 +201,7 @@ function AskMatches({ askId }: { askId: string }) {
         const res = await fetch("/api/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(applied ? { askId, query: applied } : { askId }),
+          body: JSON.stringify({ askId }),
         });
         const body = await res.json().catch(() => null);
         if (!live) return;
@@ -221,19 +217,14 @@ function AskMatches({ askId }: { askId: string }) {
     return () => {
       live = false;
     };
-  }, [askId, applied, attempt]);
+  }, [askId, attempt]);
 
   const matches = useMemo(() => (load.state === "ready" ? load.matches : []), [load]);
   const sentIds = useMemo(() => new Set(sent.flatMap((r) => (r.person ? [r.person.id] : [r.toPersonId]))), [sent]);
   /** Nobody left to answer: the list is empty, or everyone still in it has your request or was passed on. */
   const allDone = matches.every((m) => sentIds.has(m.person.id) || passedIds.has(m.person.id));
-  /**
-   * The requests that explain this list: those to people in it, plus, without a search, earlier
-   * ones (the server leaves those people out). A search that finds no one isn't explained by them.
-   */
-  const sentHere = applied
-    ? sent.filter((request) => matches.some((m) => m.person.id === (request.person?.id ?? request.toPersonId)))
-    : sent;
+  /** The requests that explain this list: those to people in it and earlier ones (the server leaves those people out). */
+  const sentHere = sent;
   /** This list was emptied by you (passes, the cutoff, or your requests), not by a lack of people. */
   const reviewed = passedAny || cutoffNote || sentHere.length > 0;
   /** No one to show and none of it your doing: the empty panel goes first, with no switch. */
@@ -254,11 +245,11 @@ function AskMatches({ askId }: { askId: string }) {
       const hint = blocker === true ? " To see them again, turn off “Keep people I pass on hidden”." : "";
       return `You passed on everyone Lanyard found.${hint}`;
     }
-    return applied ? "Try a different search, or show everyone." : "Try asking it another way, or check back as more people join.";
+    return "Try asking it another way, or check back as more people join.";
   }
 
   // Reloading while a pass or send is saving would let that save land on the new list,
-  // so every reload (Refresh, Search, Show everyone, See them again) waits for it.
+  // so every reload (Refresh, See them again) waits for it.
   function refresh() {
     if (busyRef.current) return;
     setActionFailure(null);
@@ -299,7 +290,7 @@ function AskMatches({ askId }: { askId: string }) {
                 body: JSON.stringify({ askId, toPersonId: match.person.id, ...(message?.trim() ? { message: message.trim() } : {}) }),
               });
         const body = await res.json().catch(() => null);
-        // If the list reloaded meanwhile (Search, Refresh or the switch), the result, a failure,
+        // If the list reloaded meanwhile (Refresh or the switch), the result, a failure,
         // and who was sent the ask still count; only the open row stays as it is.
         const stale = deckGen.current !== gen;
         if (!res.ok) {
@@ -391,16 +382,6 @@ function AskMatches({ askId }: { askId: string }) {
     } finally {
       setResolving(false);
     }
-  }
-
-  function onSearch(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (busyRef.current) return;
-    setCutoffNote(false);
-    setPassedAny(false);
-    setLoad({ state: "loading" });
-    setApplied(query.trim());
-    setAttempt((n) => n + 1); // reload even when the query didn't change
   }
 
   const sentNotice = sentStatus === "loading" ? <p role="status">Loading your sent requests…</p> : sentStatus === "failed" ? (
@@ -611,26 +592,6 @@ function AskMatches({ askId }: { askId: string }) {
                       <p className="mt-4 font-semibold">{note}</p>
                     ) : (
                       <>
-                      {/* Found by searching: write to them, not just send the question. */}
-                      {applied && (
-                        <div className="mt-5">
-                          <label htmlFor={`message-${m.person.id}`} className="block text-sm font-semibold">
-                            Message to {m.person.name}
-                          </label>
-                          <textarea
-                            id={`message-${m.person.id}`}
-                            rows={3}
-                            maxLength={500}
-                            value={drafts[m.person.id] ?? ""}
-                            onChange={(e) => {
-                              const text = e.target.value;
-                              setDrafts((cur) => ({ ...cur, [m.person.id]: text }));
-                            }}
-                            placeholder="Say hello and why you'd like to talk. They'll see your question too."
-                            className="mt-1 w-full rounded-xl border-2 border-border bg-background px-3 py-2 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
-                          />
-                        </div>
-                      )}
                       <div className="mt-5 grid grid-cols-2 gap-3">
                         <Button
                           variant="secondary"
@@ -641,11 +602,11 @@ function AskMatches({ askId }: { askId: string }) {
                           {busy === "pass" ? "Passing…" : "Pass"}
                         </Button>
                         <Button
-                          onClick={() => void act("send", m, applied ? drafts[m.person.id] : undefined)}
+                          onClick={() => void act("send", m)}
                           aria-disabled={off}
                           className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                         >
-                          {busy === "send" ? "Sending…" : applied ? "Send message" : "Send request"}
+                          {busy === "send" ? "Sending…" : "Send request"}
                         </Button>
                       </div>
                       </>
@@ -729,52 +690,9 @@ function AskMatches({ askId }: { askId: string }) {
           <span className="sr-only">Your question: </span>&ldquo;{question}&rdquo;
         </p>
       )}
-      {/* No one matched: say so first, before the search. */}
+      {/* No one matched: say so first. */}
       {noMatches && matchesSection}
 
-      <label htmlFor="match-search" className="mt-6 block text-lg font-bold">
-        Find people who can help
-      </label>
-      <form role="search" onSubmit={onSearch} className="mt-2 flex gap-2">
-        <input
-          id="match-search"
-          type="search"
-          value={query}
-          maxLength={200}
-          placeholder="Such as university, organisation or country"
-          onChange={(e) => setQuery(e.target.value)}
-          className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
-        />
-        <Button
-          type="submit"
-          variant="secondary"
-          aria-disabled={busy !== null}
-          className="shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        >
-          Search
-        </Button>
-      </form>
-      {applied && (
-        <p className="mt-2 text-sm text-muted">
-          Showing people for &ldquo;{applied}&rdquo;.{" "}
-          <button
-            type="button"
-            onClick={() => {
-              if (busyRef.current) return;
-              setQuery("");
-              setCutoffNote(false);
-              setPassedAny(false);
-              setLoad({ state: "loading" });
-              setApplied("");
-              setAttempt((n) => n + 1);
-            }}
-            aria-disabled={busy !== null}
-            className="font-semibold text-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-          >
-            Show everyone
-          </button>
-        </p>
-      )}
 
       {blocker !== null && !noMatches && (
       <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">

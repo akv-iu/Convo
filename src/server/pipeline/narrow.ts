@@ -1,9 +1,9 @@
 /**
- * The person finder: the "Find people who can help" box on the matches screen. It is a strict
- * filter on the request matcher's list. A country's name ("Spain", "united kingdom") keeps people
- * who show that country; anything else ("University", "University of Utah", "Grafana Labs", "Rust")
- * keeps people whose shown workplace, organisations or skills contain it as whole words. If no one
- * fits, no one is shown: the finder never falls back to a looser search.
+ * The person finder's rules, used by the Find tab over everyone (./find.ts). It is a strict
+ * filter. A country's name ("Spain", "united kingdom") keeps people who show that country;
+ * anything else ("University", "University of Utah", "Grafana Labs", "Rust") keeps people whose
+ * shown workplace, organisations or skills contain it as whole words. If no one fits, no one is
+ * shown: the finder never falls back to a looser search.
  *
  * Only what a person shows counts: a hidden country or workplace is never matched, so searching
  * for it can't reveal it. GitHub organisations and skills are always on the card, so they always count.

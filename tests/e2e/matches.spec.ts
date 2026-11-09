@@ -293,24 +293,6 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(page.getByText("You've passed on three people, so Lanyard hid everyone ranked below them.")).toBeVisible();
   });
 
-  test("pressing Search again with the same words reloads instead of hanging", async ({ page }) => {
-    let loads = 0;
-    await page.route("**/api/match", (route) => {
-      loads++;
-      return route.fulfill({ json: fakeMatches(2) });
-    });
-    await open(page, "made-up");
-    await expect(card(page)).toBeVisible();
-    await page.getByRole("button", { name: "Search", exact: true }).click(); // empty box, same as now
-    await expect(rows(page)).toHaveCount(2);
-    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(rows(page)).toHaveCount(2);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(rows(page)).toHaveCount(2);
-    await expect.poll(() => loads).toBe(4);
-  });
-
   test("a failed pass is never retried by itself, and Refresh matches reloads", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
     let passes = 0;
@@ -337,58 +319,6 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).first()).toContainText("Person 1");
     await rows(page).first().click();
     await expect(passButton(page)).not.toHaveAttribute("aria-disabled", "true");
-  });
-
-  test("Search waits while a pass is saving, so the save can't land on a new deck", async ({ page }) => {
-    let loads = 0;
-    await page.route("**/api/match", (route) => {
-      loads++;
-      return route.fulfill({ json: fakeMatches(3) });
-    });
-    let release: () => void = () => {};
-    const held = new Promise<void>((r) => (release = r));
-    await page.route("**/api/rejections", async (route) => {
-      await held;
-      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
-    });
-    await open(page, "made-up");
-    await expect(card(page)).toBeVisible();
-    await passButton(page).click();
-    const search = page.getByRole("button", { name: "Search", exact: true });
-    await expect(search).toHaveAttribute("aria-disabled", "true");
-    await search.click({ force: true });
-    release();
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    expect(loads).toBe(1);
-    await expect(search).not.toHaveAttribute("aria-disabled", "true");
-  });
-
-  test("Show everyone looks unavailable and waits while a pass is saving", async ({ page }) => {
-    let loads = 0;
-    await page.route("**/api/match", (route) => {
-      loads++;
-      return route.fulfill({ json: fakeMatches(3) });
-    });
-    let release: () => void = () => {};
-    const held = new Promise<void>((r) => (release = r));
-    await page.route("**/api/rejections", async (route) => {
-      await held;
-      return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
-    });
-    await open(page, "made-up");
-    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(page.getByText(/Showing people for .Go./)).toBeVisible();
-    await rows(page).first().click();
-    await expect(card(page)).toBeVisible();
-    await passButton(page).click();
-    const showAll = page.getByRole("button", { name: "Show everyone" });
-    await expect(showAll).toHaveAttribute("aria-disabled", "true");
-    await showAll.click({ force: true });
-    release();
-    await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await expect(showAll).not.toHaveAttribute("aria-disabled", "true");
-    expect(loads).toBe(2);
   });
 
   test("after Pass or Send, keyboard focus moves to the next person's row", async ({ page, isMobile }) => {
@@ -509,25 +439,6 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0); // the cutoff stays either way
   });
 
-  test("a search that finds no one says so, even after earlier requests", async ({ page }) => {
-    await savedAsk(page, "made-up");
-    const sentView = (n: number) => ({
-      id: `r-earlier-${n}`, askId: "made-up", fromUserId: ME, toPersonId: `x_${n}`, question: "q", minutes: 5,
-      status: "sent", reply: null, slot: null, createdAt: "2026-11-05T12:00:00Z", type: "knowledge",
-      person: fakeMatches(n + 1)[n].person,
-    });
-    await page.route("**/api/requests/sent", (route) => route.fulfill({ json: [sentView(0), sentView(1)] }));
-    await page.route("**/api/match", (route) => route.fulfill({ json: [] })); // everyone was sent the ask; the search finds no one
-    await open(page, "made-up");
-    // No search: the earlier requests explain the empty list.
-    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
-    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches yet");
-    await expect(list(page)).toContainText("Try a different search, or show everyone.");
-    await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
-  });
-
   test("after a save, focus stays where the user moved it", async ({ page, isMobile }) => {
     test.skip(isMobile, "keyboard path is checked on the laptop project");
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
@@ -609,19 +520,6 @@ test.describe("match list (A2 steps 1-2)", () => {
     await sendButton(page).click();
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
     expect(sends).toBe(2);
-  });
-
-  test("the search box narrows the list through the server", async ({ page }) => {
-    const askId = await newAsk(page);
-    await open(page, askId);
-    await expect(card(page)).toBeVisible();
-    const searching = page.waitForRequest((r) => r.url().endsWith("/api/match") && !!r.postDataJSON().query);
-    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Rust");
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    expect((await searching).postDataJSON()).toEqual({ askId, query: "Rust" });
-    await expect(page.getByText(/Showing people for .Rust./)).toBeVisible();
-    await page.getByRole("button", { name: "Show everyone" }).click();
-    await expect(page.getByText(/Showing people for/)).toHaveCount(0);
   });
 
   test("no matches, someone else's ask, and no ask at all each explain what to do", async ({ page }) => {
@@ -733,7 +631,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(blocker).not.toHaveAttribute("aria-disabled", "true");
   });
 
-  test("while a send is saving, Search and the switch wait, so it can't land on a new deck", async ({ page }) => {
+  test("while a send is saving, the switch waits, so it can't land on a new deck", async ({ page }) => {
     let loads = 0;
     await page.route("**/api/match", (route) => {
       loads++;
@@ -753,7 +651,6 @@ test.describe("match list (A2 steps 1-2)", () => {
     await savedAsk(page, "made-up");
     await open(page, "made-up");
     await sendButton(page).click();
-    await page.getByRole("button", { name: "Search", exact: true }).click({ force: true });
     await page.getByRole("switch", { name: "Keep people I pass on hidden" }).click({ force: true });
     release();
     await expect(page.getByRole("status").filter({ hasText: "Request sent" })).toHaveText("Request sent to Person 1.");
