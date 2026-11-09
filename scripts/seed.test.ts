@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvidenceDoc, Person } from "@/contracts/types";
+import { asks as asksTable } from "../db/schema";
 
-const { ingestPerson, syncProfile, users } = vi.hoisted(() => ({ ingestPerson: vi.fn(), syncProfile: vi.fn(), users: [] as unknown[] }));
-vi.mock("@/server/search/elastic", () => ({ elasticSearch: { ingestPerson }, client: vi.fn(), askDocument: vi.fn(), INDEX: {} }));
+const { ingestPerson, syncProfile, users, asks, bulk, refresh } = vi.hoisted(() => ({ ingestPerson: vi.fn(), syncProfile: vi.fn(), users: [] as unknown[], asks: [] as unknown[], bulk: vi.fn(), refresh: vi.fn() }));
+vi.mock("@/server/search/elastic", () => ({ elasticSearch: { ingestPerson }, client: () => ({ bulk, indices: { refresh } }), askDocument: (id: string) => ({ id }), INDEX: { asks: "asks" } }));
 vi.mock("@/server/profile/service", () => ({ syncProfile }));
-vi.mock("../db", () => ({ db: () => ({ select: () => ({ from: () => ({ where: async () => users }) }) }) }));
+vi.mock("../db", () => ({ db: () => ({ select: () => ({ from: (table: unknown) => ({ where: async () => table === asksTable ? asks : users }) }) }) }));
 
 import { elasticSearch } from "@/server/search/elastic";
 import { seedSynthetic, seedUsers } from "./seed";
@@ -13,7 +14,11 @@ beforeEach(() => {
   ingestPerson.mockReset();
   syncProfile.mockReset().mockResolvedValue(undefined);
   users.length = 0;
+  asks.length = 0;
+  bulk.mockReset().mockResolvedValue({ items: [] });
+  refresh.mockReset().mockResolvedValue({});
 });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 describe("seeding the synthetic attendees", () => {
   it("loads every attendee with their own evidence, eight at a time", async () => {
@@ -57,7 +62,7 @@ describe("seeding signed-up users", () => {
     ];
     users.push(...rows);
 
-    await expect(seedUsers()).resolves.toBe(2);
+    await expect(seedUsers()).resolves.toEqual({ indexed: 2, failed: [] });
 
     expect(syncProfile).toHaveBeenCalledTimes(2);
     for (const [i, [user, target]] of syncProfile.mock.calls.entries()) {
@@ -66,10 +71,47 @@ describe("seeding signed-up users", () => {
     }
   });
 
-  it("fails when a user can't be synced", async () => {
-    users.push({ id: "u_1" });
-    syncProfile.mockRejectedValueOnce(Object.assign(new Error("Saved repository evidence is invalid."), { status: 503 }));
-
-    await expect(seedUsers()).rejects.toThrow("Saved repository evidence is invalid.");
+  it("continues beyond the first worker batch and returns only failed IDs, never provider text", async () => {
+    users.push(...Array.from({ length: 20 }, (_, i) => ({ id: `u_${i}` })));
+    syncProfile.mockImplementation(async (user: { id: string }) => {
+      if (user.id === "u_0") throw new Error("private CV text and provider-token");
+      if (user.id === "u_1") throw "another private error";
+    });
+    const result = await seedUsers();
+    expect(result).toEqual({ indexed: 18, failed: ["u_0", "u_1"] });
+    expect(syncProfile).toHaveBeenCalledTimes(20);
+    expect(JSON.stringify(result)).not.toMatch(/private|token/);
   });
+});
+it("finishes open asks and refresh before reporting an incomplete run as failure", async () => {
+  vi.stubEnv("DATABASE_URL", "postgresql://unused@example.invalid/unused");
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  users.push({ id: "u_bad" }, { id: "u_good" });
+  asks.push({ id: "ask", userId: "u_good", refined: { text: "Find a researcher" } });
+  syncProfile.mockImplementation(async (user: { id: string }) => { if (user.id === "u_bad") throw new Error("private provider text"); });
+  const { seed } = await import("./seed");
+  await expect(seed()).rejects.toThrow("User seeding incomplete.");
+  expect(bulk).toHaveBeenCalledOnce(); expect(refresh).toHaveBeenCalledOnce();
+  expect(bulk.mock.invocationCallOrder[0]).toBeLessThan(refresh.mock.invocationCallOrder[0]);
+  expect(console.log).toHaveBeenCalledWith("ingested 1 signed-up users");
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("Signed-up users could not be indexed", { count: 1, ids: ["u_bad"] });
+});
+it("completes successfully when every signed-up user recovers", async () => {
+  vi.stubEnv("DATABASE_URL", "postgresql://unused@example.invalid/unused");
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  users.push({ id: "u_good" });
+  const { seed } = await import("./seed");
+  await expect(seed()).resolves.toBeUndefined();
+  expect(refresh).toHaveBeenCalledOnce(); expect(console.error).not.toHaveBeenCalled();
+  expect(console.log).toHaveBeenCalledWith("ingested 1 signed-up users");
+});
+it("seeds fixtures without attempting database users or asks when no database is configured", async () => {
+  vi.stubEnv("DATABASE_URL", "");
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const { seed } = await import("./seed");
+  await expect(seed()).resolves.toBeUndefined();
+  expect(syncProfile).not.toHaveBeenCalled(); expect(bulk).not.toHaveBeenCalled();
+  expect(refresh).toHaveBeenCalledOnce();
 });

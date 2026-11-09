@@ -1,7 +1,9 @@
 // Feature sign-off, a required status. Most PRs pass at once, and their author merges them alone.
 // A PR waits for an approval from someone other than its author only when
-//   - it changes a feature file (docs/features/<feature>.md) whose checklist is now complete, or
-//   - it has the needs-approval label (Gitar adds it for the cases in .gitar/rules/needs-approval.md).
+//   - it changes a feature file (docs/features/<feature>.md) whose checklist is now complete, unless
+//     every file it changes is a screen file (screenOnly below), or
+//   - it has the needs-approval label (Gitar adds it for the cases in .gitar/rules/needs-approval.md,
+//     including what other users can see about a person, so screen PRs that change that still wait).
 // Every run sets the same commit status on the PR's latest commit, so the newest verdict replaces the
 // older ones and an approval turns it green in place. The verdict isn't the job's own result because
 // GitHub keeps every failed run listed in red next to the newer green one.
@@ -12,6 +14,14 @@ import { pathToFileURL } from "node:url";
 export const LABEL = "needs-approval";
 export const CONTEXT = "Feature sign-off";
 const FEATURE_FILE = /^docs\/features\/(?!TEMPLATE\.md$)[^/]+\.md$/;
+/** Screen files: the pages people see, shared UI, their browser tests, static files and feature files. */
+const SCREEN_FILE = /^(src\/app\/\((onboarding|app)\)\/|src\/app\/page\.tsx$|src\/components\/ui\/|tests\/e2e\/|public\/|docs\/features\/)/;
+
+/** True when every changed file (old and new names) is a screen file, so completing a feature needs no sign-off. */
+export function screenOnly(files) {
+  const screen = (name) => SCREEN_FILE.test(name) && !name.split("/").includes(".."); // no climbing out of a screen folder
+  return files.length > 0 && files.every((f) => screen(f.filename) && (!f.previous_filename || screen(f.previous_filename)));
+}
 
 /** Ticked and open checklist items ("- [x]" and "- [ ]") in a markdown file. */
 export function checklist(markdown) {
@@ -47,7 +57,7 @@ export function approvedByOther(reviews, author) {
 
 /** The status to set, from what needs sign-off and whether someone other than the author approved. */
 export function verdict(reasons, approved) {
-  if (!reasons.length) return { state: "success", description: "No sign-off needed: no feature file was completed and there is no needs-approval label." };
+  if (!reasons.length) return { state: "success", description: "No sign-off needed: no feature file was completed outside screen files, and there is no needs-approval label." };
   const why = reasons.join("; ");
   return approved
     ? { state: "success", description: `Signed off by the other person (${why}).` }
@@ -96,7 +106,9 @@ async function main() {
   await setStatus({ state: "pending", description: "Checking whether this PR needs the other person's approval…" });
 
   const encode = (name) => name.split("/").map(encodeURIComponent).join("/");
-  const features = (await all(`/pulls/${number}/files`)).filter((f) => f.status !== "removed" && FEATURE_FILE.test(f.filename));
+  const files = await all(`/pulls/${number}/files`);
+  // A screen-only PR completes its feature alone; only the needs-approval label can make it wait.
+  const features = screenOnly(files) ? [] : files.filter((f) => f.status !== "removed" && FEATURE_FILE.test(f.filename));
   // Each feature file at the PR's head and on the base branch (by its old name if renamed), fetched at once.
   const completed = await Promise.all(features.map(async (f) => {
     const [head, base] = await Promise.all([text(encode(f.filename), pr.head.sha), text(encode(f.previous_filename ?? f.filename), pr.base.sha)]);

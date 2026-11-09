@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Account, NextAuthConfig, Profile } from "next-auth";
-import NextAuth from "next-auth";
+import type { Account, Profile } from "next-auth";
 import { Auth, skipCSRFCheck } from "@auth/core";
 import type { OAuthConfig } from "@auth/core/providers";
 import type { GitHubProfile } from "next-auth/providers/github";
@@ -14,9 +13,9 @@ vi.mock("next/headers", () => ({ cookies }));
 vi.mock("@/server/config", () => ({ config }));
 vi.mock("./persistence", () => ({ initializeGitHubProfile: initialize }));
 vi.mock("next-auth", () => ({ default: vi.fn(() => ({ handlers: {}, auth, signIn: vi.fn(), signOut: vi.fn() })) }));
-import { getUserId } from "@/server/auth";
+import { authOptions, getUserId } from "@/server/auth";
 
-const options = vi.mocked(NextAuth).mock.calls[0][0] as NextAuthConfig;
+const options = authOptions();
 const callbacks = options.callbacks!;
 const account: Account = { provider: "github", type: "oauth", providerAccountId: "101", access_token: "private-token" };
 // GitHub's raw OAuth profile has a numeric ID despite Auth.js's generic Profile type.
@@ -158,4 +157,14 @@ describe("GitHub sign-in integration", () => {
     expect(await getUserId(req)).toBeNull();
     expect(await getUserId(req)).toBe("github:101");
   });
+});
+
+it("selects a manual fake browser identity from a cookie, with header priority", async () => {
+  config.fakeApi = true;
+  const req = new Request("https://example.test/api/me", { headers: { cookie: "other=1; convo_demo_user=u_google_new_browser; tail=2" } });
+  expect(await getUserId(req)).toBe("u_google_new_browser");
+  expect(await getUserId(new Request(req, { headers: { cookie: "convo_demo_user=u_google_new_browser", "x-demo-user": DEMO_USER_A } }))).toBe(DEMO_USER_A);
+  expect(await getUserId(new Request(req, { headers: { cookie: "convo_demo_user=%broken" } }))).toBe(DEMO_USER_A);
+  config.fakeApi = false; auth.mockResolvedValue(null);
+  expect(await getUserId(req)).toBeNull();
 });

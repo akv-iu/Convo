@@ -91,15 +91,11 @@ test.describe("done when (A1 and A2)", () => {
       await tabTo(page, page.getByRole("textbox", { name: "What do you want to ask?" }));
       await page.keyboard.type(QUESTION);
       await page.keyboard.press("Control+Enter");
-      await expect(page.getByRole("heading", { level: 1 })).toBeFocused({ timeout: AFTER_SUBMIT });
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Current request");
-      await scan(page, `refined (${size.name})`);
 
-      // On to the matches, still by keyboard: Tab to Find people, Enter, Tab to the first person,
-      // Enter to open them, Tab to Send request, Enter.
-      await page.keyboard.press("Tab");
-      await expect(page.getByRole("link", { name: "Find people" })).toBeFocused();
-      await page.keyboard.press("Enter");
+      // Sending opens the matches. Still by keyboard: Tab to the first person, Enter to open them,
+      // Tab to Send request, Enter.
+      await expect(page).toHaveURL(/\/matches\?ask=/, { timeout: AFTER_SUBMIT });
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("People who can help");
       const firstRow = page.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
       await expect(firstRow).toBeVisible({ timeout: AFTER_SUBMIT });
       await tabTo(page, firstRow);
@@ -123,8 +119,7 @@ test.describe("done when (A1 and A2)", () => {
     await a.goto("/ask");
     await a.getByRole("textbox", { name: "What do you want to ask?" }).fill(QUESTION);
     await a.getByRole("button", { name: "Send", exact: true }).click();
-    const question = (await a.locator("blockquote").textContent())!.trim();
-    await a.getByRole("link", { name: "Find people" }).click();
+    const question = QUESTION.trim(); // saved as written; Send opens the matches
     const firstRow = a.getByRole("region", { name: "Matches" }).locator("button[aria-expanded]").first();
     await expect(firstRow).toContainText("Demo Expert", { timeout: AFTER_SUBMIT });
     await firstRow.click();

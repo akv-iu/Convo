@@ -115,10 +115,10 @@ export function toProfileBody(
   };
 }
 
-/** Step 1's answers rebuilt from a saved profile. */
+/** Step 1's answers rebuilt from a saved profile (or profile enrichment's saved identity). */
 export function aboutFromProfile(p: {
   name: string;
-  filters: HardFilters;
+  filters: Pick<HardFilters, "country" | "rorId">;
   workplaceName?: string | null;
 }): AboutYou {
   const label = p.workplaceName ?? null;
