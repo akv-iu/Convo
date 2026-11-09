@@ -92,7 +92,8 @@ async function docxText(bytes: Uint8Array): Promise<{ text: string; truncated: b
 
 async function pdfText(bytes: Uint8Array): Promise<{ text: string; truncated: boolean }> {
   const pdf = await getDocumentProxy(bytes, {
-    verbosity: 0, useSystemFonts: false, disableFontFace: true, enableXfa: false, maxImageSize: 16_777_216,
+    // isEvalSupported: false keeps pdf.js from compiling font programs with new Function on untrusted input.
+    verbosity: 0, useSystemFonts: false, disableFontFace: true, enableXfa: false, isEvalSupported: false, maxImageSize: 16_777_216,
   }).catch((error: unknown) => {
     // A user password is needed; an owner-only password (copy/print restrictions) still opens.
     throw new Failure(error instanceof Error && error.name === "PasswordException" ? "cv_encrypted" : "cv_unreadable");

@@ -122,6 +122,15 @@ it("does not treat corrupt stored evidence on an indexing retry as a normal pend
   mocks.user!.profileEvidence = {} as never;
   await expect(acceptEnrichment(owner, "job", body())).rejects.toMatchObject({ status: 503 });
 });
+it("keeps approved evidence and its source when that source comes back empty, as the fake does", async () => {
+  const research = { id: paper.sourceId, source: "research" as const, label: "OpenAlex author", evidenceCount: 1, approvedAt: now };
+  mocks.user!.profileEvidence = [paper]; mocks.user!.profileSources = [research];
+  mocks.data!.jobs[0].value.sources[1] = { ...mocks.data!.jobs[0].value.sources[1], status: "empty", items: 0 };
+  mocks.data!.jobs[0].collected = [cv]; mocks.data!.jobs[0].value.draft!.evidence = [cv];
+  await acceptEnrichment(owner, "job", { ...body(), evidenceIds: [cv.id] });
+  expect(mocks.user!.profileEvidence).toEqual([paper, cv]);
+  expect(mocks.user!.profileSources).toContainEqual(research);
+});
 it("does not approve evidence from a source whose collection was not successful", async () => {
   mocks.data!.jobs[0].value.sources[1].status = "failed";
   await expect(acceptEnrichment(owner, "job", body())).rejects.toMatchObject({ status: 503 });

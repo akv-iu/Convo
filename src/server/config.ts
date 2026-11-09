@@ -20,8 +20,8 @@ export const config = {
   /** Private discovery credentials; each source can be unavailable independently. */
   openAlexApiKey: process.env.OPENALEX_API_KEY ?? "",
   braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY ?? "",
-  /** Authenticates Vercel's scheduled private-input cleanup (Authorization: Bearer <secret>). Unset: the endpoint refuses every request. */
-  cronSecret: process.env.CRON_SECRET || null,
+  /** Authenticates Vercel's scheduled private-input cleanup (Authorization: Bearer <secret>). Unset or under 16 characters: the endpoint refuses every request. */
+  cronSecret: (process.env.CRON_SECRET?.length ?? 0) >= 16 ? process.env.CRON_SECRET! : null,
   /** Rejections for one ask before lower-ranked results are hidden too. */
   batchRejectAfter: 3,
   /** A suggested slot is never closer than this. */
