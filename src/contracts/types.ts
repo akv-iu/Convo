@@ -70,6 +70,8 @@ export const Person = z.object({
    * the badge colour; synthetic profiles have none. Photo uploads are a later, separate field.
    */
   avatar: AvatarId.nullable().optional(),
+  /** The picture circle's colour; null or absent means the same as the badge colour. Always shown. */
+  avatarColour: BadgeColour.nullable().optional(),
   /** Card display only; hidden values remain available for matching. */
   visibility: ProfileVisibility.optional(),
   /** Shown as a label in the UI. Demo profiles are synthetic; real sign-ups are not. */

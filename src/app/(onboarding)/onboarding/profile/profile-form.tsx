@@ -20,6 +20,7 @@ import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
 import { clearOnboardingTab } from "../../_components/draft";
 import { showSavedColour } from "../../_components/badge-prefs";
 import { aboutFromProfile, saveErrorMessage, SHOW_ALL, workplaceLabel } from "../answers";
+import { colourHex } from "@/components/ui/badge-colours";
 import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
 import { SeenByOthers, useVisibilitySave } from "./seen-by-others";
@@ -231,6 +232,7 @@ export function ProfileForm() {
       name={d.name.trim() || "Your name"}
       handle={person.githubLogin}
       avatar={person.avatar}
+      avatarColour={person.avatarColour ? colourHex(person.avatarColour) : undefined}
       label={<BadgeCountry country={countryName(person.filters.country)} shown={visibility.country} onHide={hide} />}
       onName={() => startEditing(FIELD.name)}
     >

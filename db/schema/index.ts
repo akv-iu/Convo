@@ -29,6 +29,8 @@ export const users = pgTable("users", {
   profileEvidencePending: boolean("profile_evidence_pending").notNull().default(false),
   expertise: jsonb("expertise").$type<string[]>(),
   textVersion: integer("text_version").notNull().default(0),
+  /** The picture circle's colour (Person.avatarColour); null follows the badge colour. Last, so existing row reads keep their order. */
+  avatarColour: text("avatar_colour").$type<BadgeColour>(),
 });
 
 /** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */

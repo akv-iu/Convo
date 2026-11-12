@@ -24,6 +24,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, avatars } from "@/components/ui/avatars";
+import { badgeColours, colourHex } from "@/components/ui/badge-colours";
 import type { AvatarId, Person, ProfileVisibility } from "@/contracts/types";
 import { Badge } from "../_components/badge";
 import { BadgeCountry, BadgeLines } from "../_components/badge-lines";
@@ -99,6 +100,9 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
   const [visibility, setVisibility] = useState<ProfileVisibility>(SHOW_ALL);
   /** The chosen picture (null: initials), saved with Continue like the colour. */
   const [avatar, setAvatar] = useState<AvatarId | null>(null);
+  /** The picture circle's own colour; null follows the badge colour. Saved with Continue. */
+  const [avatarColour, setAvatarColour] = useState<BadgeColour | null>(null);
+  const pictureHex = avatarColour ? colourHex(avatarColour) : undefined;
   const [pickerOpen, setPickerOpen] = useState(false);
   const plusRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLFieldSetElement>(null);
@@ -124,6 +128,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       setColour(profile ? showSavedColour(profile.badgeColour) : readBadgePrefs().colour);
       setVisibility(profile?.visibility ?? SHOW_ALL);
       setAvatar(profile?.avatar ?? null);
+      setAvatarColour(profile?.avatarColour ?? null);
 
       if (owner) {
         const next = fromIdentity(owner, profile, status);
@@ -205,7 +210,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       const res = await fetch("/api/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility, avatar)),
+        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility, avatar, avatarColour)),
       });
       if (!res.ok) {
         setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
@@ -237,6 +242,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       name={about.name}
       handle={handle}
       avatar={avatar}
+      avatarColour={pictureHex}
       avatarControl={
         <button
           ref={plusRef}
@@ -326,6 +332,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                     <Avatar
                       avatar={a.id}
                       name={about.name}
+                      colour={pictureHex}
                       className="size-11 ring-1 ring-black/10 peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
                     />
                     <span className="sr-only">{a.name}</span>
@@ -340,6 +347,46 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
             </fieldset>
           )}
           <ColourPicker defaultColour={colour} centred />
+          {/* The picture circle's own colour; "Same as badge" follows the badge colour above. */}
+          <fieldset className="text-center">
+            <legend className="mx-auto mb-3 text-base font-semibold">Picture colour</legend>
+            <div className="flex flex-col items-center gap-3">
+              {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
+              <label className="cursor-pointer">
+                <input
+                  type="radio"
+                  name="avatarColour"
+                  value=""
+                  checked={avatarColour === null}
+                  onChange={() => setAvatarColour(null)}
+                  className="peer sr-only"
+                />
+                <span className="flex h-10 items-center rounded-full border-2 border-border px-4 text-sm font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
+                  Same as badge
+                </span>
+              </label>
+              <div className="flex flex-wrap justify-center gap-2.5">
+                {badgeColours.map((c) => (
+                  <label key={c.id} title={c.name} className="relative cursor-pointer">
+                    <input
+                      type="radio"
+                      name="avatarColour"
+                      value={c.id}
+                      checked={avatarColour === c.id}
+                      onChange={() => setAvatarColour(c.id)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      aria-hidden="true"
+                      style={{ backgroundColor: c.hex }}
+                      className="block size-10 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none"
+                    />
+                    <span className="sr-only">{c.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </fieldset>
         </div>
         {/*
           Beside the badge, centred on it. From 1024 px the badge hangs from a strap (lg:mt-16), so the

@@ -18,6 +18,7 @@ export function Badge({
   name = "Your name",
   handle = "your-github",
   avatar = null,
+  avatarColour,
   avatarControl,
   onName,
 }: {
@@ -29,6 +30,8 @@ export function Badge({
   handle?: string | null;
   /** The chosen picture; null shows initials. */
   avatar?: AvatarId | null;
+  /** A CSS colour for the picture circle; by default it follows the badge colour (--badge). */
+  avatarColour?: string;
   /** An interactive control on the picture (step 2's "+"), left visible to screen readers. */
   avatarControl?: ReactNode;
   /**
@@ -57,7 +60,7 @@ export function Badge({
         <div className="px-5 pb-5 pt-4">
           <div className="flex items-center gap-3">
             <div className="relative shrink-0">
-              <Avatar avatar={avatar} name={name} className="size-14 text-xl" />
+              <Avatar avatar={avatar} name={name} colour={avatarColour} className="size-14 text-xl" />
               {avatarControl}
             </div>
             <div aria-hidden="true" className="min-w-0 flex-1">
