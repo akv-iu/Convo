@@ -3,9 +3,10 @@
  * shows the slowest one at a glance.
  */
 import { trace } from "@opentelemetry/api";
-import type { Ask, AskType, MatchResult, Person } from "@/contracts/types";
+import type { Ask, AskType, MatchResult, Person, ProfileVisibility } from "@/contracts/types";
 import { ai } from "@/server/ai";
 import { search } from "@/server/search";
+import { narrowTo, readNarrowing } from "./narrow";
 
 const tracer = trace.getTracer("convo");
 
@@ -47,6 +48,11 @@ export interface MatchInput {
   hideIds?: string[];
   /** Search box on the results screen. */
   query?: string;
+  /**
+   * Each person's saved show/hide choices, the ones their card uses. Read only when the box names a
+   * country or place, so a search copy that hasn't caught up can't reveal something just hidden.
+   */
+  savedVisibility?: (people: Person[]) => Promise<Map<string, ProfileVisibility>>;
   /** From the batch-reject rule: only results ranked above this are shown. */
   hiddenBelowRank: number | null;
 }
@@ -72,8 +78,10 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const refined = await step("understand", async () => input.ask.refined ?? ai.refineAsk(input.ask.rawText, input.requester));
 
   const hide = new Set(input.hideIds);
+  // The box can name a country or a place (see ./narrow); a country isn't a topic, so it isn't searched for.
+  const narrowing = readNarrowing(input.query ?? "");
   const candidates = await step("search", () =>
-    search.searchCandidates(input.query ? `${refined.text} ${input.query}` : refined.text, {
+    search.searchCandidates(narrowing.rest ? `${refined.text} ${narrowing.rest}` : refined.text, {
       excludeIds: [input.requester.id, ...input.excludeIds],
       freeTimes: input.requester.freeTimes,
     }, POOL),
@@ -89,9 +97,15 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
     .sort((a, b) => b.score - a.score);
   // Rank first, then hide, so ranks don't shift as people are passed on or sent a request.
   // Hidden results are never shown, so they are never explained (or paid for).
+  // A country or place in the search box narrows who's shown, after ranking, so ranks stay the same.
+  const saved = input.savedVisibility && (narrowing.country !== null || narrowing.rest !== "")
+    ? await input.savedVisibility(ranked.map((c) => c.person))
+    : null;
+  const asSaved = (person: Person): Person => ({ ...person, visibility: saved?.get(person.id) ?? person.visibility });
+  const fits = narrowTo(ranked.map((c) => asSaved(c.person)), narrowing);
   const shown = ranked
     .map((c, rank) => ({ ...c, rank }))
-    .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank))
+    .filter((c) => !hide.has(c.person.id) && (input.hiddenBelowRank === null || c.rank < input.hiddenBelowRank) && fits(asSaved(c.person)))
     .slice(0, SHOWN);
 
   // The model reads plain evidence lines only (not the evidence links), so its cache keys don't

@@ -15,8 +15,8 @@ export function ColourPicker({
 }) {
   return (
     <fieldset className={centred ? "text-center" : undefined}>
-      <legend className={`mb-3 text-base font-semibold ${centred ? "mx-auto" : ""}`}>Badge colour</legend>
-      <div className={`flex flex-wrap gap-3 ${centred ? "justify-center" : ""}`}>
+      <legend className={`mb-2 text-sm font-semibold ${centred ? "mx-auto" : ""}`}>Badge colour</legend>
+      <div className={`flex flex-wrap gap-2 ${centred ? "justify-center" : ""}`}>
         {badgeColours.map((c) => (
           <label key={c.id} className="relative cursor-pointer" title={c.name}>
             <input
@@ -30,7 +30,7 @@ export function ColourPicker({
             <span
               aria-hidden="true"
               style={{ backgroundColor: c.hex }}
-              className="block size-11 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none"
+              className="block size-7 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent motion-reduce:transition-none"
             />
             <span className="sr-only">{c.name}</span>
           </label>

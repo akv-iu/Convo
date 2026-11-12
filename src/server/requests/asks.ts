@@ -135,6 +135,24 @@ export async function getAsk(userId: string, askId: string): Promise<Ask> {
   }
 }
 
+/**
+ * Current privacy settings, even when search still has an older profile: the users table, the search
+ * copy for synthetic people, otherwise nothing shown. Cards and the search box's narrowing both use it.
+ */
+async function loadSaved(people: Pick<Person, "id" | "synthetic" | "visibility">[]) {
+  const saved = await db().select({ id: users.id, visibility: users.visibility,
+    evidencePending: sql<boolean>`(${users.githubEvidencePending} or ${users.profileEvidencePending})` }).from(users)
+    .where(inArray(users.id, people.map(person => person.id)));
+  const stored = new Map(saved.map(person => [person.id, ProfileVisibility.parse(person.visibility)]));
+  const hidden: ProfileVisibility = { country: false, workplace: false, hiring: false };
+  return {
+    visibility: new Map(people.map(person => [person.id,
+      stored.get(person.id) ?? (person.synthetic ? person.visibility ?? hidden : hidden)])),
+    // Do not expose old repository highlights or explanations while a refresh/revocation is pending.
+    pending: new Set(saved.filter(person => person.evidencePending).map(person => person.id)),
+  };
+}
+
 export async function matchAsk(userId: string, askId: string, query?: string): Promise<MatchResult[]> {
   const ask = await getAsk(userId, askId);
 
@@ -161,18 +179,12 @@ export async function matchAsk(userId: string, askId: string, query?: string): P
       // request to. Ranking them keeps everyone else's rank, so the batch cutoff means the same place.
       hideIds: [...(ask.softBlocker ? rejectedIds : []), ...requested.map(person => person.id)],
       hiddenBelowRank,
+      savedVisibility: async people => (await loadSaved(people)).visibility,
     });
     if (!matches.length) return [];
-    // Read current privacy settings even when search still has an older profile.
-    const saved = await db().select({ id: users.id, visibility: users.visibility,
-      evidencePending: sql<boolean>`(${users.githubEvidencePending} or ${users.profileEvidencePending})` }).from(users)
-      .where(inArray(users.id, matches.map(match => match.person.id)));
-    // Do not expose old repository highlights or explanations while a refresh/revocation is pending.
-    const pending = new Set(saved.filter(person => person.evidencePending).map(person => person.id));
-    const visibility = new Map(saved.map(person => [person.id, ProfileVisibility.parse(person.visibility)]));
-    return routes.match.response.parse(matches.filter(match => !pending.has(match.person.id)).map(match => visibleCard(match,
-      visibility.get(match.person.id) ?? (match.person.synthetic ? match.person.visibility :
-        { country: false, workplace: false, hiring: false }))));
+    const { visibility, pending } = await loadSaved(matches.map(match => match.person));
+    return routes.match.response.parse(matches.filter(match => !pending.has(match.person.id))
+      .map(match => visibleCard(match, visibility.get(match.person.id) ?? { country: false, workplace: false, hiring: false })));
   } catch {
     throw new AskError("Matching is unavailable. Try again with the same ask ID.", 503);
   }

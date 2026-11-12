@@ -349,8 +349,8 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           <ColourPicker defaultColour={colour} centred />
           {/* The picture circle's own colour; "Same as badge" follows the badge colour above. */}
           <fieldset className="text-center">
-            <legend className="mx-auto mb-3 text-base font-semibold">Picture colour</legend>
-            <div className="flex flex-col items-center gap-3">
+            <legend className="mx-auto mb-2 text-sm font-semibold">Picture colour</legend>
+            <div className="flex flex-col items-center gap-2">
               {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
               <label className="cursor-pointer">
                 <input
@@ -361,11 +361,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                   onChange={() => setAvatarColour(null)}
                   className="peer sr-only"
                 />
-                <span className="flex h-10 items-center rounded-full border-2 border-border px-4 text-sm font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
+                <span className="flex h-8 items-center rounded-full border-2 border-border px-3 text-xs font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
                   Same as badge
                 </span>
               </label>
-              <div className="flex flex-wrap justify-center gap-2.5">
+              <div className="flex flex-wrap justify-center gap-2">
                 {badgeColours.map((c) => (
                   <label key={c.id} title={c.name} className="relative cursor-pointer">
                     <input
@@ -379,7 +379,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                     <span
                       aria-hidden="true"
                       style={{ backgroundColor: c.hex }}
-                      className="block size-10 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none"
+                      className="block size-7 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent motion-reduce:transition-none"
                     />
                     <span className="sr-only">{c.name}</span>
                   </label>
@@ -394,9 +394,8 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
         */}
         <div className="flex flex-col gap-6 sm:col-start-2 sm:row-start-1 sm:self-center lg:mt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
-            <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
+            <legend className="sr-only">Show on your badge</legend>
             <p id="visibility-note" className="mb-2 text-sm text-muted">
-              Tap a line marked with an eraser on your badge to hide it, or switch it here.{" "}
               {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
             </p>
             <div className="flex max-w-sm flex-col gap-1.5">

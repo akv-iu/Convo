@@ -132,6 +132,10 @@ function AskMatches({ askId }: { askId: string }) {
   const [resolving, setResolving] = useState(false);
   const [resolved, setResolved] = useState(false);
   const [resolveFailed, setResolveFailed] = useState<Failure | null>(null);
+  /** No one matched and the user chose to leave the request open. */
+  const [keptOpen, setKeptOpen] = useState(false);
+  /** Closed from the empty screen, so the closing page doesn't say it was answered. */
+  const [closedEmpty, setClosedEmpty] = useState(false);
   const [cutoffNote, setCutoffNote] = useState(false);
   /** Bumped whenever the deck reloads, so a pass or send answered after a reload can't move the new deck. */
   const deckGen = useRef(0);
@@ -226,6 +230,8 @@ function AskMatches({ askId }: { askId: string }) {
     : sent;
   /** This list was emptied by you (passes, the cutoff, or your requests), not by a lack of people. */
   const reviewed = passedAny || cutoffNote || sentHere.length > 0;
+  /** No one to show and none of it your doing: the empty panel goes first, with no switch. */
+  const noMatches = load.state === "ready" && matches.length === 0 && !reviewed;
   /** A reload only brings people back when you passed on someone with the switch off. */
   const canSeeAgain = passedAny && blocker === false;
 
@@ -358,7 +364,7 @@ function AskMatches({ askId }: { askId: string }) {
     }
   }
 
-  async function resolve() {
+  async function resolve(empty = false) {
     if (resolving) return;
     setResolving(true);
     setResolveFailed(null);
@@ -369,8 +375,9 @@ function AskMatches({ askId }: { askId: string }) {
         setResolveFailed(resolveFailure(res.status, body));
         return;
       }
+      setClosedEmpty(empty);
       setResolved(true);
-      setAnnounce("Marked as answered.");
+      setAnnounce(empty ? "Request closed." : "Marked as answered.");
     } catch {
       setResolveFailed(resolveFailure(0, null));
     } finally {
@@ -417,7 +424,7 @@ function AskMatches({ askId }: { askId: string }) {
     );
     return (
       <div className="mx-auto flex max-w-xl flex-col">
-        <h1 className={headingClass}>Marked as answered</h1>
+        <h1 className={headingClass}>{closedEmpty ? "Request closed" : "Marked as answered"}</h1>
         <p className="mt-3 text-lg text-muted">
           Lanyard won&apos;t match this question with anyone new. Your requests and meetings stay as they are.
         </p>
@@ -455,6 +462,226 @@ function AskMatches({ askId }: { askId: string }) {
     );
   }
 
+  const resolveError = resolveFailed && (
+    <p role="alert" className={`mt-3 ${errorClass}`}>
+      {resolveFailed.message}
+      {resolveFailed.action && (
+        <>
+          {" "}
+          <a href={resolveFailed.action.href} className="underline underline-offset-4">
+            {resolveFailed.action.label}
+          </a>
+        </>
+      )}
+    </p>
+  );
+
+  const matchesSection = (
+    <section aria-label="Matches" className="mt-6">
+    {load.state === "loading" && (
+      <div aria-busy="true" className="flex flex-col gap-3 rounded-2xl bg-surface p-5 ring-1 ring-border">
+        <p role="status">Finding people…</p>
+        <span className="h-3 w-3/4 rounded-full bg-[var(--skeleton)] motion-safe:animate-pulse" aria-hidden="true" />
+        <span className="h-3 w-1/2 rounded-full bg-[var(--skeleton)] motion-safe:animate-pulse" aria-hidden="true" />
+      </div>
+    )}
+
+    {load.state === "failed" && (
+      <div>
+        <p role="alert" className="text-lg">
+          {load.failure.message}
+        </p>
+        <div className="mt-4">
+          {load.failure.action ? (
+            <Button href={load.failure.action.href}>{load.failure.action.label}</Button>
+          ) : (
+            <Button onClick={refresh}>Try again</Button>
+          )}
+        </div>
+      </div>
+    )}
+
+    {load.state === "ready" && matches.length > 0 && (
+      <>
+        <p id="matches-count" tabIndex={-1} className="mb-3 text-xl font-extrabold tracking-tight focus:outline-none">
+          {onlyNearest(matches)
+            ? `No close match. ${matches.length === 1 ? "The nearest person" : `The ${matches.length} nearest people`}`
+            : `${matches.length} ${matches.length === 1 ? "person" : "people"} found`}
+        </p>
+        {onlyNearest(matches) && (
+          <p className="mb-3 text-muted">
+            No one here works on exactly this. {matches.length === 1 ? "This person does" : "These people do"} related work and may still help.
+          </p>
+        )}
+        {cutoffNote && (
+          <p className="mb-3 rounded-xl border-2 border-border px-4 py-3 text-sm">
+            You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
+          </p>
+        )}
+        {actionFailure && (
+          <p role="alert" className={`mb-3 ${errorClass}`}>
+            {actionFailure.message}{" "}
+            {actionFailure.action ? (
+              <a href={actionFailure.action.href} className="underline underline-offset-4">
+                {actionFailure.action.label}
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={refresh}
+                aria-disabled={busy !== null}
+                className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+              >
+                Refresh matches
+              </button>
+            )}
+          </p>
+        )}
+        <ul className="flex flex-col gap-2">
+          {matches.map((m) => {
+            const open = openId === m.person.id;
+            const isSent = sentIds.has(m.person.id);
+            const isPassed = passedIds.has(m.person.id);
+            const note = doneNote(m.person.name, isSent, isPassed);
+            const off = busy !== null || lockedIds.has(m.person.id) || blockerSaving;
+            const panelId = `match-${m.person.id}-panel`;
+            return (
+              <li
+                key={m.person.id}
+                id={`match-${m.person.id}-item`}
+                className={`overflow-hidden rounded-2xl border-2 bg-surface transition-colors motion-reduce:transition-none ${open ? "border-accent" : "border-border"}`}
+              >
+                <button
+                  id={`match-${m.person.id}-toggle`}
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  onClick={() => setOpenId(open ? null : m.person.id)}
+                  className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+                >
+                  <MatchSummary match={m} sent={isSent} passed={isPassed} />
+                  <span
+                    aria-hidden="true"
+                    className={`mt-1 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors motion-reduce:transition-none ${
+                      open ? "border-accent bg-accent text-on-accent" : "border-border bg-background text-foreground"
+                    }`}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className={`size-6 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </span>
+                </button>
+                {open && (
+                  <div id={panelId} role="region" aria-labelledby={`match-${m.person.id}-name`} className="border-t-2 border-border px-4 pb-4 pt-4">
+                    <MatchDetails match={m} nameId={`match-${m.person.id}-name`} />
+                    {lockedIds.has(m.person.id) && (
+                      <p className={`mt-4 ${errorClass}`}>
+                        Lanyard couldn&apos;t confirm your pass on {m.person.name}, so Pass and Send are off until you{" "}
+                        <button
+                          type="button"
+                          onClick={refresh}
+                          aria-disabled={busy !== null}
+                          className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                          refresh the matches
+                        </button>{" "}
+                        to see what was saved.
+                      </p>
+                    )}
+                    {note ? (
+                      <p className="mt-4 font-semibold">{note}</p>
+                    ) : (
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <Button
+                          variant="secondary"
+                          onClick={() => void act("pass", m)}
+                          aria-disabled={off}
+                          className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                          {busy === "pass" ? "Passing…" : "Pass"}
+                        </Button>
+                        <Button
+                          onClick={() => void act("send", m)}
+                          aria-disabled={off}
+                          className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                          {busy === "send" ? "Sending…" : "Send request"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    )}
+
+    {load.state === "ready" && allDone && (
+      <div className={`rounded-2xl border-2 border-border bg-surface p-6 ${matches.length > 0 ? "mt-4" : ""}`}>
+        <h2 id="matches-done" tabIndex={-1} className="text-2xl font-extrabold tracking-tight focus:outline-none">
+          {reviewed ? "That's everyone for now" : applied ? "No one matches your search" : "No one matches yet"}
+        </h2>
+        {cutoffNote && (
+          <p className="mt-2 font-medium">
+            You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
+          </p>
+        )}
+        <p className="mt-2 text-muted">{endNote()}</p>
+        {/* An empty search says nothing about the ask, so it never offers to close it. */}
+        {noMatches && !applied ? (
+          <div className="mt-5 border-t-2 border-border pt-5">
+            {keptOpen ? (
+              <p role="status" className="font-semibold">
+                Your request stays active. Lanyard will match you as more people join.
+              </p>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold">Leave as active request?</h3>
+                <p className="mt-1 text-sm text-muted">
+                  Yes keeps looking for people as they join. No closes the request.
+                </p>
+                <div className="mt-3 flex gap-3">
+                  <Button onClick={() => setKeptOpen(true)} disabled={resolving}>
+                    Yes
+                  </Button>
+                  <Button variant="secondary" onClick={() => void resolve(true)} disabled={resolving}>
+                    {resolving ? "Saving…" : "No"}
+                  </Button>
+                </div>
+                {resolveError}
+              </>
+            )}
+            <div className="mt-5">
+              <Button href="/ask" variant="secondary">
+                Ask something else
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <Button href="/ask">Ask something else</Button>
+            {canSeeAgain && (
+              <Button variant="secondary" onClick={refresh}>
+                See them again
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+  </section>
+  );
+
   return (
     <div className="mx-auto flex max-w-xl flex-col">
       <h1 className={headingClass}>People who can help</h1>
@@ -463,17 +690,19 @@ function AskMatches({ askId }: { askId: string }) {
           <span className="sr-only">Your question: </span>&ldquo;{question}&rdquo;
         </p>
       )}
+      {/* No one matched: say so first, before the search. */}
+      {noMatches && matchesSection}
 
-      <form role="search" onSubmit={onSearch} className="mt-6 flex gap-2">
-        <label htmlFor="match-search" className="sr-only">
-          Narrow the list
-        </label>
+      <label htmlFor="match-search" className="mt-6 block text-lg font-bold">
+        Find people who can help
+      </label>
+      <form role="search" onSubmit={onSearch} className="mt-2 flex gap-2">
         <input
           id="match-search"
           type="search"
           value={query}
           maxLength={200}
-          placeholder="Narrow the list, e.g. Rust"
+          placeholder="Such as university, organisation or country"
           onChange={(e) => setQuery(e.target.value)}
           className="min-h-12 min-w-0 flex-1 rounded-xl border-2 border-border bg-surface px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
         />
@@ -508,7 +737,7 @@ function AskMatches({ askId }: { askId: string }) {
         </p>
       )}
 
-      {blocker !== null && (
+      {blocker !== null && !noMatches && (
       <div className="mt-4 rounded-xl border-2 border-border bg-surface px-4 py-3">
         <Switch
           boxed={false}
@@ -538,7 +767,7 @@ function AskMatches({ askId }: { askId: string }) {
         )}
       </div>
       )}
-      {askFailed && (
+      {askFailed && !noMatches && (
         <p role="alert" className={`mt-4 ${errorClass}`}>
           The &ldquo;Keep people I pass on hidden&rdquo; setting didn&apos;t load.{" "}
           <button
@@ -559,179 +788,9 @@ function AskMatches({ askId }: { askId: string }) {
         {announce}
       </p>
 
-      <section aria-label="Matches" className="mt-6">
-        {load.state === "loading" && (
-          <div aria-busy="true" className="flex flex-col gap-3 rounded-2xl bg-surface p-5 ring-1 ring-border">
-            <p role="status">Finding people…</p>
-            <span className="h-3 w-3/4 rounded-full bg-[var(--skeleton)] motion-safe:animate-pulse" aria-hidden="true" />
-            <span className="h-3 w-1/2 rounded-full bg-[var(--skeleton)] motion-safe:animate-pulse" aria-hidden="true" />
-          </div>
-        )}
+      {!noMatches && matchesSection}
 
-        {load.state === "failed" && (
-          <div>
-            <p role="alert" className="text-lg">
-              {load.failure.message}
-            </p>
-            <div className="mt-4">
-              {load.failure.action ? (
-                <Button href={load.failure.action.href}>{load.failure.action.label}</Button>
-              ) : (
-                <Button onClick={refresh}>Try again</Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {load.state === "ready" && matches.length > 0 && (
-          <>
-            <p id="matches-count" tabIndex={-1} className="mb-3 text-xl font-extrabold tracking-tight focus:outline-none">
-              {onlyNearest(matches)
-                ? `No close match. ${matches.length === 1 ? "The nearest person" : `The ${matches.length} nearest people`}`
-                : `${matches.length} ${matches.length === 1 ? "person" : "people"} found`}
-            </p>
-            {onlyNearest(matches) && (
-              <p className="mb-3 text-muted">
-                No one here works on exactly this. {matches.length === 1 ? "This person does" : "These people do"} related work and may still help.
-              </p>
-            )}
-            {cutoffNote && (
-              <p className="mb-3 rounded-xl border-2 border-border px-4 py-3 text-sm">
-                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
-              </p>
-            )}
-            {actionFailure && (
-              <p role="alert" className={`mb-3 ${errorClass}`}>
-                {actionFailure.message}{" "}
-                {actionFailure.action ? (
-                  <a href={actionFailure.action.href} className="underline underline-offset-4">
-                    {actionFailure.action.label}
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={refresh}
-                    aria-disabled={busy !== null}
-                    className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                  >
-                    Refresh matches
-                  </button>
-                )}
-              </p>
-            )}
-            <ul className="flex flex-col gap-2">
-              {matches.map((m) => {
-                const open = openId === m.person.id;
-                const isSent = sentIds.has(m.person.id);
-                const isPassed = passedIds.has(m.person.id);
-                const note = doneNote(m.person.name, isSent, isPassed);
-                const off = busy !== null || lockedIds.has(m.person.id) || blockerSaving;
-                const panelId = `match-${m.person.id}-panel`;
-                return (
-                  <li
-                    key={m.person.id}
-                    id={`match-${m.person.id}-item`}
-                    className={`overflow-hidden rounded-2xl border-2 bg-surface transition-colors motion-reduce:transition-none ${open ? "border-accent" : "border-border"}`}
-                  >
-                    <button
-                      id={`match-${m.person.id}-toggle`}
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={panelId}
-                      onClick={() => setOpenId(open ? null : m.person.id)}
-                      className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-                    >
-                      <MatchSummary match={m} sent={isSent} passed={isPassed} />
-                      <span
-                        aria-hidden="true"
-                        className={`mt-1 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors motion-reduce:transition-none ${
-                          open ? "border-accent bg-accent text-on-accent" : "border-border bg-background text-foreground"
-                        }`}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className={`size-6 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.75"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M6 9l6 6 6-6" />
-                        </svg>
-                      </span>
-                    </button>
-                    {open && (
-                      <div id={panelId} role="region" aria-labelledby={`match-${m.person.id}-name`} className="border-t-2 border-border px-4 pb-4 pt-4">
-                        <MatchDetails match={m} nameId={`match-${m.person.id}-name`} />
-                        {lockedIds.has(m.person.id) && (
-                          <p className={`mt-4 ${errorClass}`}>
-                            Lanyard couldn&apos;t confirm your pass on {m.person.name}, so Pass and Send are off until you{" "}
-                            <button
-                              type="button"
-                              onClick={refresh}
-                              aria-disabled={busy !== null}
-                              className="underline underline-offset-4 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                            >
-                              refresh the matches
-                            </button>{" "}
-                            to see what was saved.
-                          </p>
-                        )}
-                        {note ? (
-                          <p className="mt-4 font-semibold">{note}</p>
-                        ) : (
-                          <div className="mt-5 grid grid-cols-2 gap-3">
-                            <Button
-                              variant="secondary"
-                              onClick={() => void act("pass", m)}
-                              aria-disabled={off}
-                              className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                            >
-                              {busy === "pass" ? "Passing…" : "Pass"}
-                            </Button>
-                            <Button
-                              onClick={() => void act("send", m)}
-                              aria-disabled={off}
-                              className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                            >
-                              {busy === "send" ? "Sending…" : "Send request"}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-
-        {load.state === "ready" && allDone && (
-          <div className={`rounded-2xl border-2 border-border bg-surface p-6 ${matches.length > 0 ? "mt-4" : ""}`}>
-            <h2 id="matches-done" tabIndex={-1} className="text-2xl font-extrabold tracking-tight focus:outline-none">
-              {reviewed ? "That's everyone for now" : "No one matches yet"}
-            </h2>
-            {cutoffNote && (
-              <p className="mt-2 font-medium">
-                You&apos;ve passed on three people, so Lanyard hid everyone ranked below them.
-              </p>
-            )}
-            <p className="mt-2 text-muted">{endNote()}</p>
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <Button href="/ask">Ask something else</Button>
-              {canSeeAgain && (
-                <Button variant="secondary" onClick={refresh}>
-                  See them again
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {load.state === "ready" && (
+      {load.state === "ready" && !noMatches && (
         <div className="mt-10 border-t-2 border-border pt-6">
           <h2 className="text-lg font-bold">Got what you needed?</h2>
           <p className="mt-1 text-sm text-muted">Marking it answered stops Lanyard matching this question with anyone new.</p>
@@ -740,19 +799,7 @@ function AskMatches({ askId }: { askId: string }) {
               {resolving ? "Saving…" : "Mark as answered"}
             </Button>
           </div>
-          {resolveFailed && (
-            <p role="alert" className={`mt-3 ${errorClass}`}>
-              {resolveFailed.message}
-              {resolveFailed.action && (
-                <>
-                  {" "}
-                  <a href={resolveFailed.action.href} className="underline underline-offset-4">
-                    {resolveFailed.action.label}
-                  </a>
-                </>
-              )}
-            </p>
-          )}
+          {resolveError}
         </div>
       )}
     </div>

@@ -324,7 +324,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(card(page)).toBeVisible();
     await page.getByRole("button", { name: "Search", exact: true }).click(); // empty box, same as now
     await expect(rows(page)).toHaveCount(2);
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(rows(page)).toHaveCount(2);
     await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -397,7 +397,7 @@ test.describe("match list (A2 steps 1-2)", () => {
       return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
     });
     await open(page, "made-up");
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText(/Showing people for .Go./)).toBeVisible();
     await rows(page).first().click();
@@ -542,11 +542,12 @@ test.describe("match list (A2 steps 1-2)", () => {
     await open(page, "made-up");
     // No search: the earlier requests explain the empty list.
     await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Haskell");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches yet");
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches your search");
     await expect(list(page)).toContainText("Try a different search, or show everyone.");
     await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0); // an empty search never offers to close the ask
   });
 
   test("after a save, focus stays where the user moved it", async ({ page, isMobile }) => {
@@ -637,7 +638,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await open(page, askId);
     await expect(card(page)).toBeVisible();
     const searching = page.waitForRequest((r) => r.url().endsWith("/api/match") && !!r.postDataJSON().query);
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Rust");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Rust");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     expect((await searching).postDataJSON()).toEqual({ askId, query: "Rust" });
     await expect(page.getByText(/Showing people for .Rust./)).toBeVisible();
@@ -649,6 +650,14 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.route("**/api/match", (route) => route.fulfill({ json: [] }));
     await open(page, "made-up");
     await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    // With no search, the empty list asks whether to keep the request open; Yes keeps it.
+    await expect(page.getByText("Leave as active request?")).toBeVisible();
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Your request stays active." })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "No one matches your search" })).toBeVisible();
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0);
     await page.unroute("**/api/match");
 
     await open(page, "not-a-real-ask");
