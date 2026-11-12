@@ -12,6 +12,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { CONFERENCE_DAY_NAME } from "@/contracts/fixtures";
 import type { Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
 import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
@@ -235,7 +236,7 @@ export function FreeTimeForm({ enrichment = false }: { enrichment?: boolean }) {
       <div className="flex flex-col">
         <h1 className={headingClass}>When are you free?</h1>
         <p className="mt-3 max-w-md text-lg text-muted">
-          Tap the times you could meet on Monday 9 November. People can only book you then.
+          Tap the times you could meet on {CONFERENCE_DAY_NAME}. People can only book you then.
         </p>
         {enrichment && <ImportStatus />}
 

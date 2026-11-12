@@ -201,15 +201,17 @@ test.describe("requests and inbox (A2 step 4)", () => {
     const mine = card(page, sent.id);
     await mine.getByRole("button", { name: "Accept this request" }).click();
     const picker = mine.getByRole("region", { name: "Pick a time to meet" });
-    await expect(picker.getByRole("button", { name: /Book$/ })).toHaveCount(slots.length);
+    await expect(picker.getByRole("button", { name: /Book$/ }).first()).toBeVisible();
     const booking = page.waitForRequest((r) => r.url().endsWith(`/api/requests/${sent.id}/schedule`));
     await picker.getByRole("button", { name: /Book$/ }).first().click();
-    expect((await booking).postDataJSON()).toEqual({ slot: slots[0] });
+    // The other viewport books p_002 at the same time, so the first slot shown may have moved on.
+    const booked = (await booking).postDataJSON().slot;
+    expect(slots).toContainEqual(booked);
     await expect(mine).toContainText("Meeting booked:");
     const saved = ((await (await page.request.get("/api/inbox")).json()) as { id: string; status: string; slot: unknown }[]).find(
       (r) => r.id === sent.id,
     );
-    expect(saved).toMatchObject({ status: "scheduled", slot: slots[0] });
+    expect(saved).toMatchObject({ status: "scheduled", slot: booked });
     await page.context().close();
   });
 
