@@ -251,6 +251,17 @@ export const elasticSearch: SearchService = {
     });
   },
 
+  async listPeople() {
+    // A few hundred people at an event: one page holds them all.
+    const res = await client().search<{ person: unknown }>({
+      index: INDEX.people, size: 1000, query: { match_all: {} }, _source: ["person"],
+    });
+    return res.hits.hits.flatMap((hit) => {
+      const person = parsePerson(hit._source?.person);
+      return person ? [person] : [];
+    });
+  },
+
   async ingestPerson(person, evidence, revision) {
     if (evidence) checkEvidence(person.id, evidence, revision !== undefined);
     const es = client();

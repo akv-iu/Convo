@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MeetingBooked } from "@/components/ui/meeting-booked";
+import { CalendarWait } from "@/components/ui/calendar-wait";
 import { CardSkeleton, EmptyState, pageSubtitleClass, pageTitleClass } from "@/components/ui/page";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SharedContactCard } from "@/components/ui/shared-contact";
@@ -64,6 +65,7 @@ export function MeetingsView() {
         {load.state === "ready" && load.meetings.length === 0 && (
           <EmptyState
             title="No meetings booked yet"
+            art={<CalendarWait className="w-28 shrink-0 sm:w-32" />}
             action={
               <Button href="/inbox" variant="secondary">
                 Go to your requests

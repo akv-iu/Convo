@@ -9,6 +9,7 @@ import { ai } from "@/server/ai";
 import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { config } from "@/server/config";
 import { runMatch } from "@/server/pipeline";
+import { findIn } from "@/server/pipeline/find";
 import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
@@ -237,5 +238,11 @@ export const fake: Api = {
   async lookingForMe({ userId }) {
     const me = store.person(userId);
     return { count: (await search.whoIsLookingFor(me)).length };
+  },
+
+  async findPeople({ userId, query }) {
+    // The fake keeps everyone in the in-memory search, each as they saved themselves.
+    const everyone = await search.listPeople();
+    return findIn(everyone, new Map(everyone.map((p) => [p.id, p])), query.get("q") ?? "", userId);
   },
 };

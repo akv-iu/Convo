@@ -150,6 +150,11 @@ export function AskForm() {
       // Saved as written, so its refined text is exactly what was sent.
       const done = { askId: saved.askId, rawText: original ?? question, refined: saved.ask.refined ?? { text: question, type: "knowledge", minutes: 5 } };
       rememberAsk(done); // the matches screen shows the question from this at once
+      // It's saved, so the box empties: the app keeps this screen while you're on the matches, and
+      // coming back to Ask (or Ask something else) starts a new question, not this one again.
+      setText("");
+      setOriginal(null);
+      setTried(false);
       // Straight to the people who can help. `leaving` holds the buttons until the move finishes.
       startLeaving(() => router.push(`/matches?ask=${encodeURIComponent(done.askId)}`));
     } catch {

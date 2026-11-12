@@ -14,6 +14,7 @@ import { ACTIVITY_EVENT } from "./toast";
 
 const TABS = [
   { href: "/ask", label: "Ask", match: ["/ask", "/matches"] },
+  { href: "/find", label: "Find", match: ["/find"] },
   { href: "/inbox", label: "Requests", match: ["/inbox"] },
   { href: "/meetings", label: "Meetings", match: ["/meetings"] },
   { href: "/onboarding/profile", label: "Profile", match: ["/onboarding"] },

@@ -11,6 +11,7 @@ import { rejectPerson, setSoftBlocker } from "@/server/requests/rejections";
 import { sendRequest, getInbox, getSentRequests, respondToRequest } from "@/server/requests/messages";
 import { getSlots, bookSlot } from "@/server/schedule/service";
 import { lookingForMe, resolveAsk } from "@/server/requests/lifecycle";
+import { findPeople } from "@/server/requests/find";
 import { beginGitHubConnection } from "@/server/profile/connection";
 import { enrichmentState, saveEnrichmentIdentity, startEnrichment, getEnrichment, retryEnrichment } from "@/server/profile/enrichment/service";
 import { cancelJob, removeCv, stageCvText } from "@/server/profile/enrichment/state";
@@ -56,4 +57,5 @@ export const real: Api = {
   getAsk: ({ userId, params }) => getAsk(userId, params.id),
   resolve: ({ userId, params }) => resolveAsk(userId, params.id),
   lookingForMe: ({ userId }) => lookingForMe(userId),
+  findPeople: ({ userId, query }) => findPeople(userId, query.get("q") ?? ""),
 };

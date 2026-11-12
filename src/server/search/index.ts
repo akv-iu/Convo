@@ -30,6 +30,8 @@ export interface SearchService {
   getPerson(id: string): Promise<Person | undefined>;
   /** Several people in one read; IDs that aren't found are left out. */
   getPeople(ids: string[]): Promise<Person[]>;
+  /** Everyone searchable: fixtures, synthetic attendees and signed-up users (for the person finder). */
+  listPeople(): Promise<Person[]>;
   /**
    * Omit evidence to preserve it, or pass a list to replace it.
    * Atomically ignore older revisions (and unversioned writes after versioned ones).

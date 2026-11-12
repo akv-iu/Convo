@@ -16,7 +16,8 @@ import { SharedContactCard } from "@/components/ui/shared-contact";
 import { MeetingBooked } from "@/components/ui/meeting-booked";
 import type { Request, RequestView } from "@/contracts/types";
 import { lengthLabel } from "../ask/asks";
-import { groupByQuestion, groupSummary, inboxFailure, sentStatusLabel, venueRange, venueTime, type AskGroup, type Failure } from "./inbox";
+import { StatusIcon } from "@/components/ui/status-icon";
+import { groupByQuestion, groupCounts, inboxFailure, peopleLabel, sentStatusLabel, venueRange, venueTime, type AskGroup, type Failure } from "./inbox";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 
@@ -165,7 +166,17 @@ function QuestionGroup({
             <span>{lengthLabel(group.minutes)}</span>
             <span>· {venueTime(group.latest)}</span>
           </span>
-          <span className="mt-1 block text-sm font-semibold">{groupSummary(group.requests)}</span>
+          {/* "2 people · 1 accepted · 1 waiting", each status with its symbol. */}
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+            <span>{peopleLabel(group.requests.length)}</span>
+            {groupCounts(group.requests).map((c) => (
+              <span key={c.status} className="inline-flex items-center gap-1">
+                {/* Real spaces, so the text still reads "2 people · 2 waiting" (screen readers, copy, tests). */}{" "}
+                <span className="text-muted">·</span> <StatusIcon status={c.status} />
+                {c.text}
+              </span>
+            ))}
+          </span>
         </span>
         <span
           aria-hidden="true"
@@ -202,9 +213,8 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
         Sent to {name ?? "someone at the conference"}
       </h3>
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span
-          className={`rounded-full px-3 py-0.5 font-semibold ${request.status === "sent" ? "bg-[var(--skeleton)]" : "bg-accent text-on-accent"}`}
-        >
+        <span className="inline-flex items-center gap-1.5 rounded-full border-2 border-border bg-surface px-3 py-0.5 font-semibold">
+          <StatusIcon status={request.status} />
           {sentStatusLabel[request.status]}
         </span>
         <span className="text-muted">{venueTime(request.createdAt)}</span>

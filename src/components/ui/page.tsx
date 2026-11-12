@@ -36,16 +36,19 @@ export function EmptyState({
   children,
   action,
   headingLevel = 2,
+  art,
 }: {
   title: string;
   children: ReactNode;
   action?: ReactNode;
   headingLevel?: 2 | 3;
+  /** The picture beside it; the radar (looking for people) unless the page has its own. */
+  art?: ReactNode;
 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
     <div className="flex flex-col items-center rounded-2xl border-2 border-border bg-surface p-6 text-center sm:flex-row sm:gap-8 sm:text-left">
-      <ScanRadar className="w-28 shrink-0 sm:w-32" />
+      {art ?? <ScanRadar className="w-28 shrink-0 sm:w-32" />}
       <div className="mt-5 sm:mt-0">
         <Heading className="text-2xl font-extrabold tracking-tight">{title}</Heading>
         <p className="mt-2 text-muted">{children}</p>
