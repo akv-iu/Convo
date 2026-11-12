@@ -629,7 +629,7 @@ function AskMatches({ askId }: { askId: string }) {
     {load.state === "ready" && allDone && (
       <div className={`rounded-2xl border-2 border-border bg-surface p-6 ${matches.length > 0 ? "mt-4" : ""}`}>
         <h2 id="matches-done" tabIndex={-1} className="text-2xl font-extrabold tracking-tight focus:outline-none">
-          {reviewed ? "That's everyone for now" : "No one matches yet"}
+          {reviewed ? "That's everyone for now" : applied ? "No one matches your search" : "No one matches yet"}
         </h2>
         {cutoffNote && (
           <p className="mt-2 font-medium">
@@ -637,7 +637,8 @@ function AskMatches({ askId }: { askId: string }) {
           </p>
         )}
         <p className="mt-2 text-muted">{endNote()}</p>
-        {noMatches ? (
+        {/* An empty search says nothing about the ask, so it never offers to close it. */}
+        {noMatches && !applied ? (
           <div className="mt-5 border-t-2 border-border pt-5">
             {keptOpen ? (
               <p role="status" className="font-semibold">
