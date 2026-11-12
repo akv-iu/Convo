@@ -249,16 +249,7 @@ test.describe("your badge (step 2)", () => {
     expect(card && panel).toBeTruthy();
     // The card hangs at a slight tilt on laptops, so its box reaches a few pixels past its edges.
     expect(Math.abs(card!.y - panel!.y)).toBeLessThanOrEqual(12);
-    const geometry = await page.evaluate(() => {
-      const box = (el: Element | null) => { const b = el?.getBoundingClientRect(); return b ? [Math.round(b.top), Math.round(b.bottom), Math.round(b.width)] : null; };
-      const stripe = [...document.querySelectorAll("[data-badge] [data-badge-stripe]")].find((e) => (e as HTMLElement).offsetParent);
-      const card = stripe?.parentElement ?? null;
-      const panel = document.querySelector('[role="group"][aria-label="Colour for"]')?.closest("div.max-w-sm") ?? null;
-      return { card: box(card), cardKids: card ? [...card.children].map(box) : [], panel: box(panel), panelKids: panel ? [...panel.children].map(box) : [],
-        colourRow: box(document.querySelector('[role="group"][aria-label="Colour for"]')?.parentElement ?? null), cell: box(card?.closest("[data-badge]")?.parentElement ?? null),
-        switches: [...document.querySelectorAll('[role="switch"]')].map((e) => box(e.closest("label"))) };
-    });
-    expect(Math.abs(card!.y + card!.height - (panel!.y + panel!.height)), JSON.stringify(geometry)).toBeLessThanOrEqual(12);
+    expect(Math.abs(card!.y + card!.height - (panel!.y + panel!.height))).toBeLessThanOrEqual(12);
     expect(panel!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
   });
 
