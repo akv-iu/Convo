@@ -149,7 +149,8 @@ describe("fit", () => {
 
 describe("no strong fit", () => {
   it("shows only the three nearest when the model found no strong fit", async () => {
-    const five = people.slice(0, 5).map((p, i) => ({ person: structuredClone(p), highlights: [`e${i}`], score: 5 - i }));
+    // Scores close together, so nobody falls under the weak-match cutoff (RELEVANCE) and only fit decides.
+    const five = people.slice(0, 5).map((p, i) => ({ person: structuredClone(p), highlights: [`e${i}`], score: 10 - i }));
     search.searchCandidates.mockResolvedValueOnce(five.slice(1)); // the requester is never a candidate
     search.whoIsLookingFor.mockResolvedValueOnce([]);
     ai.explain.mockResolvedValueOnce([{ why: "a", fit: "partial" }, { why: "b", fit: "none" }, { why: "c", fit: "partial" }, { why: "d", fit: "partial" }]);

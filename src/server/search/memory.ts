@@ -5,6 +5,7 @@
 import * as fixtures from "@/contracts/fixtures";
 import type { EvidenceDoc, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
 import { addEvidence, checkEvidence, expertiseOf, shownWorkplace } from "./evidence";
+import { contentTerms } from "./terms";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
 interface MemoryIndex {
@@ -25,13 +26,9 @@ function freshIndex(): MemoryIndex {
 const runtime = globalThis as typeof globalThis & { convoMemorySearch?: MemoryIndex };
 const { people, evidence, revisions, asks, resolved } = (runtime.convoMemorySearch ??= freshIndex());
 
-const STOP = new Set(["i", "a", "an", "the", "to", "at", "in", "on", "of", "how", "want", "works", "work", "does", "do", "with", "and", "for", "is", "it", "my", "me", "get", "specifically", "what", "about"]);
-
+/** What a text is about, as keywords (see ./terms): the same words Elasticsearch's keyword search uses. */
 export function tokens(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 1 && !STOP.has(t));
+  return contentTerms(text);
 }
 
 function meetsHardFilters(person: Person, hard: SearchFilters["hard"] = {}): boolean {

@@ -306,8 +306,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
         className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
         <div className="w-full sm:col-start-1 sm:row-start-1">{badge}</div>
-        {/* Under the badge: the picture picker, when open. */}
-        <div className="flex w-full flex-col items-center gap-6 empty:hidden sm:col-start-1 sm:row-start-2">
+        {/* Under the badge: what's always on it (it describes the switches beside it), then the picture picker, when open. */}
+        <div className="flex w-full flex-col items-center gap-6 sm:col-start-1 sm:row-start-2">
+          <p id="visibility-note" className="text-center text-sm text-muted">
+            {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
+          </p>
           {pickerOpen && (
             <fieldset
               id="avatar-picker"
@@ -350,18 +353,17 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           )}
         </div>
         {/*
-          Beside the badge, from the top of the card: what to show, then the colours. From 1024 px the
-          badge hangs from a strap (lg:mt-16), so the same margin here lines up with the card.
+          Beside the badge: one panel, what to show and then the colours, the same height as the badge
+          card so their tops and bottoms line up. From 1024 px the badge hangs from a strap (lg:mt-16),
+          so the same margin here starts the panel level with the card.
         */}
-        <div className="flex flex-col gap-5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start lg:mt-16">
+        <div className="flex w-full max-w-sm flex-col justify-between gap-2 rounded-2xl border-2 border-border bg-surface px-4 py-2.5 sm:col-start-2 sm:row-start-1 sm:self-stretch lg:mt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="sr-only">Show on your badge</legend>
-            <p id="visibility-note" className="mb-2 text-sm text-muted">
-              {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
-            </p>
-            <div className="flex max-w-sm flex-col gap-1.5">
+            <div className="flex flex-col divide-y-2 divide-border">
               {sections.map((v) => (
                 <Switch
+                  boxed={false}
                   key={v.id}
                   label={v.label}
                   aside={visibility[v.id] ? "Shown" : "Hidden"}
@@ -375,9 +377,13 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
             One colour panel for both: pick Badge or Picture, then a colour. Both groups stay in the
             form (the badge's colours the stripe through CSS); only the chosen one is in view.
           */}
-          <div className="w-full max-w-sm rounded-2xl border-2 border-border bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold">Colours</h2>
+          <div className="border-t-2 border-border pt-3">
+            <h2 className="sr-only">Colours</h2>
+            {/*
+              The Badge / Picture choice and its swatches on one row, wrapping on phones. Beside the badge it
+              never wraps: the row fits with ~2 px to spare, and a wrap would push the panel past the card.
+            */}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:flex-nowrap">
               <div role="group" aria-label="Colour for" className="flex rounded-full border-2 border-border p-0.5">
                 {(["badge", "picture"] as const).map((target) => (
                   <button
@@ -385,7 +391,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                     type="button"
                     aria-pressed={colourFor === target}
                     onClick={() => setColourFor(target)}
-                    className="flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors aria-pressed:bg-foreground aria-pressed:text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+                    className="flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-colors aria-pressed:bg-foreground aria-pressed:text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
                   >
                     <span
                       aria-hidden="true"
@@ -396,8 +402,8 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="mt-3">
+            {/* shrink-0: squeezed, the swatches would wrap onto a second row instead. */}
+            <div className="shrink-0">
               <ColourPicker defaultColour={colour} quiet hidden={colourFor !== "badge"} />
               <fieldset hidden={colourFor !== "picture"}>
                 <legend className="sr-only">Picture colour</legend>
@@ -432,6 +438,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                   </label>
                 </div>
               </fieldset>
+            </div>
             </div>
           </div>
         </div>

@@ -13,6 +13,8 @@
   /* Text on an accent background */
   --on-accent: #ffffff;
   --accent-2: #0f766e;
+  --success: #15803d;
+  --on-success: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,6 +28,8 @@
     --accent-hover: #93c5fd;
     --on-accent: #141414;
     --accent-2: #5eead4;
+    --success: #4ade80;
+    --on-success: #052e16;
   }
 }
 
@@ -39,6 +43,8 @@
   --color-accent-hover: var(--accent-hover);
   --color-on-accent: var(--on-accent);
   --color-accent-2: var(--accent-2);
+  --color-success: var(--success);
+  --color-on-success: var(--on-success);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

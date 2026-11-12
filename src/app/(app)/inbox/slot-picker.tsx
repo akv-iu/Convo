@@ -115,7 +115,7 @@ export function SlotPicker({
           <a href="/onboarding/free-time" className="font-semibold underline underline-offset-4">
             Add more free times
           </a>{" "}
-          or reply with a short answer instead.
+          or use the contact details to arrange a time.
         </p>
       )}
 

@@ -554,7 +554,9 @@ function AskMatches({ askId }: { askId: string }) {
               <li
                 key={m.person.id}
                 id={`match-${m.person.id}-item`}
-                className={`overflow-hidden rounded-2xl border-2 bg-surface transition-colors motion-reduce:transition-none ${open ? "border-accent" : "border-border"}`}
+                className={`relative overflow-hidden rounded-2xl border-2 transition-colors motion-reduce:transition-none ${
+                  isSent ? "border-success bg-success/10" : `bg-surface ${open ? "border-accent" : "border-border"}`
+                }`}
               >
                 <button
                   id={`match-${m.person.id}-toggle`}
@@ -562,9 +564,15 @@ function AskMatches({ askId }: { askId: string }) {
                   aria-expanded={open}
                   aria-controls={panelId}
                   onClick={() => setOpenId(open ? null : m.person.id)}
-                  className="flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+                  className={`flex w-full items-start gap-2 px-4 py-3 hover:bg-accent/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${isSent ? "pt-11" : ""}`}
                 >
-                  <MatchSummary match={m} sent={isSent} passed={isPassed} />
+                  {/* Done with this person: the whole card turns green, with a large tag in the corner. */}
+                  {isSent && (
+                    <span className="absolute right-0 top-0 flex items-center gap-1.5 rounded-bl-xl bg-success px-4 py-1.5 text-sm font-extrabold text-on-success">
+                      <span aria-hidden="true">✓</span> Request sent<span className="sr-only">:</span>
+                    </span>
+                  )}
+                  <MatchSummary match={m} passed={isPassed} />
                   <span
                     aria-hidden="true"
                     className={`mt-1 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors motion-reduce:transition-none ${

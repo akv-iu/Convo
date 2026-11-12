@@ -6,6 +6,7 @@
  * Everything is made up and lives only in memory.
  */
 import { MEETING_MINUTES } from "@/server/ai/minutes";
+import { block } from "@/contracts/fixtures";
 import { store } from "./store";
 
 /** How long a demo attendee "thinks" before replying to your request. */
@@ -38,6 +39,9 @@ export function playDemo(userId: string): void {
 
   if (!state.seeded.has(userId)) {
     state.seeded.add(userId);
+    for (const person of state.people.values()) {
+      if (person.synthetic) person.freeTimes = [block("08:00", "12:30"), block("13:00", "18:00")];
+    }
     const senders = [...state.people.values()].filter((p) => p.synthetic && p.id !== userId).slice(-2);
     senders.forEach((sender, i) => {
       const item = INCOMING[i % INCOMING.length];
