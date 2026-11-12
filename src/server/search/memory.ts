@@ -4,7 +4,7 @@
  */
 import * as fixtures from "@/contracts/fixtures";
 import type { EvidenceDoc, MatchEvidence, Person, TimeBlock } from "@/contracts/types";
-import { addEvidence, checkEvidence, expertiseOf } from "./evidence";
+import { addEvidence, checkEvidence, expertiseOf, shownWorkplace } from "./evidence";
 import { contentTerms } from "./terms";
 import type { Candidate, SearchFilters, SearchService } from "./index";
 
@@ -69,18 +69,17 @@ export const memorySearch: SearchService = {
     const out: Candidate[] = [];
     for (const person of people.values()) {
       if (exclude.has(person.id) || !meetsHardFilters(person, filters.hard)) continue;
-      const highlights: string[] = [];
+      // Like Elasticsearch, which collapses to each person's best document: best match first, and only
+      // the best counts in full, so a long profile can't outrank a precise one on volume alone.
+      const matched = (evidence.get(person.id) ?? [])
+        .map((doc) => ({ doc, hit: new Set(tokens(`${doc.title} ${doc.text}`).filter((t) => q.has(t))).size }))
+        .filter(({ hit }) => hit > 0)
+        .sort((a, b) => b.hit - a.hit);
+      const highlights = matched.map(({ doc }) => doc.title);
       const found: MatchEvidence[] = [];
-      let score = 0;
-      for (const doc of evidence.get(person.id) ?? []) {
-        const hit = tokens(`${doc.title} ${doc.text}`).filter((t) => q.has(t));
-        if (hit.length) {
-          score += new Set(hit).size;
-          highlights.push(doc.title);
-          addEvidence(found, doc);
-        }
-      }
-      const bioHits = tokens(`${person.bio} ${person.organisations.join(" ")} ${expertiseOf(person).join(" ")}`).filter((t) => q.has(t));
+      for (const { doc } of matched) addEvidence(found, doc);
+      let score = matched.reduce((sum, { hit }, i) => sum + (i === 0 ? hit : 0.1 * hit), 0);
+      const bioHits = tokens(`${person.bio} ${shownWorkplace(person)} ${person.organisations.join(" ")} ${expertiseOf(person).join(" ")}`).filter((t) => q.has(t));
       score += new Set(bioHits).size * 0.5;
       if (score === 0) continue;
       if (filters.freeTimes && overlaps(filters.freeTimes, person.freeTimes)) score += 0.5;

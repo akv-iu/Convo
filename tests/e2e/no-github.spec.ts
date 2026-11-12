@@ -84,4 +84,32 @@ test.describe("people without GitHub", () => {
     await expect(card.getByRole("link", { name: /on GitHub/ })).toHaveCount(0);
     await expect(card).not.toContainText("@");
   });
+
+  test("an agreed request with someone without a handle shows their contact details, still with no GitHub", async ({ page }) => {
+    await page.setExtraHTTPHeaders({ "x-demo-user": ME });
+    const contact = { email: "grace@example.com", phone: null };
+    const incoming = { ...request(noGitHub), id: "r-in-agreed", fromUserId: noGitHub.id, toPersonId: ME, status: "accepted", contact };
+    const sent = { ...request(noGitHub), id: "r-out-agreed", status: "accepted", contact };
+    await page.route("**/api/inbox", (route) => route.fulfill({ json: [incoming] }));
+    await page.route("**/api/requests/sent", (route) => route.fulfill({ json: [sent] }));
+    await page.goto("/inbox");
+    const links = page.getByRole("link", { name: "grace@example.com" });
+    await expect(links.first()).toBeVisible();
+    for (const link of await links.all()) await expect(link).toHaveAttribute("href", "mailto:grace@example.com");
+    await expect(page.getByText("Contact Grace Example").first()).toBeVisible();
+    await expect(page.getByRole("main").getByRole("link", { name: /on GitHub/ })).toHaveCount(0);
+    expect(await page.getByRole("main").innerText()).not.toMatch(/(^|\s)@[\w-]/); // no @handle; the email's @ is fine
+  });
+
+  test("a meeting with someone without a handle shows no GitHub", async ({ page }) => {
+    await page.setExtraHTTPHeaders({ "x-demo-user": ME });
+    const booked = { ...request(noGitHub), id: "r-meeting", status: "scheduled", slot: { start: "2026-11-12T09:00:00Z", end: "2026-11-12T09:05:00Z" }, contact: null };
+    await page.route("**/api/inbox", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/requests/sent", (route) => route.fulfill({ json: [booked] }));
+    await page.goto("/meetings");
+    const meeting = page.getByRole("main").getByRole("article");
+    await expect(meeting).toContainText("Grace Example");
+    await expect(meeting.getByRole("link", { name: /on GitHub/ })).toHaveCount(0);
+    await expect(meeting).not.toContainText("@");
+  });
 });

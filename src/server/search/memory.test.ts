@@ -29,6 +29,21 @@ describe("one index for every route", () => {
   });
 });
 
+describe("ranking", () => {
+  it("ranks one precise piece of evidence above many that each share one word, and lists the best match first", async () => {
+    const base = { ...structuredClone(people[0]), bio: "", organisations: [], expertise: [] };
+    const precise = { ...base, id: "rank-precise" };
+    const broad = { ...base, id: "rank-broad" };
+    const doc = (personId: string, n: number, title: string): EvidenceDoc => ({ id: `${personId}:repo:${n}`, personId, kind: "repo", title, text: "" });
+    await memorySearch.ingestPerson(precise, [doc(precise.id, 1, "Zebrafish husbandry"), doc(precise.id, 2, "Zebrafish retina tracing")], 1);
+    await memorySearch.ingestPerson(broad, Array.from({ length: 8 }, (_, n) => doc(broad.id, n, `Zebrafish note ${n}`)), 1);
+
+    const found = await memorySearch.searchCandidates("zebrafish retina tracing", { excludeIds: [] });
+    expect(found.map((c) => c.person.id).slice(0, 2)).toEqual([precise.id, broad.id]);
+    expect(found[0].highlights).toEqual(["Zebrafish retina tracing", "Zebrafish husbandry"]);
+  });
+});
+
 describe("approved expertise", () => {
   it("is matched and read by reverse search, and a stale save can't bring it back once withdrawn", async () => {
     const researcher = { ...structuredClone(people[0]), id: "expertise-test", bio: "", organisations: [], expertise: ["Qubit calibration"] };
@@ -201,5 +216,16 @@ describe("person updates without replacing evidence", () => {
     expect(await memorySearch.getAvailability([person.id])).toEqual({ [person.id]: [] });
     await memorySearch.ingestPerson({ ...person, freeTimes: [] }, [], 3);
     expect(await memorySearch.searchCandidates("RevisionEvidence", { excludeIds: [] })).toEqual([]);
+  });
+});
+
+describe("workplace", () => {
+  it("is matched only when the person shows it", async () => {
+    const atStripe = { ...structuredClone(people[0]), id: "workplace-test", bio: "", organisations: [], workplaceName: "Stripe",
+      visibility: { country: true, workplace: true, hiring: true } };
+    await memorySearch.ingestPerson(atStripe, [], 1);
+    expect(await matchedIds("stripe")).toContain(atStripe.id);
+    await memorySearch.ingestPerson({ ...atStripe, visibility: { ...atStripe.visibility, workplace: false } }, [], 2);
+    expect(await matchedIds("stripe")).not.toContain(atStripe.id);
   });
 });

@@ -11,10 +11,10 @@ const expert = person({ id: "ex", workplaceName: null, organisations: ["kubernet
 
 describe("reading the person finder", () => {
   it("finds a country by name, any case, and keeps the rest", () => {
-    expect(readNarrowing("Spain")).toEqual({ country: "ES", rest: "" });
-    expect(readNarrowing("rust engineers in united kingdom")).toEqual({ country: "GB", rest: "rust engineers in" });
-    expect(readNarrowing("Rust")).toEqual({ country: null, rest: "Rust" });
-    expect(readNarrowing("")).toEqual({ country: null, rest: "" });
+    expect(readNarrowing("Spain")).toMatchObject({ country: "ES", rest: "" });
+    expect(readNarrowing("rust engineers in united kingdom")).toMatchObject({ country: "GB", rest: "rust engineers in" });
+    expect(readNarrowing("Rust")).toMatchObject({ country: null, rest: "Rust" });
+    expect(readNarrowing("")).toMatchObject({ country: null, rest: "" });
   });
 });
 
@@ -56,5 +56,15 @@ describe("the person finder is a strict filter", () => {
 
   it("keeps everyone when the box is empty", () => {
     expect(ids("")).toEqual(["ox", "gr", "hd", "ex"]);
+  });
+});
+
+describe("a workplace with a country in its name", () => {
+  it("fits as the workplace, while a bare country is still the country", () => {
+    const georgia = person({ id: "ga", workplaceName: "University of Georgia", filters: { country: "US", rorId: null, hiring: true } });
+    const all = [georgia, grafana];
+    const ids = (q: string) => all.filter(narrowTo(readNarrowing(q))).map((p) => p.id);
+    expect(ids("University of Georgia")).toEqual(["ga"]);
+    expect(ids("Georgia")).toEqual([]); // nobody shows the country Georgia
   });
 });

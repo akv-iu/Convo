@@ -6,7 +6,8 @@
  * that one person gets what you pick here (email by default) and you get theirs.
  * Saved with "Yes, that's me" (PUT /api/me/contact).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ContactDetails, type ContactShare } from "@/contracts/types";
 import { saveErrorMessage } from "../answers";
 
@@ -22,27 +23,39 @@ export function useContactDetails() {
   const [fields, setFields] = useState<Fields>({ email: "", phone: "", share: "email" });
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [load, setLoad] = useState<"loading" | "ready" | "failed">("loading");
+  const [attempt, setAttempt] = useState(0);
+  /** Typed before the saved details arrived: what they typed wins. */
+  const edited = useRef(false);
 
   useEffect(() => {
     let live = true;
     void (async () => {
       try {
-        const res = await fetch("/api/me/contact");
-        if (!res.ok) return;
-        const saved = ContactDetails.safeParse(await res.json()).data;
-        if (live && saved) setFields({ email: saved.email ?? "", phone: saved.phone ?? "", share: saved.share });
+        const res = await fetch("/api/me/contact", { cache: "no-store" });
+        const saved = res.ok ? ContactDetails.safeParse(await res.json()).data : undefined;
+        if (!live) return;
+        if (!saved) return setLoad("failed");
+        if (!edited.current) setFields({ email: saved.email ?? "", phone: saved.phone ?? "", share: saved.share });
+        setLoad("ready");
       } catch {
-        // Empty fields: the user fills them in, and the save says if anything is wrong.
+        if (live) setLoad("failed");
       }
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [attempt]);
 
   function update(changes: Partial<Fields>) {
+    edited.current = true;
     setFields((cur) => ({ ...cur, ...changes }));
     setProblem(null);
+  }
+
+  function retry() {
+    setLoad("loading");
+    setAttempt((n) => n + 1);
   }
 
   /** Checks and saves; true when saved. The first problem is shown and its field focused. */
@@ -55,8 +68,10 @@ export function useContactDetails() {
       document.getElementById(id)?.focus();
       return false;
     };
-    if (fields.share !== "phone" && !email) return need("contact-email", "Add the email you want to share when you agree to meet.");
-    if (fields.share !== "email" && !phone) return need("contact-phone", "Add the phone number you want to share when you agree to meet.");
+    // Both empty is fine: nothing is shared, and finishing onboarding never waits on contact details.
+    const any = Boolean(email || phone);
+    if (any && fields.share !== "phone" && !email) return need("contact-email", "Add the email you want to share when you agree to meet.");
+    if (any && fields.share !== "email" && !phone) return need("contact-phone", "Add the phone number you want to share when you agree to meet.");
     const parsed = ContactDetails.safeParse({ email: email || null, phone: phone || null, share: fields.share });
     if (!parsed.success) {
       const field = parsed.error.issues[0]?.path[0] === "phone" ? "contact-phone" : "contact-email";
@@ -82,14 +97,14 @@ export function useContactDetails() {
     }
   }
 
-  return { fields, update, save, saving, problem };
+  return { fields, update, save, saving, problem, load, retry };
 }
 
 const inputClass =
   "min-h-12 w-full rounded-xl border-2 border-border bg-background px-4 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none";
 
 export function ContactSection({ contact }: { contact: ReturnType<typeof useContactDetails> }) {
-  const { fields, update, problem } = contact;
+  const { fields, update, problem, load, retry } = contact;
   return (
     <section aria-labelledby="contact-heading" className="mt-10 rounded-2xl border-2 border-border bg-surface p-5">
       <h2 id="contact-heading" className="text-2xl font-extrabold tracking-tight">
@@ -99,6 +114,16 @@ export function ContactSection({ contact }: { contact: ReturnType<typeof useCont
         Private: never on your badge. When you accept someone&apos;s request, or they accept yours, Lanyard shares what you
         pick here with that one person, and you get theirs.
       </p>
+      {load === "failed" && (
+        <div className="mt-4">
+          <p role="alert" className="font-medium text-[var(--danger)]">
+            Your saved contact details didn&apos;t load. Try again before you change them.
+          </p>
+          <Button variant="secondary" className="mt-3" onClick={retry}>
+            Try again
+          </Button>
+        </div>
+      )}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <label htmlFor="contact-email" className="font-semibold">

@@ -73,7 +73,7 @@ test.describe("profile enrichment: badge and free time", () => {
     await page.getByRole("button", { name: "Choose a picture" }).click();
     const picker = page.getByRole("group", { name: "Your picture" });
     await picker.locator("label").filter({ has: page.getByRole("radio", { name: "Moon" }) }).click();
-    await page.locator("label").filter({ has: page.getByRole("radio", { name: "Mint" }) }).click();
+    await page.getByRole("group", { name: "Badge colour" }).locator("label").filter({ has: page.getByRole("radio", { name: "Mint" }) }).click();
     await toggle(page, "Workplace");
     await scan(page, "badge");
     await continueButton(page).click();
@@ -97,7 +97,7 @@ test.describe("profile enrichment: badge and free time", () => {
       await expect(page.getByRole("radio", { name: /Not right now/ }), pass).toBeChecked();
       await expect(page.getByRole("switch", { name: "Workplace", exact: true }), pass).not.toBeChecked();
       await expect(badge(page).locator("[data-avatar]"), pass).toHaveAttribute("data-avatar", "moon");
-      await expect(page.getByRole("radio", { name: "Mint" }), pass).toBeChecked();
+      await expect(page.getByRole("group", { name: "Badge colour" }).getByRole("radio", { name: "Mint" }), pass).toBeChecked();
     }
 
     // Back to page two: the choices are still there, and Continue without changes keeps the same import.

@@ -355,8 +355,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           so the same margin here starts the panel level with the card.
         */}
         <div className="flex w-full max-w-sm flex-col justify-between gap-2 rounded-2xl border-2 border-border bg-surface px-4 py-2.5 sm:col-start-2 sm:row-start-1 sm:self-stretch lg:mt-16">
-          <fieldset className="border-0 p-0">
+          <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="sr-only">Show on your badge</legend>
+            <p id="visibility-note" className="py-1 text-sm text-muted">
+              {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
+            </p>
             <div className="flex flex-col divide-y-2 divide-border">
               {sections.map((v) => (
                 <Switch

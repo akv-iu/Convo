@@ -114,7 +114,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     const first = expected[0];
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
     await expect(page.getByText(`${expected.length} ${expected.length === 1 ? "person" : "people"} found`)).toBeVisible();
-    await expect(card(page)).toContainText(first.explanation);
+    await expect(rows(page).first()).toContainText(first.explanation); // why them is on the row
     if (first.person.synthetic) await expect(card(page)).toContainText("Demo profile");
   });
 
@@ -172,6 +172,25 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText("Person 2");
     await expect(rows(page).nth(1)).toBeFocused();
     await expect(rows(page).nth(0)).toContainText("Request sent");
+  });
+
+  test("with no close match, the list says these are the nearest people, at most three", async ({ page }) => {
+    // The fake API rates everyone a partial fit for "[demo:nearest]", as the model does when no one fits strongly.
+    const askId = await newAsk(page, "how does the Kubernetes scheduler do preemption [demo:nearest]");
+    await open(page, askId);
+    await expect(page.getByText(/^No close match\. The (\d nearest people|nearest person)$/)).toBeVisible();
+    await expect(page.getByText(/^No one here works on exactly this\./)).toBeVisible();
+    expect(await rows(page).count()).toBeLessThanOrEqual(3);
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, colorScheme).toEqual([]);
+    }
+  });
+
+  test("an ordinary ask counts the people found, with no nearest note", async ({ page }) => {
+    await open(page, await newAsk(page));
+    await expect(page.getByText(/^\d+ (people|person) found$/)).toBeVisible();
+    await expect(page.getByText(/^No close match/)).toHaveCount(0);
   });
 
   test("a card shows evidence highlights, the mutual marker, and hides fields the person hid", async ({ page }) => {
@@ -526,6 +545,10 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.route("**/api/match", (route) => route.fulfill({ json: [] }));
     await open(page, "made-up");
     await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    // The empty list asks whether to keep the request open; Yes keeps it.
+    await expect(page.getByText("Leave as active request?")).toBeVisible();
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Your request stays active." })).toBeVisible();
     await page.unroute("**/api/match");
 
     await open(page, "not-a-real-ask");
@@ -815,14 +838,16 @@ test.describe("match list (A2 steps 1-2)", () => {
       headers: { "x-demo-user": ME }, data: { askId, toPersonId: first.person.id },
     });
     expect(sent.ok()).toBe(true);
-    let loads = 0;
+    // Failing until Try again: the header's counts read sent requests too, so "the first call" isn't the page's.
+    let failing = true;
     await page.route("**/api/requests/sent", async route => {
-      if (++loads === 1) return route.fulfill({ status: 503, json: { error: "unavailable" } });
+      if (failing) return route.fulfill({ status: 503, json: { error: "unavailable" } });
       return route.fulfill({ response: await route.fetch() });
     });
     await open(page, askId);
     const error = page.getByRole("alert").filter({ hasText: "Your sent requests didn't load." });
     await expect(error).toBeVisible();
+    failing = false;
     await error.getByRole("button", { name: "Try again" }).click();
     await expect(error).toHaveCount(0);
     await page.getByRole("button", { name: "Mark as answered" }).click();
@@ -847,7 +872,8 @@ test.describe("match list (A2 steps 1-2)", () => {
 
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
+      // Reduced motion: the sent toast fades in, and a scan mid-fade reads blended colours.
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
       let sends = 0; // each request gets its own ID, as on the server
       await page.route("**/api/requests", (route) => route.fulfill({ json: { id: `r${++sends}` } }));
