@@ -379,8 +379,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           */}
           <div className="border-t-2 border-border pt-3">
             <h2 className="sr-only">Colours</h2>
-            {/* The Badge / Picture choice and its swatches on one row, wrapping on narrow screens. */}
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            {/*
+              The Badge / Picture choice and its swatches on one row, wrapping on phones. Beside the badge it
+              never wraps: the row fits with ~2 px to spare, and a wrap would push the panel past the card.
+            */}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:flex-nowrap">
               <div role="group" aria-label="Colour for" className="flex rounded-full border-2 border-border p-0.5">
                 {(["badge", "picture"] as const).map((target) => (
                   <button
