@@ -306,8 +306,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
         className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
         <div className="w-full sm:col-start-1 sm:row-start-1">{badge}</div>
-        {/* Under the badge: the picture picker, when open. */}
-        <div className="flex w-full flex-col items-center gap-6 empty:hidden sm:col-start-1 sm:row-start-2">
+        {/* Under the badge: what's always on it (it describes the switches beside it), then the picture picker, when open. */}
+        <div className="flex w-full flex-col items-center gap-6 sm:col-start-1 sm:row-start-2">
+          <p id="visibility-note" className="text-center text-sm text-muted">
+            {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
+          </p>
           {pickerOpen && (
             <fieldset
               id="avatar-picker"
@@ -357,9 +360,6 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
         <div className="flex w-full max-w-sm flex-col justify-between gap-2 rounded-2xl border-2 border-border bg-surface px-4 py-2.5 sm:col-start-2 sm:row-start-1 sm:self-stretch lg:mt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="sr-only">Show on your badge</legend>
-            <p id="visibility-note" className="py-1 text-sm text-muted">
-              {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
-            </p>
             <div className="flex flex-col divide-y-2 divide-border">
               {sections.map((v) => (
                 <Switch
