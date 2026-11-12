@@ -173,6 +173,25 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(0)).toContainText("Request sent");
   });
 
+  test("with no close match, the list says these are the nearest people, at most three", async ({ page }) => {
+    // The fake API rates everyone a partial fit for "[demo:nearest]", as the model does when no one fits strongly.
+    const askId = await newAsk(page, "how does the Kubernetes scheduler do preemption [demo:nearest]");
+    await open(page, askId);
+    await expect(page.getByText(/^No close match\. The (\d nearest people|nearest person)$/)).toBeVisible();
+    await expect(page.getByText(/^No one here works on exactly this\./)).toBeVisible();
+    expect(await rows(page).count()).toBeLessThanOrEqual(3);
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, colorScheme).toEqual([]);
+    }
+  });
+
+  test("an ordinary ask counts the people found, with no nearest note", async ({ page }) => {
+    await open(page, await newAsk(page));
+    await expect(page.getByText(/^\d+ (people|person) found$/)).toBeVisible();
+    await expect(page.getByText(/^No close match/)).toHaveCount(0);
+  });
+
   test("a card shows evidence highlights, the mutual marker, and hides fields the person hid", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
     await open(page, "made-up");
