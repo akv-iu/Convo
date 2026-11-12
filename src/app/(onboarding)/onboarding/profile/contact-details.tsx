@@ -68,8 +68,10 @@ export function useContactDetails() {
       document.getElementById(id)?.focus();
       return false;
     };
-    if (fields.share !== "phone" && !email) return need("contact-email", "Add the email you want to share when you agree to meet.");
-    if (fields.share !== "email" && !phone) return need("contact-phone", "Add the phone number you want to share when you agree to meet.");
+    // Both empty is fine: nothing is shared, and finishing onboarding never waits on contact details.
+    const any = Boolean(email || phone);
+    if (any && fields.share !== "phone" && !email) return need("contact-email", "Add the email you want to share when you agree to meet.");
+    if (any && fields.share !== "email" && !phone) return need("contact-phone", "Add the phone number you want to share when you agree to meet.");
     const parsed = ContactDetails.safeParse({ email: email || null, phone: phone || null, share: fields.share });
     if (!parsed.success) {
       const field = parsed.error.issues[0]?.path[0] === "phone" ? "contact-phone" : "contact-email";
