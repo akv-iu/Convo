@@ -15,6 +15,11 @@ Return two or three short plain sentences, at most 600 characters, and up to eig
 Do not name the person, use gendered pronouns, invent facts, or claim expert/maintainer status merely from a language or coauthorship.
 Never state country, workplace/employer, current employment, hiring/job-seeking, contact details, referees or unrelated sensitive information.
 Use only supported professional work, methods and research topics. If evidence is weak, describe only what it shows.
+Write it the way a colleague would introduce them at the conference: start with what they build or work on, then the main tools or topics, and name at most two notable projects when the evidence names them, e.g. "Builds Kubernetes tooling in Go, including kube-sim, a scheduler simulator.".
+Write about the work, never about the evidence: no "repository activity suggests", "the work includes", "the evidence shows" or "appears to".
+Weigh real projects, products, research and roles above routine items: coding-practice submissions, course assignments, personal websites or portfolios and profile READMEs. Mention routine items only when there is nothing else.
+Whatever the sources (only GitHub, only a CV, only a paper), still write a useful profile from what they show.
+Make expertise labels specific skills, tools or topics ("Next.js", "OpenAI Agents SDK", "Kubernetes scheduling"), not generic ones ("software development", "coding").
 Every nonempty bio and expertise label must cite one or more supplied evidence IDs. Never invent IDs.
 Never put evidence IDs, brackets or citations in the bio or label text: list them only in bioEvidenceIds and evidenceIds.
 Return only the requested JSON. The owner reviews this draft before anything is published.`;
