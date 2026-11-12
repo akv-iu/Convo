@@ -7,7 +7,7 @@ Owner: Person A · PRs: #61
 - [x] Screens: on the matches screen, after a search, an open person has a "Message to <name>" box (up to 500 characters) and "Send message"; the recipient sees "Their message" on the request in Requests.
 - [x] Contract: `sendRequest` takes an optional `message` (trimmed, at most 500); `Request.message` is optional. Additive; fake and `contract.test.ts` updated.
 - [x] Backend: `requests.message` stored and returned with the request.
-- [ ] Data: `0012_request_message.sql` (adds `requests.message`) applied to Neon.
+- [x] Data: `0012_request_message.sql` (adds `requests.message`) applied to Neon.
 - [x] Tests: contract tests for carrying, trimming and rejecting a long message.
 
 ## How to try it
