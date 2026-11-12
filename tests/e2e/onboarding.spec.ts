@@ -235,7 +235,15 @@ test.describe("your badge (step 2)", () => {
 
   test("the switches and colours panel sits beside the badge, lined up with the card top and bottom", async ({ page, isMobile }) => {
     test.skip(isMobile, "on phones the panel stacks under the badge");
+    // The card's height depends on what it shows; other tests change p_003's choices, so pin them here.
+    await page.route("**/api/me", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      const response = await route.fetch();
+      const me = await response.json();
+      await route.fulfill({ response, json: { ...me, filters: { ...me.filters, hiring: true }, visibility: { country: true, workplace: true, hiring: true } } });
+    });
     await openWithDraft(page, "p_003");
+    await expect(visibleBadge(page).locator("[data-eraser]")).toHaveCount(3); // country, workplace and hiring all shown
     const card = await page.locator("[data-badge]:visible [data-badge-stripe]").locator("..").boundingBox();
     const panel = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
     expect(card && panel).toBeTruthy();
