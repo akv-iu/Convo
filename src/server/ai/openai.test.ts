@@ -164,61 +164,75 @@ describe("moderate", () => {
 });
 
 describe("explain", () => {
-  it("explains every uncached card in one call, in card order, and caches each line", async () => {
+  it("explains and rates every uncached card in one call, in card order, and caches each judgement", async () => {
     const cards = [card("a", ["kube-scheduler: preemption"]), card("b", []), card("c", ["sched-sim: a simulator"])];
     create.mockResolvedValueOnce(reply({ lines: [
-      { ref: 2, why: "Built a scheduler simulator." },
-      { ref: 1, why: "Maintains kube-scheduler preemption." },
+      { ref: 2, why: "Built a scheduler simulator.", fit: "partial" },
+      { ref: 1, why: "Maintains kube-scheduler preemption.", fit: "strong" },
     ] }));
 
     await expect(openAi.explain(ask, cards)).resolves.toEqual([
-      "Maintains kube-scheduler preemption.", "Profile mentions what you're asking about.", "Built a scheduler simulator.",
+      { why: "Maintains kube-scheduler preemption.", fit: "strong" },
+      { why: "Profile mentions what you're asking about." }, // no evidence: never judged, never dropped
+      { why: "Built a scheduler simulator.", fit: "partial" },
     ]);
 
     expect(create).toHaveBeenCalledOnce();
     expect(JSON.parse(create.mock.calls[0][0].input)).toEqual({
       question: ask.text,
+      type: ask.type,
       people: [{ ref: 1, evidence: ["kube-scheduler: preemption"] }, { ref: 2, evidence: ["sched-sim: a simulator"] }],
     });
+    expect(create.mock.calls[0][0].text.format.schema.properties.lines.items.properties.fit).toEqual({ type: "string", enum: ["strong", "partial", "none"] });
     expect(create.mock.calls[0][1]).toEqual({ timeout: 4000, maxRetries: 0 });
     expect(statements("insert")).toHaveLength(1);
     expect(statements("insert")[0][1]).toEqual(expect.arrayContaining([
-      JSON.stringify("Maintains kube-scheduler preemption."), JSON.stringify("Built a scheduler simulator."),
+      JSON.stringify({ why: "Maintains kube-scheduler preemption.", fit: "strong" }),
+      JSON.stringify({ why: "Built a scheduler simulator.", fit: "partial" }),
     ]));
   });
 
   it("sends only cache misses, once per distinct evidence", async () => {
-    cacheHolds("Cached line for a.");
-    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "Line for y." }] }));
+    cacheHolds({ why: "Cached line for a.", fit: "none" });
+    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "Line for y.", fit: "partial" }] }));
 
-    await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"]), card("c", ["y"])]))
-      .resolves.toEqual(["Cached line for a.", "Line for y.", "Line for y."]);
+    await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"]), card("c", ["y"])])).resolves.toEqual([
+      { why: "Cached line for a.", fit: "none" }, { why: "Line for y.", fit: "partial" }, { why: "Line for y.", fit: "partial" },
+    ]);
 
     expect(statements("select")).toHaveLength(1);
     expect(sentPeople()).toEqual([{ ref: 1, evidence: ["y"] }]);
   });
 
-  it("never fails a match: on a model error every card keeps its evidence line", async () => {
+  it("asks again for a cached plain line from before fit ratings existed", async () => {
+    cacheHolds("Old line without a fit.");
+    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "New line.", fit: "strong" }] }));
+    await expect(openAi.explain(ask, [card("a", ["x"])])).resolves.toEqual([{ why: "New line.", fit: "strong" }]);
+  });
+
+  it("never fails a match: on a model error every card keeps its evidence line, unjudged", async () => {
     create.mockRejectedValueOnce(new Error("Request timed out."));
 
     await expect(openAi.explain(ask, [card("a", ["kube-scheduler: preemption"])]))
-      .resolves.toEqual(["Evidence: kube-scheduler: preemption."]);
+      .resolves.toEqual([{ why: "Evidence: kube-scheduler: preemption." }]);
 
     expect(statements("insert")).toHaveLength(0);
   });
 
   it("keeps the evidence line for a card the model skipped or answered badly", async () => {
-    create.mockResolvedValueOnce(reply({ lines: [{ ref: 1, why: "   " }, { ref: 2, why: "x".repeat(201) }, { ref: 9, why: "Stray." }] }));
+    create.mockResolvedValueOnce(reply({ lines: [
+      { ref: 1, why: "   ", fit: "none" }, { ref: 2, why: "x".repeat(201), fit: "none" }, { ref: 9, why: "Stray.", fit: "strong" },
+    ] }));
 
     await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"])]))
-      .resolves.toEqual(["Evidence: x.", "Evidence: y."]);
+      .resolves.toEqual([{ why: "Evidence: x." }, { why: "Evidence: y." }]);
 
     expect(statements("insert")).toHaveLength(0);
   });
 
   it("calls nothing for an empty list or cards without evidence", async () => {
     await expect(openAi.explain(ask, [])).resolves.toEqual([]);
-    await expect(openAi.explain(ask, [card("b", [])])).resolves.toEqual(["Profile mentions what you're asking about."]);
+    await expect(openAi.explain(ask, [card("b", [])])).resolves.toEqual([{ why: "Profile mentions what you're asking about." }]);
 
     expect(query).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
