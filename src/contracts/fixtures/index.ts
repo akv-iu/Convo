@@ -6,12 +6,18 @@
  */
 import type { EvidenceDoc, Person, RorMatch } from "../types";
 
-/** Build day, Mountain Standard Time. */
-export const CONFERENCE_DAY = "2026-11-09";
+/**
+ * The event day, Mountain Standard Time: always tomorrow, so demo free times stay bookable whenever
+ * the app runs (a fixed 9 November ran out once the day passed). ponytail: pin a real event's date here.
+ */
+export const CONFERENCE_DAY = new Date(Date.now() + 17 * 3_600_000).toISOString().slice(0, 10);
+/** "Thursday 12 November". */
+export const CONFERENCE_DAY_NAME = new Date(`${CONFERENCE_DAY}T12:00:00-07:00`)
+  .toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Denver" });
 const tz = "-07:00";
-export const block = (from: string, to: string) => ({
-  start: `${CONFERENCE_DAY}T${from}:00${tz}`,
-  end: `${CONFERENCE_DAY}T${to}:00${tz}`,
+export const block = (from: string, to: string, day = CONFERENCE_DAY) => ({
+  start: `${day}T${from}:00${tz}`,
+  end: `${day}T${to}:00${tz}`,
 });
 
 export const DEMO_USER_A = "u_demo_a";

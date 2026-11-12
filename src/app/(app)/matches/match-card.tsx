@@ -70,7 +70,7 @@ export function MatchDetails({
       )}
 
       <p className="rounded-xl bg-accent/10 px-4 py-3 leading-snug">
-        <span className="block text-xs font-semibold text-muted">Why them</span>
+        <span className="block text-xs font-semibold">Why them</span>
         {match.explanation}
       </p>
 
