@@ -143,6 +143,11 @@ export const MatchResult = z.object({
   mutual: z.boolean(),
   /** One "why this person" line. */
   explanation: z.string(),
+  /**
+   * How well this person fits the question, judged from their evidence when the AI could: "strong" (directly
+   * shows what was asked) or "partial" (related). People judged unrelated aren't returned. Absent: not judged.
+   */
+  fit: z.enum(["strong", "partial"]).optional(),
   score: z.number(),
   /**
    * Place in this ask's ranking. People already rejected or sent a request keep their place but

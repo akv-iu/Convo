@@ -17,6 +17,8 @@ export interface Narrowing {
   country: string | null;
   /** The rest of the box: a workplace, organisation or skill. */
   rest: string;
+  /** The whole box, for a workplace with a country in its name ("University of Georgia"). */
+  query: string;
 }
 
 const words = (text: string) => text.toLocaleLowerCase("en").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
@@ -34,8 +36,8 @@ const COUNTRY_NAMES = countries
 export function readNarrowing(query: string): Narrowing {
   const text = phrase(query);
   const hit = COUNTRY_NAMES.find(({ name }) => text.includes(name));
-  if (!hit) return { country: null, rest: query.trim() };
-  return { country: hit.code, rest: text.replace(hit.name, " ").trim() };
+  if (!hit) return { country: null, rest: query.trim(), query: query.trim() };
+  return { country: hit.code, rest: text.replace(hit.name, " ").trim(), query: query.trim() };
 }
 
 /** The workplace, organisations and skills a person shows on their card. */
@@ -64,9 +66,14 @@ export function showsCountry(person: Person, code: string): boolean {
   return person.visibility?.country !== false && person.filters.country === code;
 }
 
-/** Who the box lets through: everything named must fit, country and the rest alike. */
+/**
+ * Who the box lets through: everything named must fit, country and the rest alike. A box that is
+ * also a whole place someone shows ("University of Georgia") fits them as that place, too.
+ */
 export function narrowTo(narrowing: Narrowing): (person: Person) => boolean {
   const rest = wanted(narrowing.rest);
+  const whole = narrowing.country !== null && rest !== "";
   return (person) =>
-    (narrowing.country === null || showsCountry(person, narrowing.country)) && (rest === "" || showsPlace(person, narrowing.rest));
+    ((narrowing.country === null || showsCountry(person, narrowing.country)) && (rest === "" || showsPlace(person, narrowing.rest))) ||
+    (whole && showsPlace(person, narrowing.query));
 }
