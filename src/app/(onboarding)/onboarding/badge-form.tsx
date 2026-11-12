@@ -402,7 +402,8 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                   </button>
                 ))}
               </div>
-            <div>
+            {/* shrink-0: squeezed, the swatches would wrap onto a second row instead. */}
+            <div className="shrink-0">
               <ColourPicker defaultColour={colour} quiet hidden={colourFor !== "badge"} />
               <fieldset hidden={colourFor !== "picture"}>
                 <legend className="sr-only">Picture colour</legend>
