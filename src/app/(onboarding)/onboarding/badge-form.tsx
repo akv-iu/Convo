@@ -354,8 +354,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           badge hangs from a strap (lg:mt-16), so the same margin here lines up with the card.
         */}
         <div className="flex flex-col gap-5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start lg:mt-16">
-          <fieldset className="border-0 p-0">
+          <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="sr-only">Show on your badge</legend>
+            <p id="visibility-note" className="mb-2 text-sm text-muted">
+              {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
+            </p>
             <div className="flex max-w-sm flex-col gap-1.5">
               {sections.map((v) => (
                 <Switch

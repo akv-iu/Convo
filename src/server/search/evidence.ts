@@ -58,3 +58,28 @@ export function checkEvidence(personId: string, docs: readonly EvidenceDoc[], re
 export function expertiseOf(person: Person): readonly string[] {
   return (person as Person & { expertise?: readonly string[] }).expertise ?? [];
 }
+
+/**
+ * Words that say what kind of ask it is, not what it's about. Matching on them ranked anyone who
+ * mentions "roles", "hiring" or "work" (measured 2026-11-09: a healthcare-employer ask showed ten
+ * people with no healthcare evidence). Search on the remaining words; the semantic half still reads
+ * the whole question.
+ */
+const FILLER = new Set(`a about after also an and any anyone are as at be before best but by can could did difference do does
+for from get good had has have help here how i if in into is it its join joined joining just kind know knows learn like look
+looking lot made make me meet more most much my need needs not of on or our out people person potential practices question
+questions really role roles sort someone something specifically stand start started tell that the there these they this
+those tips to together type understand up very want wants was we what when where which who why will with would you your
+work works working job jobs career careers hire hires hiring hired employer employers company companies position positions
+opportunity opportunities experience experiences advice explain application team teams open`.split(/\s+/));
+
+/** The words of an ask that say what it's about, for keyword search. Falls back to the whole ask. */
+export function keyTerms(text: string): string {
+  const words = text.split(/[^\p{L}\p{N}+#.-]+/u).map((w) => w.replace(/^[.-]+|[.-]+$/g, ""))
+    .filter((w) => w.length > 1 && !FILLER.has(w.toLowerCase()));
+  return words.length ? words.join(" ") : text;
+}
+
+/** The workplace search may read: only when the person shows it on their badge. */
+export const shownWorkplace = (person: Person): string =>
+  person.visibility?.workplace === false ? "" : person.workplaceName?.trim() ?? "";
