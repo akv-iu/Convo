@@ -10,6 +10,9 @@
  */
 import { countryName } from "@/components/ui/countries";
 import { block, ror } from "@/contracts/fixtures";
+
+/** The day people.json (seeded into Elasticsearch) was generated for; the fake API's own demo day moves. */
+const SEEDED_DAY = "2026-11-09";
 import { BadgeColour, type EvidenceDoc, type Person } from "@/contracts/types";
 
 /** Niches the fixture experts own. Nobody generated claims them, so each sample ask keeps one clear best person. */
@@ -539,5 +542,5 @@ function freeTimes(random: () => number): Person["freeTimes"] {
     if (taken.every(([s, e]) => end <= s || start >= e)) taken.push([start, end]);
   }
   const clock = (halfHour: number) => `${String(9 + Math.floor(halfHour / 2)).padStart(2, "0")}:${halfHour % 2 ? "30" : "00"}`;
-  return taken.toSorted(([a], [b]) => a - b).map(([start, end]) => block(clock(start), clock(end)));
+  return taken.toSorted(([a], [b]) => a - b).map(([start, end]) => block(clock(start), clock(end), SEEDED_DAY));
 }
