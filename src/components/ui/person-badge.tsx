@@ -6,7 +6,7 @@
 import type { CSSProperties } from "react";
 import type { CardPerson } from "@/contracts/types";
 import { Avatar } from "./avatars";
-import { personColour } from "./badge-colours";
+import { personColour, pictureColour } from "./badge-colours";
 import { countryName } from "./countries";
 
 export function githubProfile(login: string): string {
@@ -35,7 +35,7 @@ export function PersonBadge({ person, caption, nameId }: { person: CardPerson | 
   const Name = nameId ? "h2" : "p";
   return (
     <div style={style} className="flex gap-3 rounded-xl border-l-8 border-[var(--badge)] bg-background px-3 py-2.5">
-      <Avatar avatar={person.avatar} name={person.name} className="mt-1 size-10 text-sm" />
+      <Avatar avatar={person.avatar} name={person.name} colour={pictureColour(person)} className="mt-1 size-10 text-sm" />
       <div className="min-w-0 flex-1">
         {caption && <p className="text-xs font-semibold text-muted">{caption}</p>}
         <Name id={nameId} className={`font-bold leading-snug break-words${nameId ? " text-2xl tracking-tight" : ""}`}>

@@ -13,6 +13,8 @@ import { findSlots } from "@/server/schedule/slots";
 import { search } from "@/server/search";
 import { Forbidden, store } from "./store";
 import { Person, type Request, type RequestView } from "@/contracts/types";
+import { NO_CONTACT, sharedContact } from "@/server/requests/contact-share";
+import { playDemo } from "./demo";
 import { visibleCard, visiblePerson } from "@/server/profile/visibility";
 import { enrichmentFake, noteProfileChange } from "./enrichment";
 
@@ -25,6 +27,7 @@ function withBadge(request: Request, otherId: string): RequestView {
     ...request,
     type: store.get().asks.get(request.askId)?.refined?.type ?? null,
     person: other ? visiblePerson(other) : null,
+    contact: sharedContact(store.get().contacts.get(otherId), request.status),
   };
 }
 
@@ -154,6 +157,7 @@ export const fake: Api = {
       fromUserId: userId,
       toPersonId: body.toPersonId,
       question: ask.refined?.text ?? ask.rawText,
+      message: body.message?.trim() || null,
       minutes: ask.refined?.minutes ?? MEETING_MINUTES,
       status: "sent" as const,
       reply: null,
@@ -164,12 +168,25 @@ export const fake: Api = {
     return request;
   },
 
+  async getContact({ userId }) {
+    store.person(userId);
+    return store.get().contacts.get(userId) ?? NO_CONTACT;
+  },
+
+  async putContact({ userId, body }) {
+    store.person(userId);
+    store.get().contacts.set(userId, body);
+    return body;
+  },
+
   async inbox({ userId }) {
+    if (config.fakeDemo) playDemo(userId);
     return [...store.get().requests.values()].filter((r) => r.toPersonId === userId).reverse()
       .map((r) => withBadge(r, r.fromUserId));
   },
 
   async sentRequests({ userId }) {
+    if (config.fakeDemo) playDemo(userId);
     return [...store.get().requests.values()].filter((r) => r.fromUserId === userId).reverse()
       .map((r) => withBadge(r, r.toPersonId));
   },

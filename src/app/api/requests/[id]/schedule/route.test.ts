@@ -21,7 +21,7 @@ import { GET as slots } from "../slots/route";
 
 const saved: SavedRequest = {
   id: "saved-request", askId: "saved-ask", fromUserId: DEMO_USER_A, toPersonId: DEMO_USER_B,
-  question: "Question?", minutes: 10, status: "accepted", reply: null, slot: null,
+  question: "Question?", message: null, minutes: 10, status: "accepted", reply: null, slot: null,
   createdAt: "2026-11-05T12:00:00.000Z",
 };
 const slot = { start: "2026-11-09T18:00:00.000Z", end: "2026-11-09T18:10:00.000Z" };

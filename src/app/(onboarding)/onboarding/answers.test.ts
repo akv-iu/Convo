@@ -121,8 +121,10 @@ describe("toProfileBody (step 2 save, db/Frontend-Support.md)", () => {
       badgeColour: "lilac",
       visibility: hidden,
       avatar: null, // no picture chosen: initials
+      avatarColour: null, // the picture follows the badge colour
     });
     expect(toProfileBody(complete, "lilac", hidden, "moon").avatar).toBe("moon");
+    expect(toProfileBody(complete, "lilac", hidden, "moon", "mint")).toMatchObject({ avatar: "moon", avatarColour: "mint" });
     expect(routes.putMe.body.safeParse(body).success).toBe(true);
   });
 

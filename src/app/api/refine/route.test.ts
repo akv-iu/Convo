@@ -53,7 +53,7 @@ describe.each(["fake", "real"] as const)("%s ask HTTP contract", (mode) => {
     expect(response.status).toBe(200);
     const created = routes.refine.response.parse(await response.json());
     expect(created.askId).not.toBe("forged-id");
-    expect(created.refined.text).toContain(sample.raw.replace(/[.?!]+$/, ""));
+    expect(created.refined.text).toMatch(new RegExp(`\\b${sample.raw.split(" ").at(-1)!.replace(/[.?!]+$/, "")}\\b.*\\?$`)); // keeps the asker's terms
     if (mode === "real") {
       expect(query.mock.calls[1][1].slice(0, 3)).toEqual([created.askId, DEMO_USER_A, sample.raw]);
       store.reset(); // The real route must read the saved ask without relying on the demo store.

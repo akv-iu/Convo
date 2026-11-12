@@ -33,6 +33,10 @@ the existing revision ordering.
     stored person and every `CardPerson`.
   - It's always shown, because it isn't a show/hide section.
   - Synthetic profiles have none. Photo uploads come later, as a separate field.
+- **Picture colour:** `avatarColour` is one of the badge colours, or `null` (the default) for the
+  same colour as the badge. It's saved with `PUT /api/me { avatarColour }` and stored in
+  `users.avatar_colour` (text, nullable, no default; migration `0007_avatar_colour`). It's
+  always shown, like the picture itself.
 - Custom workplace: `rorId: null`, `workplaceName: "Acme Robotics"`.
 - Directory workplace: its real `rorId`, with its name in `workplaceName`.
 - Independent: `rorId: null`, `workplaceName: null`.

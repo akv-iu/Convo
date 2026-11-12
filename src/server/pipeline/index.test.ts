@@ -192,3 +192,22 @@ describe("hiring preference", () => {
     expect(await match("hiring", hiddenNotHiring)).toEqual([alsoLooking.id, onlyWanted.id]);
   });
 });
+
+describe("search box narrowing by country", () => {
+  it("uses each person's saved visibility, so a country hidden since search last saw them isn't found", async () => {
+    const shown = { country: true, workplace: true, hiring: true };
+    const inSpain = (p: typeof onlyWanted) => ({ ...structuredClone(p), filters: { ...p.filters, country: "ES" }, visibility: shown });
+    search.searchCandidates.mockResolvedValueOnce([
+      { person: inSpain(onlyWanted), highlights: ["a"], score: 3 },
+      { person: inSpain(alsoLooking), highlights: ["b"], score: 2.5 },
+    ]);
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+    // The index still shows both countries; onlyWanted has since hidden theirs.
+    const savedVisibility = vi.fn(async () => new Map([[onlyWanted.id, { ...shown, country: false }], [alsoLooking.id, shown]]));
+
+    const results = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null, query: "Spain", savedVisibility });
+
+    expect(savedVisibility).toHaveBeenCalledTimes(1);
+    expect(results.map((r) => r.person.id)).toEqual([alsoLooking.id]);
+  });
+});

@@ -15,8 +15,11 @@ import type { Person, ProfileVisibility } from "@/contracts/types";
 import { saveErrorMessage, SHOW_ALL, VISIBILITY_SECTIONS } from "../answers";
 import { asSeenByOthers } from "./edits";
 
-export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p: Person) => void }) {
-  const visibility = person.visibility ?? SHOW_ALL;
+/**
+ * Saving the show/hide choices at once (PUT /api/me { visibility }), shared by the switches
+ * here and the erasers on step 4's badge, so both save, wait and fail the same way.
+ */
+export function useVisibilitySave(onSaved: (p: Person) => void) {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -40,14 +43,22 @@ export function SeenByOthers({ person, onSaved }: { person: Person; onSaved: (p:
     }
   }
 
+  return { save, saving, failure };
+}
+
+export function SeenByOthers({ person, saver }: { person: Person; saver: ReturnType<typeof useVisibilitySave> }) {
+  const visibility = person.visibility ?? SHOW_ALL;
+  const { save, saving, failure } = saver;
+
   return (
-    <section aria-labelledby="seen-heading" className="mt-10 border-t-2 border-border pt-8">
+    <section aria-labelledby="seen-heading">
       <h2 id="seen-heading" className="text-2xl font-extrabold tracking-tight">
         How people see you
       </h2>
       <p className="mt-1 text-muted">This is your row in other people&apos;s matches. Choose what it shows.</p>
 
-      <div className="mt-5 grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
+      {/* The public row, with what to hide straight under it. */}
+      <div className="mt-4 flex flex-col gap-5">
         <div className="rounded-2xl border-2 border-border bg-surface px-4 py-3" data-testid="seen-preview">
           <MatchSummary
             match={{

@@ -5,21 +5,23 @@
  * to the global stylesheet.
  */
 .onb {
-  --background: #eef1f7; /* mist */
+  /* Neutral paper and ink, so the badge colours and the two accents carry the colour. */
+  --background: #f6f4f0; /* warm paper */
   --surface: #ffffff;
-  --foreground: #14213d; /* ink */
-  --muted: #4f5a72;
-  --border: #cfd6e4;
-  --accent: #2b59ff; /* lanyard cobalt */
-  --accent-hover: #1f45d6;
+  --foreground: #1c1917; /* ink */
+  --muted: #57534e;
+  --border: #d9d4cc;
+  --accent: #c2410c; /* burnt orange, 5.2:1 on surface; white text on it is 5.2:1 */
+  --accent-hover: #9a3412;
   --on-accent: #ffffff;
+  --accent-2: #0f766e; /* teal, for the other way forward (Ask something else); 5.4:1 on surface */
   --badge: #ffd23f; /* badge stripe only */
   --logo-stripe: #ffd23f; /* the stripe on the Lanyard logo's badge */
   --badge-ink: #14213d; /* text on the badge stripe; every badge colour is light */
-  --skeleton: #dfe4ee;
-  --danger: #c2410c; /* error text, 5.2:1 on surface */
-  --danger-border: #c2410c;
-  --popover-shadow: 0 18px 40px -18px rgb(20 33 61 / 0.45); /* badge and pop-ups */
+  --skeleton: #e7e2da;
+  --danger: #b91c1c; /* error text: red, so it never reads as an action; 6.5:1 on surface */
+  --danger-border: #b91c1c;
+  --popover-shadow: 0 18px 40px -18px rgb(28 25 23 / 0.4); /* badge and pop-ups */
 
   background: var(--background);
   color: var(--foreground);
@@ -28,17 +30,18 @@
 
 @media (prefers-color-scheme: dark) {
   .onb {
-    --background: #0d1630;
-    --surface: #17223f;
-    --foreground: #eef2ff;
-    --muted: #b6c0d8;
-    --border: #2d3b5f;
-    --accent: #7c9bff;
-    --accent-hover: #a3b9ff;
-    --on-accent: #0d1630;
-    --skeleton: #2a3756;
-    --danger: #fdba74;
-    --danger-border: #fb923c;
+    --background: #141414; /* charcoal, no blue cast */
+    --surface: #212121;
+    --foreground: #f5f5f4;
+    --muted: #c2bfba;
+    --border: #3a3a3a;
+    --accent: #ff9e6d; /* apricot, 9.6:1 on the background */
+    --accent-hover: #ffbb94;
+    --on-accent: #141414;
+    --accent-2: #5eead4; /* teal */
+    --skeleton: #2e2e2e;
+    --danger: #fca5a5; /* error text: light red, distinct from the apricot accent */
+    --danger-border: #f87171;
     --popover-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.7);
   }
 }
@@ -77,4 +80,14 @@
 @keyframes hero-tick {
   from { transform: translateY(-12%); opacity: 0.35; }
   to { transform: none; opacity: 1; }
+}
+
+/* The empty-inbox radar (scan-radar.tsx). Used only through motion-safe:. */
+@keyframes scan-sweep {
+  to { transform: rotate(-360deg); }
+}
+@keyframes scan-ping {
+  0%, 70%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.8); }
+  8% { opacity: 1; transform: translate(-50%, -50%) scale(1.6); }
+  30% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
 }

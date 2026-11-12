@@ -10,7 +10,8 @@ import { mutateApprovedProfile } from "./approved-storage";
 const owner = people[0].id;
 const initial = () => ({ ...people[0], createdAt: new Date("2026-11-07T12:00:00Z"), revision: 5, textVersion: 2, expertise: null,
   githubEvidence: [], githubEvidencePending: false, profileEvidence: [], profileSources: [], profileEvidencePending: false,
-  workplaceName: null, badgeColour: "mint" as const, avatar: null, visibility: { country: true, workplace: true, hiring: true } });
+  workplaceName: null, badgeColour: "mint" as const, avatar: null, avatarColour: null,
+  contactEmail: null, contactPhone: null, contactShare: "email" as const, visibility: { country: true, workplace: true, hiring: true } });
 type User = typeof users.$inferSelect;
 const raw = (user: User) => ({ rows: [Object.keys(getTableColumns(users)).map(key => {
   const value = user[key as keyof User]; return value instanceof Date ? value.toISOString() : value;

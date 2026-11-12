@@ -12,9 +12,14 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { AvatarId, Person, TimeBlock } from "@/contracts/types";
+import { CONFERENCE_DAY_NAME } from "@/contracts/fixtures";
+import type { Person, TimeBlock } from "@/contracts/types";
 import { Badge, BadgeChip } from "../../_components/badge";
+import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
+import { readDraft } from "../../_components/draft";
+import { badgeDetails, type BadgeDetails } from "./badge-details";
 import { showSavedColour } from "../../_components/badge-prefs";
+import { colourHex } from "@/components/ui/badge-colours";
 import { countryName } from "@/components/ui/countries";
 import { loadProblem } from "../profile/edits";
 import {
@@ -36,6 +41,8 @@ import {
 import { ImportStatus } from "./import-status";
 
 export const NEXT_STEP = "/onboarding/profile";
+
+
 
 const blocks = blocksForDay();
 const hours = Array.from(new Set(blocks.map((b) => Math.floor(b.from / 60))));
@@ -72,19 +79,26 @@ export function FreeTimeForm({ enrichment = false }: { enrichment?: boolean }) {
   const [mustResend, setMustResend] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [who, setWho] = useState<{ name: string; handle: Person["githubLogin"]; country: string; avatar: AvatarId | null } | null>(null);
+  const [who, setWho] = useState<BadgeDetails | null>(null);
 
-  // The badge shows the real name when the profile loads; it's not needed for this step, so failures are ignored.
+  // The badge shows the same details as step 2: what was entered on step 1 if it isn't saved yet,
+  // otherwise the saved profile, with the same lines hidden. Not needed for this step, so failures
+  // only leave the placeholder badge.
   useEffect(() => {
     let live = true;
-    fetch("/api/me", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<Person>) : null))
-      .then((p) => {
-        if (!live || !p) return;
-        showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
-        setWho({ name: p.name, handle: p.githubLogin, country: p.filters.country, avatar: p.avatar ?? null });
-      })
-      .catch(() => {});
+    void (async () => {
+      let p: Person | null = null;
+      try {
+        const r = await fetch("/api/me", { cache: "no-store" });
+        p = r.ok ? ((await r.json()) as Person) : null;
+      } catch {
+        p = null; // the placeholder badge stays
+      }
+      if (!live) return;
+      if (p) showSavedColour(p.badgeColour); // the saved colour wins over this browser's preview cookie
+      const details = badgeDetails(p, readDraft());
+      if (details) setWho(details);
+    })();
     return () => {
       live = false;
     };
@@ -192,7 +206,14 @@ export function FreeTimeForm({ enrichment = false }: { enrichment?: boolean }) {
 
   const labels = runLabels(blocks, picked);
   const badge = (
-    <Badge name={who?.name} handle={who?.handle} avatar={who?.avatar} label={who ? countryName(who.country) : undefined}>
+    <Badge
+      name={who?.name}
+      handle={who?.handle ?? undefined}
+      avatar={who?.avatar}
+      avatarColour={who?.avatarColour ? colourHex(who.avatarColour) : undefined}
+      label={who ? <BadgeCountry country={countryName(who.country)} shown={who.visibility.country} /> : undefined}
+    >
+      {who && <BadgeLines workplace={who.workplace} hiring={who.hiring} visibility={who.visibility} />}
       <span className="mt-4 block">
         <span className="block text-xs text-muted">Free to meet</span>
         <span className="flex flex-wrap gap-1.5 pt-1.5">
@@ -215,7 +236,7 @@ export function FreeTimeForm({ enrichment = false }: { enrichment?: boolean }) {
       <div className="flex flex-col">
         <h1 className={headingClass}>When are you free?</h1>
         <p className="mt-3 max-w-md text-lg text-muted">
-          Tap the times you could meet on Monday 9 November. People can only book you then.
+          Tap the times you could meet on {CONFERENCE_DAY_NAME}. People can only book you then.
         </p>
         {enrichment && <ImportStatus />}
 

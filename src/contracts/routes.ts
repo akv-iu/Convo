@@ -11,6 +11,7 @@ import {
 import {
   Ask,
   AskType,
+  ContactDetails,
   MatchResult,
   Person,
   RefinedAsk,
@@ -120,6 +121,21 @@ export const routes = {
     body: Person.partial().omit({ id: true, synthetic: true, githubLogin: true, expertise: true }),
     response: Person,
   }),
+  getContact: def({
+    method: "GET",
+    path: "/api/me/contact",
+    description: "The signed-in user's private contact details, and which to share once a request is agreed.",
+    usedBy: "A1",
+    response: ContactDetails,
+  }),
+  putContact: def({
+    method: "PUT",
+    path: "/api/me/contact",
+    description: "Save the signed-in user's contact details and what to share when a request is agreed.",
+    usedBy: "A1",
+    body: ContactDetails,
+    response: ContactDetails,
+  }),
   searchRor: def({
     method: "GET",
     path: "/api/ror?q=",
@@ -198,9 +214,10 @@ export const routes = {
   sendRequest: def({
     method: "POST",
     path: "/api/requests",
-    description: "Swipe right: send the refined question to a person. One request per person per ask; sending again returns it.",
+    description:
+      "Swipe right: send the refined question to a person, with an optional note to them. One request per person per ask; sending again returns it.",
     usedBy: "A2",
-    body: z.object({ askId: z.string(), toPersonId: z.string() }),
+    body: z.object({ askId: z.string(), toPersonId: z.string(), message: z.string().trim().max(500).optional() }),
     response: Request,
   }),
   inbox: def({

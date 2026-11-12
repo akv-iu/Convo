@@ -11,7 +11,7 @@ vi.mock("@/server/search", () => ({ search: { getAvailability } }));
 import { bookSlot, getSlots } from "./service";
 
 const request: Request = {
-  id: "request-id", askId: "ask-id", fromUserId: "sender", toPersonId: "receiver", question: "Question?",
+  id: "request-id", askId: "ask-id", fromUserId: "sender", toPersonId: "receiver", question: "Question?", message: null,
   minutes: 10, status: "accepted", reply: null, slot: null, createdAt: "2026-11-05T12:00:00.000Z",
 };
 const slot = { start: "2026-11-09T18:00:00.000Z", end: "2026-11-09T18:10:00.000Z" };

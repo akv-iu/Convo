@@ -13,8 +13,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ScanRadar } from "@/components/ui/scan-radar";
+import { SharedContactCard } from "@/components/ui/shared-contact";
 import type { Request, RequestView } from "@/contracts/types";
-import { lengthLabel, typeLabel } from "../ask/asks";
+import { lengthLabel } from "../ask/asks";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SlotPicker } from "./slot-picker";
 import {
@@ -72,6 +74,24 @@ export function InboxView() {
         ? { state: "ready", requests: cur.requests.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)) }
         : cur,
     );
+    // Agreeing shares contact details both ways: fetch the asker's, which the plain request doesn't carry.
+    if (updated.status === "accepted" || updated.status === "scheduled") void loadContact(updated.id);
+  }
+
+  async function loadContact(id: string) {
+    try {
+      const res = await fetch("/api/inbox");
+      if (!res.ok) return;
+      const fresh = ((await res.json()) as RequestView[]).find((r) => r.id === id);
+      if (!fresh?.contact) return;
+      setLoad((cur) =>
+        cur.state === "ready"
+          ? { state: "ready", requests: cur.requests.map((r) => (r.id === id ? { ...r, contact: fresh.contact } : r)) }
+          : cur,
+      );
+    } catch {
+      // The details show on the next visit; nothing else depends on them.
+    }
   }
 
   const pending = load.state === "ready" ? load.requests.filter((r) => r.status === "sent").length : 0;
@@ -112,13 +132,16 @@ export function InboxView() {
         )}
 
         {load.state === "ready" && load.requests.length === 0 && (
-          <div className="rounded-2xl border-2 border-border bg-surface p-6">
+          <div className="flex flex-col items-center rounded-2xl border-2 border-border bg-surface p-6 text-center sm:flex-row sm:gap-8 sm:text-left">
+            <ScanRadar className="w-32 shrink-0 sm:w-36" />
+            <div className="mt-5 sm:mt-0">
             <h2 className="text-2xl font-extrabold tracking-tight">No requests yet</h2>
-            <p className="mt-2 text-muted">When someone sends you their question, it shows up here.</p>
+            <p className="mt-2 text-muted">Lanyard is looking for people your skills can help. When someone sends you their question, it shows up here.</p>
             <div className="mt-5">
               <Button href="/ask" variant="secondary">
                 Ask your own question
               </Button>
+            </div>
             </div>
           </div>
         )}
@@ -199,7 +222,6 @@ function RequestCard({
         >
           {statusLabel[request.status]}
         </span>
-        {request.type && <span className="font-semibold">{typeLabel[request.type]}</span>}
         <span className="text-muted">{lengthLabel(request.minutes)}</span>
         <span className="text-muted">· {venueTime(request.createdAt)}</span>
       </div>
@@ -211,6 +233,12 @@ function RequestCard({
       <h2 id={qId} className="mt-3 text-xl font-semibold leading-snug tracking-tight break-words">
         {request.question}
       </h2>
+      {request.message && (
+        <p className="mt-3 rounded-xl border-2 border-border px-4 py-3 break-words">
+          <span className="block text-xs font-semibold text-muted">Their message</span>
+          {request.message}
+        </p>
+      )}
 
       {request.status === "answered" && request.reply && (
         <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3">
@@ -222,6 +250,9 @@ function RequestCard({
         <p className="mt-3 rounded-xl bg-accent/10 px-4 py-3 font-semibold">Meeting booked: {venueRange(request.slot)}</p>
       )}
       {request.status === "declined" && <p className="mt-3 text-muted">You declined this one.</p>}
+      {(request.status === "accepted" || request.status === "scheduled") && request.contact && (
+        <SharedContactCard contact={request.contact} name={request.person?.name ?? "them"} />
+      )}
       {request.status === "accepted" && !request.slot && (
         <SlotPicker request={request} onBooked={(r) => onSaved(r, `Meeting booked: ${r.slot ? venueRange(r.slot) : ""}`)} onReload={onReload} />
       )}
@@ -246,6 +277,12 @@ function RequestCard({
             {busy === "decline" ? "Declining…" : "Decline"}
             <span className="sr-only"> this request</span>
           </Button>
+          <p className="text-sm text-muted sm:col-span-3">
+            Accepting shares the contact details you chose with {request.person?.name ?? "them"}, and theirs with you.{" "}
+            <a href="/onboarding/profile" className="font-semibold text-accent underline-offset-4 hover:underline">
+              Change what you share
+            </a>
+          </p>
         </div>
       )}
 

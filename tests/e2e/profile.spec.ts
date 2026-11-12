@@ -77,12 +77,37 @@ test.describe("your details (step 4)", () => {
     }
   });
 
+  test("step 4's badge keeps the hiding rules: hidden lines aren't there, and an eraser hides one and saves", async ({ page }) => {
+    // The save is answered here, so no shared fake person changes.
+    await page.route("**/api/me", async (route) => {
+      if (route.request().method() !== "PUT") return route.fallback();
+      const me = await (await page.request.get("/api/me", { headers: { "x-demo-user": "u_demo_b" } })).json();
+      return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
+    });
+    // u_demo_b: no test changes its show/hide choices, so the badge starts showing everything.
+    const saved = await stored(page, "u_demo_b");
+    await open(page, "u_demo_b");
+    const badge = visibleBadge(page);
+    await expect(badge.locator("[data-eraser]")).not.toHaveCount(0);
+    const stripeCountry = badge.locator("[data-badge-stripe] [data-line-text]");
+    const countryName = (await stripeCountry.textContent())!;
+    const country = page.getByRole("group", { name: "Show in your row" }).getByRole("switch", { name: "Country" });
+    await expect(country).toBeChecked();
+    const saving = page.waitForRequest((r) => r.url().endsWith("/api/me") && r.method() === "PUT");
+    await stripeCountry.click(); // tap the country on the badge
+    expect((await saving).postDataJSON()).toEqual({ visibility: { ...saved.visibility, country: false } });
+    await expect(country).not.toBeChecked(); // the switch below follows
+    // Hidden means gone from the badge, as on step 2.
+    await expect(badge.locator("[data-badge-stripe]")).not.toContainText(countryName);
+  });
+
   test("Yes finishes without saving anything", async ({ page }) => {
     await open(page, "p_006");
     let saved = false;
     page.on("request", (req) => {
       if (isSave(req)) saved = true;
     });
+    await page.getByRole("textbox", { name: "Email" }).fill("demo@example.com");
     await yes(page).click();
     await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
     expect(saved).toBe(false);
@@ -276,4 +301,43 @@ test.describe("your details (step 4)", () => {
       await scan("ask screen");
     });
   }
+});
+
+test.describe("contact details (step 4)", () => {
+  const email = (page: Page) => page.getByRole("textbox", { name: "Email" });
+  const saved = { email: "saved@example.com", phone: null, share: "email" };
+
+  test("saved details that arrive late don't replace what was already typed", async ({ page }) => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let served = false;
+    await page.route("**/api/me/contact", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      await held;
+      served = true;
+      await route.fulfill({ json: saved });
+    });
+    await open(page, "p_006");
+    await email(page).fill("typed@example.com");
+    release();
+    await expect.poll(() => served).toBe(true);
+    await expect(email(page)).toHaveValue("typed@example.com");
+
+    await page.reload(); // nothing typed: the saved details fill the form
+    await expect(email(page)).toHaveValue("saved@example.com");
+  });
+
+  test("a failed load says so, with Try again, instead of an empty form", async ({ page }) => {
+    let failing = true;
+    await page.route("**/api/me/contact", (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      return failing ? route.fulfill({ status: 503, json: { error: "Unavailable" } }) : route.fulfill({ json: saved });
+    });
+    await open(page, "p_006");
+    await expect(page.getByRole("alert").filter({ hasText: "Your saved contact details didn't load" })).toBeVisible();
+    failing = false;
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(email(page)).toHaveValue("saved@example.com");
+    await expect(page.getByRole("alert").filter({ hasText: "didn't load" })).toHaveCount(0);
+  });
 });

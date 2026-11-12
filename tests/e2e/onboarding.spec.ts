@@ -24,6 +24,8 @@ const OXFORD = { id: "https://ror.org/052gg0110", name: "University of Oxford", 
 const SHOW_ALL = { country: true, workplace: true, hiring: true };
 const LILAC = "rgb(196, 181, 253)";
 const CORAL = "rgb(255, 163, 138)";
+/** A badge-colour swatch (the picture has its own colour swatches with the same names). */
+const badgeSwatch = (page: Page, name: string) => page.getByRole("group", { name: "Badge colour" }).getByRole("radio", { name });
 const visibilitySwitch = (page: Page, name: string) =>
   page.getByRole("group", { name: "Show on your badge" }).getByRole("switch", { name });
 /** The visible row a person taps (the input itself is visually hidden), so the click is hit-tested like a real tap. */
@@ -66,7 +68,7 @@ test.describe("your badge (step 2)", () => {
     await openWithDraft(page, "p_004");
     await page.getByText("Yes, I'm hiring", { exact: true }).click();
     await expect(visibleBadge(page)).toContainText("Hiring");
-    await page.getByRole("radio", { name: "Lilac" }).check({ force: true });
+    await badgeSwatch(page, "Lilac").check({ force: true });
     await expect.poll(() => stripeColour(page)).toBe(LILAC);
 
     const saving = page.waitForRequest(isSave);
@@ -78,6 +80,7 @@ test.describe("your badge (step 2)", () => {
       badgeColour: "lilac",
       visibility: SHOW_ALL,
       avatar: null, // no picture chosen: initials
+      avatarColour: null, // the picture follows the badge colour
     });
     await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
 
@@ -101,7 +104,7 @@ test.describe("your badge (step 2)", () => {
     await openWithDraft(page, person, { name: "Grace Hopper", country: "US", workplace: { kind: "custom", name: acme } });
     await expect(visibleBadge(page)).toContainText(acme);
     await page.getByText("Not right now", { exact: true }).click();
-    await page.getByRole("radio", { name: "Coral" }).check({ force: true });
+    await badgeSwatch(page, "Coral").check({ force: true });
     const saving = page.waitForRequest(isSave);
     await continueButton(page).click();
     expect((await saving).postDataJSON()).toMatchObject({ filters: { rorId: null }, workplaceName: acme, badgeColour: "coral" });
@@ -111,14 +114,14 @@ test.describe("your badge (step 2)", () => {
     // Same browser, fresh load of step 2 (the draft is gone, so this is the saved profile).
     await page.goto("/onboarding");
     await expect(visibleBadge(page)).toContainText(acme);
-    await expect(page.getByRole("radio", { name: "Coral" })).toBeChecked();
+    await expect(badgeSwatch(page, "Coral")).toBeChecked();
 
     // Another browser: no draft and no colour cookie, only the saved profile.
     const other = await freshBrowser(browser, person);
     await other.goto("/onboarding");
     await expect(visibleBadge(other)).toContainText(acme);
     await expect(visibleBadge(other)).toContainText("Grace Hopper");
-    await expect(other.getByRole("radio", { name: "Coral" })).toBeChecked();
+    await expect(badgeSwatch(other, "Coral")).toBeChecked();
     await expect.poll(() => stripeColour(other)).toBe(CORAL);
     await other.goto("/onboarding/profile");
     await expect.poll(() => stripeColour(other)).toBe(CORAL);
@@ -230,6 +233,42 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
+  test("the switches sit beside the badge, level with the top of the card", async ({ page, isMobile }) => {
+    test.skip(isMobile, "on phones the switches stack under the badge");
+    await openWithDraft(page, "p_003");
+    const card = await page.locator("[data-badge]:visible [data-badge-stripe]").locator("..").boundingBox();
+    const switches = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
+    expect(card && switches).toBeTruthy();
+    // The card hangs at a slight tilt on laptops, so its box reaches a few pixels past its edges.
+    expect(Math.abs(card!.y - switches!.y)).toBeLessThanOrEqual(12);
+    expect(switches!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
+  });
+
+  test("each eraser sits right after the text it removes", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    const badge = visibleBadge(page);
+    const text = await badge.getByText("University of Oxford", { exact: true }).boundingBox();
+    const erasers = badge.locator("[data-eraser]");
+    await expect(erasers).toHaveCount(3);
+    // The workplace eraser is the one on the same line, just after the name.
+    const boxes = await erasers.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    const sameLine = boxes.filter((b) => Math.abs(b.y + b.height / 2 - (text!.y + text!.height / 2)) < text!.height);
+    expect(sameLine).toHaveLength(1);
+    expect(sameLine[0].x - (text!.x + text!.width)).toBeGreaterThanOrEqual(0);
+    expect(sameLine[0].x - (text!.x + text!.width)).toBeLessThanOrEqual(16);
+  });
+
+  test("step 3's badge shows the details entered on step 1, not other ones", async ({ page }) => {
+    await openWithDraft(page, "p_003", { name: "Grace Hopper", country: "US", workplace: { kind: "custom", name: "Harbor Compilers" } });
+    await page.goto("/onboarding/free-time"); // the step 1 answers are still in this tab
+    const badge = visibleBadge(page);
+    await expect(badge).toContainText("Grace Hopper");
+    await expect(badge).toContainText("Harbor Compilers");
+    await expect(badge).toContainText("United States");
+    const me = await stored(page, "p_003");
+    if (me.name !== "Grace Hopper") await expect(badge).not.toContainText(me.name);
+  });
+
   test("the + on the badge picks a picture: it shows on the badge and is saved with Continue", async ({ page, isMobile }) => {
     await openWithDraft(page, "p_003");
     const badge = visibleBadge(page);
@@ -265,9 +304,16 @@ test.describe("your badge (step 2)", () => {
       const me = await (await page.request.get("/api/me", { headers: { "x-demo-user": "p_003" } })).json();
       return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
     });
+    // The picture can have its own colour; the stripe keeps the badge colour.
+    await page.getByRole("button", { name: "Picture", exact: true }).click();
+    const pictureColours = page.getByRole("group", { name: "Picture colour" });
+    await expect(pictureColours.getByRole("radio", { name: "Same as badge" })).toBeChecked();
+    await pictureColours.locator("label").filter({ has: page.getByRole("radio", { name: "Lilac" }) }).click();
+    await expect(badge.locator("[data-avatar]")).toHaveCSS("background-color", LILAC);
+    await expect.poll(() => stripeColour(page)).not.toBe(LILAC);
     const saving = page.waitForRequest(isSave);
     await continueButton(page).click();
-    expect((await saving).postDataJSON()).toMatchObject({ avatar: "moon" });
+    expect((await saving).postDataJSON()).toMatchObject({ avatar: "moon", avatarColour: "lilac" });
     await expect(page).toHaveURL(/\/onboarding\/free-time$/, { timeout: AFTER_SUBMIT });
   });
 
@@ -290,7 +336,7 @@ test.describe("your badge (step 2)", () => {
     await expect(badge).toContainText("University of Oxford");
     // The colour picker and the switches sit with the badge, in one section.
     const look = page.getByRole("region", { name: "Your badge's look" });
-    await expect(look.getByRole("radio", { name: "Lilac" })).toHaveCount(1);
+    await expect(look.getByRole("group", { name: "Badge colour" }).getByRole("radio", { name: "Lilac" })).toHaveCount(1);
     await expect(look.getByRole("group", { name: "Show on your badge" })).toBeVisible();
   });
 
@@ -305,7 +351,7 @@ test.describe("your badge (step 2)", () => {
       return route.fulfill({ response: res, json: { ...(await res.json()), badgeColour: "lilac" } });
     });
     await openWithDraft(page, "p_003");
-    await expect(page.getByRole("radio", { name: "Lilac" })).toBeChecked();
+    await expect(badgeSwatch(page, "Lilac")).toBeChecked();
     await expect.poll(() => stripeColour(page)).toBe(LILAC);
     await expect(page.locator("form:visible")).toHaveCount(1);
     const cookie = (await page.context().cookies()).find((c) => c.name === "convo_badge");
@@ -320,7 +366,7 @@ test.describe("your badge (step 2)", () => {
       route.request().method() === "GET" ? route.fulfill({ status: 409, json: { error: "Complete onboarding first." } }) : route.fallback(),
     );
     await openWithDraft(page, "p_003");
-    await expect(page.getByRole("radio", { name: "Coral" })).toBeChecked();
+    await expect(badgeSwatch(page, "Coral")).toBeChecked();
     await expect.poll(() => stripeColour(page)).toBe(CORAL);
   });
 

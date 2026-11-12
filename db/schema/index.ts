@@ -3,7 +3,7 @@
  * the searchable copy. Run `npm run db:generate` after changing this.
  */
 import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import type { AvatarId, BadgeColour, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
+import type { AvatarId, BadgeColour, ContactShare, EvidenceDoc, HardFilters, ProfileVisibility, RefinedAsk, TimeBlock } from "@/contracts/types";
 import type { ApprovedEvidence, ProfileSource } from "../../src/server/profile/evidence";
 
 export const users = pgTable("users", {
@@ -29,6 +29,12 @@ export const users = pgTable("users", {
   profileEvidencePending: boolean("profile_evidence_pending").notNull().default(false),
   expertise: jsonb("expertise").$type<string[]>(),
   textVersion: integer("text_version").notNull().default(0),
+  /** The picture circle's colour (Person.avatarColour); null follows the badge colour. Last, so existing row reads keep their order. */
+  avatarColour: text("avatar_colour").$type<BadgeColour>(),
+  /** Private contact details (ContactDetails), shared only on agreed requests. Last, like avatar. */
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  contactShare: text("contact_share").$type<ContactShare>().notNull().default("email"),
 });
 
 /** Provider subjects (GitHub numeric ID / Google sub) belong to one stable Lanyard account. */
@@ -94,6 +100,8 @@ export const requests = pgTable(
     fromUserId: text("from_user_id").notNull().references(() => users.id),
     toPersonId: text("to_person_id").notNull(),
     question: text("question").notNull(),
+    /** The sender's own note to this person, or null. */
+    message: text("message"),
     minutes: integer("minutes").notNull(),
     status: text("status", { enum: ["sent", "accepted", "declined", "answered", "scheduled"] }).notNull().default("sent"),
     reply: text("reply"),

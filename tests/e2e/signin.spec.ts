@@ -31,6 +31,8 @@ test.describe("about you (step 1)", () => {
 
   test("home page leads to step 1", async ({ page }) => {
     await page.goto("/");
+    await expect(page.getByText("Ask questions about new technologies or jobs in order to meet the people who can help.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Lanyard" })).toBeVisible();
     await page.getByRole("link", { name: "Get started" }).click();
     await expect(page).toHaveURL(/\/signin$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make your badge");

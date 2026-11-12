@@ -78,6 +78,7 @@ function fakeMatches(n: number) {
       workplaceName: null,
       badgeColour: "mint",
       avatar: rank === 1 ? "star" : null,
+      avatarColour: rank === 1 ? "lilac" : null,
       synthetic: rank % 2 === 1,
       freeTimes: [],
     },
@@ -182,6 +183,8 @@ test.describe("match list (A2 steps 1-2)", () => {
     expect(await rows(page).count()).toBeLessThanOrEqual(3);
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
+      // The theme change fades colours; a scan mid-fade reads blended ones.
+      await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
       expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, colorScheme).toEqual([]);
     }
   });
@@ -198,15 +201,33 @@ test.describe("match list (A2 steps 1-2)", () => {
     const c = card(page);
     await expect(c.getByRole("heading", { level: 2 })).toHaveText("Person 1");
     await expect(c.locator("mark")).toHaveText("leader election");
-    await expect(c).not.toContainText("Not hiring"); // hidden hiring (null) is not "not hiring"
+    // The row carries who they are; hidden fields are on neither the row nor the open part.
+    await expect(rows(page).nth(0)).not.toContainText("Not hiring"); // hidden hiring (null) is not "not hiring"
+    await expect(rows(page).nth(0)).not.toContainText("United States");
     await expect(c).not.toContainText("United States");
     await page.route("**/api/rejections", (route) => route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } }));
     await passButton(page).click();
     await expect(c.getByRole("heading", { level: 2 })).toHaveText("Person 2");
-    await expect(c).toContainText("Synthetic profile");
-    await expect(c).toContainText("Looking for someone like you too");
-    await expect(c).toContainText("Hiring");
-    await expect(c).toContainText("United States");
+    const row = rows(page).nth(0); // Person 1 left the list
+    await expect(row).toContainText("Synthetic profile");
+    await expect(row).toContainText("Looking for someone like you too");
+    await expect(row).toContainText("Hiring");
+    await expect(row).toContainText("United States");
+  });
+
+  test("the open part doesn't repeat the row: no second name, handle, facts or labels", async ({ page }) => {
+    await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
+    await open(page, "made-up");
+    await rows(page).nth(1).click(); // Person 2: facts, mutual and synthetic labels on the row
+    const c = card(page);
+    // The name stays as a heading for screen readers only, so the open part is still named.
+    await expect(c.getByRole("heading", { level: 2 })).toHaveText("Person 2");
+    await expect(c.getByRole("heading", { level: 2 })).toHaveClass(/sr-only/);
+    await expect(c.locator("[data-avatar]")).toHaveCount(0);
+    for (const repeated of ["Synthetic profile", "Looking for someone like you too", "United States"]) {
+      await expect(c.getByText(repeated)).toHaveCount(0);
+    }
+    await expect(c.getByRole("link", { name: /Their GitHub profile/ })).toHaveAttribute("href", "https://github.com/person2");
   });
 
   test("rows and open profiles show each person's picture, or their initials", async ({ page }) => {
@@ -215,15 +236,24 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
     await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveText("P1");
     await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
-    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "initials");
-    await rows(page).nth(1).click();
-    await expect(card(page).locator("[data-avatar]")).toHaveAttribute("data-avatar", "star");
+    // The picture's own colour (lilac) over the badge colour (mint); without one it follows the badge.
+    await expect(rows(page).nth(1).locator("[data-avatar]")).toHaveCSS("background-color", "rgb(196, 181, 253)");
+    await expect(rows(page).nth(0).locator("[data-avatar]")).toHaveCSS("background-color", "rgb(94, 230, 180)");
+    // The open part doesn't repeat the picture: the row above it shows it.
+    await expect(card(page).locator("[data-avatar]")).toHaveCount(0);
   });
 
-  test("the open profile lists projects and papers, linking out safely", async ({ page }) => {
+  test("the open profile ends with their articles, projects and papers, linking out safely, just above Pass and Send", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
     await open(page, "made-up");
-    const works = card(page).getByRole("list", { name: "Person 1's projects and papers" });
+    const works = card(page).getByRole("list", { name: "Person 1's articles, projects and papers" });
+    // It's the last thing before the buttons.
+    const order = await card(page).evaluate((panel) => {
+      const list = panel.querySelector("ul[aria-label$='articles, projects and papers']");
+      const pass = [...panel.querySelectorAll("button")].find((b) => b.textContent === "Pass");
+      return list && pass ? list.compareDocumentPosition(pass) & Node.DOCUMENT_POSITION_FOLLOWING : 0;
+    });
+    expect(order).toBeTruthy();
     await expect(works.getByRole("listitem")).toHaveCount(2);
     await expect(works.getByRole("listitem").nth(0)).toContainText("Repository");
     const link = works.getByRole("link", { name: "etcd-io/raft (opens in a new tab)" });
@@ -235,7 +265,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(works.getByRole("listitem").nth(1).getByRole("link")).toHaveCount(0);
     // Someone with no evidence has no empty section.
     await rows(page).nth(1).click();
-    await expect(card(page).getByText("Projects and papers")).toHaveCount(0);
+    await expect(card(page).getByText("Articles, projects and papers")).toHaveCount(0);
   });
 
   test("evidence links come from the server's matches", async ({ page }) => {
@@ -294,7 +324,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(card(page)).toBeVisible();
     await page.getByRole("button", { name: "Search", exact: true }).click(); // empty box, same as now
     await expect(rows(page)).toHaveCount(2);
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(rows(page)).toHaveCount(2);
     await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -367,7 +397,7 @@ test.describe("match list (A2 steps 1-2)", () => {
       return route.fulfill({ json: { rejections: 1, hiddenBelowRank: null } });
     });
     await open(page, "made-up");
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Go");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Go");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText(/Showing people for .Go./)).toBeVisible();
     await rows(page).first().click();
@@ -512,11 +542,12 @@ test.describe("match list (A2 steps 1-2)", () => {
     await open(page, "made-up");
     // No search: the earlier requests explain the empty list.
     await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Haskell");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches yet");
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches your search");
     await expect(list(page)).toContainText("Try a different search, or show everyone.");
     await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0); // an empty search never offers to close the ask
   });
 
   test("after a save, focus stays where the user moved it", async ({ page, isMobile }) => {
@@ -607,7 +638,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     await open(page, askId);
     await expect(card(page)).toBeVisible();
     const searching = page.waitForRequest((r) => r.url().endsWith("/api/match") && !!r.postDataJSON().query);
-    await page.getByRole("searchbox", { name: "Narrow the list" }).fill("Rust");
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Rust");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     expect((await searching).postDataJSON()).toEqual({ askId, query: "Rust" });
     await expect(page.getByText(/Showing people for .Rust./)).toBeVisible();
@@ -619,6 +650,14 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.route("**/api/match", (route) => route.fulfill({ json: [] }));
     await open(page, "made-up");
     await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    // With no search, the empty list asks whether to keep the request open; Yes keeps it.
+    await expect(page.getByText("Leave as active request?")).toBeVisible();
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Your request stays active." })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "No one matches your search" })).toBeVisible();
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0);
     await page.unroute("**/api/match");
 
     await open(page, "not-a-real-ask");

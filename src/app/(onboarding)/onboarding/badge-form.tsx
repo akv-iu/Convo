@@ -22,11 +22,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { EraserIcon } from "@/components/ui/eraser-icon";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, avatars } from "@/components/ui/avatars";
+import { badgeColours, colourHex } from "@/components/ui/badge-colours";
 import type { AvatarId, Person, ProfileVisibility } from "@/contracts/types";
-import { Badge, BadgeChip } from "../_components/badge";
+import { Badge } from "../_components/badge";
+import { BadgeCountry, BadgeLines } from "../_components/badge-lines";
 import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
 import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
 import { clearDraft, readDraft } from "../_components/draft";
@@ -99,7 +100,12 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
   const [visibility, setVisibility] = useState<ProfileVisibility>(SHOW_ALL);
   /** The chosen picture (null: initials), saved with Continue like the colour. */
   const [avatar, setAvatar] = useState<AvatarId | null>(null);
+  /** The picture circle's own colour; null follows the badge colour. Saved with Continue. */
+  const [avatarColour, setAvatarColour] = useState<BadgeColour | null>(null);
+  const pictureHex = avatarColour ? colourHex(avatarColour) : undefined;
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Which the colour swatches change: the badge stripe or the picture circle. */
+  const [colourFor, setColourFor] = useState<"badge" | "picture">("badge");
   const plusRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLFieldSetElement>(null);
   const [tried, setTried] = useState(false);
@@ -124,6 +130,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       setColour(profile ? showSavedColour(profile.badgeColour) : readBadgePrefs().colour);
       setVisibility(profile?.visibility ?? SHOW_ALL);
       setAvatar(profile?.avatar ?? null);
+      setAvatarColour(profile?.avatarColour ?? null);
 
       if (owner) {
         const next = fromIdentity(owner, profile, status);
@@ -205,7 +212,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       const res = await fetch("/api/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility, avatar)),
+        body: JSON.stringify(toProfileBody(answers, badgeColour, visibility, avatar, avatarColour)),
       });
       if (!res.ok) {
         setSaveError(saveErrorMessage(res.status, await res.json().catch(() => null)));
@@ -226,16 +233,6 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
     setVisibility((cur) => ({ ...cur, [id]: !cur[id] }));
   }
 
-  /**
-   * A line on the badge people can hide: tap it (pointer) to hide it, and it
-   * disappears from the badge. The labelled switches beside the badge bring
-   * it back, and do the same for keyboard and screen-reader users, since the
-   * badge itself is decorative.
-   */
-  const tappable = "group/line cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
-  /** The eraser marking a line you can remove; it darkens when you point at the line. */
-  const eraser = <EraserIcon className="opacity-75 group-hover/line:opacity-100" />;
-  const hideHint = "Tap to hide from your badge";
 
   function closePicker() {
     setPickerOpen(false);
@@ -247,6 +244,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       name={about.name}
       handle={handle}
       avatar={avatar}
+      avatarColour={pictureHex}
       avatarControl={
         <button
           ref={plusRef}
@@ -263,53 +261,9 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           <span aria-hidden="true">+</span>
         </button>
       }
-      label={
-        visibility.country ? (
-          <span
-            role="presentation"
-            title={hideHint}
-            onClick={() => toggleSection("country")}
-            className={`inline-flex items-center gap-1 ${tappable}`}
-          >
-            {countryName(about.country)}
-            {eraser}
-          </span>
-        ) : (
-          " "
-        )
-      }
+      label={<BadgeCountry country={countryName(about.country)} shown={visibility.country} onHide={toggleSection} />}
     >
-      {visibility.workplace && (
-        <span
-          role="presentation"
-          title={hideHint}
-          onClick={() => toggleSection("workplace")}
-          className={`mt-4 flex items-start gap-2 ${tappable}`}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs text-muted">Works at</span>
-            <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
-          </span>
-          <span className="mt-0.5">{eraser}</span>
-        </span>
-      )}
-      {visibility.hiring && (
-        <span
-          role="presentation"
-          title={hideHint}
-          onClick={() => toggleSection("hiring")}
-          className={`mt-3 flex w-fit flex-wrap items-center gap-1.5 ${tappable}`}
-        >
-          {hiring === null ? (
-            <BadgeChip className="w-20" />
-          ) : (
-            <BadgeChip className={hiring ? "bg-accent text-on-accent" : "bg-[var(--skeleton)]"}>
-              {hiring ? "Hiring" : "Not hiring"}
-            </BadgeChip>
-          )}
-          {eraser}
-        </span>
-      )}
+      <BadgeLines workplace={workplaceLabel(about.workplace)} hiring={hiring} visibility={visibility} onHide={toggleSection} />
     </Badge>
   );
 
@@ -351,8 +305,9 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
         aria-label="Your badge's look"
         className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
       >
-        <div className="flex w-full flex-col items-center gap-6">
-          <div className="w-full">{badge}</div>
+        <div className="w-full sm:col-start-1 sm:row-start-1">{badge}</div>
+        {/* Under the badge: the picture picker, when open. */}
+        <div className="flex w-full flex-col items-center gap-6 empty:hidden sm:col-start-1 sm:row-start-2">
           {pickerOpen && (
             <fieldset
               id="avatar-picker"
@@ -379,6 +334,7 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
                     <Avatar
                       avatar={a.id}
                       name={about.name}
+                      colour={pictureHex}
                       className="size-11 ring-1 ring-black/10 peer-checked:ring-4 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent"
                     />
                     <span className="sr-only">{a.name}</span>
@@ -392,14 +348,15 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
               </div>
             </fieldset>
           )}
-          <ColourPicker defaultColour={colour} centred />
         </div>
-        {/* From 1024 px the badge hangs from a strap (lg:mt-16), so start level with its card, not the strap. */}
-        <div className="flex flex-col gap-6 lg:pt-16">
+        {/*
+          Beside the badge, from the top of the card: what to show, then the colours. From 1024 px the
+          badge hangs from a strap (lg:mt-16), so the same margin here lines up with the card.
+        */}
+        <div className="flex flex-col gap-5 sm:col-start-2 sm:row-span-2 sm:row-start-1 sm:self-start lg:mt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
-            <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
+            <legend className="sr-only">Show on your badge</legend>
             <p id="visibility-note" className="mb-2 text-sm text-muted">
-              Tap a line marked with an eraser on your badge to hide it, or switch it here.{" "}
               {handle === null ? "Your name is always shown." : "Your name and GitHub are always shown."}
             </p>
             <div className="flex max-w-sm flex-col gap-1.5">
@@ -414,10 +371,73 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
               ))}
             </div>
           </fieldset>
+          {/*
+            One colour panel for both: pick Badge or Picture, then a colour. Both groups stay in the
+            form (the badge's colours the stripe through CSS); only the chosen one is in view.
+          */}
+          <div className="w-full max-w-sm rounded-2xl border-2 border-border bg-surface p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">Colours</h2>
+              <div role="group" aria-label="Colour for" className="flex rounded-full border-2 border-border p-0.5">
+                {(["badge", "picture"] as const).map((target) => (
+                  <button
+                    key={target}
+                    type="button"
+                    aria-pressed={colourFor === target}
+                    onClick={() => setColourFor(target)}
+                    className="flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors aria-pressed:bg-foreground aria-pressed:text-background focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-3 rounded-full ring-1 ring-black/15"
+                      style={{ backgroundColor: target === "badge" ? "var(--badge)" : (pictureHex ?? "var(--badge)") }}
+                    />
+                    {target === "badge" ? "Badge" : "Picture"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="mt-3">
+              <ColourPicker defaultColour={colour} quiet hidden={colourFor !== "badge"} />
+              <fieldset hidden={colourFor !== "picture"}>
+                <legend className="sr-only">Picture colour</legend>
+                <div className="flex flex-wrap items-center gap-2">
+                  {badgeColours.map((c) => (
+                    <label key={c.id} title={c.name} className="relative cursor-pointer">
+                      <input
+                        type="radio"
+                        name="avatarColour"
+                        value={c.id}
+                        checked={avatarColour === c.id}
+                        onChange={() => setAvatarColour(c.id)}
+                        className="peer sr-only"
+                      />
+                      <span aria-hidden="true" style={{ backgroundColor: c.hex }} className="block size-7 rounded-full ring-1 ring-black/10 transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-checked:ring-offset-2 peer-checked:ring-offset-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent motion-reduce:transition-none" />
+                      <span className="sr-only">{c.name}</span>
+                    </label>
+                  ))}
+                  {/* Following the badge is a worded choice, so it can't be mistaken for a sixth colour. */}
+                  <label className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="avatarColour"
+                      value=""
+                      checked={avatarColour === null}
+                      onChange={() => setAvatarColour(null)}
+                      className="peer sr-only"
+                    />
+                    <span className="flex h-8 items-center rounded-full border-2 border-border px-3 text-xs font-semibold transition-colors peer-checked:border-foreground peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent motion-reduce:transition-none">
+                      Same as badge
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
         </div>
       </section>
 
-      <div className="sticky bottom-0 -mx-4 mt-10 bg-background/95 px-4 pb-4 pt-3 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+      <div className="sticky bottom-0 -mx-4 mt-10 bg-background/95 px-4 pb-4 pt-3 text-center backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         {tried && step1Missing.length > 0 && (
           <p role="alert" className={`mb-3 ${errorClass}`}>
             {missingMessage[step1Missing[0]]}{" "}

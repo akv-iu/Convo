@@ -16,12 +16,15 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
+import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
 import { clearOnboardingTab } from "../../_components/draft";
 import { showSavedColour } from "../../_components/badge-prefs";
-import { saveErrorMessage } from "../answers";
+import { aboutFromProfile, saveErrorMessage, SHOW_ALL, workplaceLabel } from "../answers";
+import { colourHex } from "@/components/ui/badge-colours";
 import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
-import { SeenByOthers } from "./seen-by-others";
+import { SeenByOthers, useVisibilitySave } from "./seen-by-others";
+import { ContactSection, useContactDetails } from "./contact-details";
 import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
 export const NEXT_STEP = "/ask";
@@ -71,7 +74,10 @@ function BadgeRow({
 
 export function ProfileForm() {
   const router = useRouter();
+  const contact = useContactDetails();
   const [load, setLoad] = useState<Load>({ state: "loading" });
+  /** Show/hide choices save at once, from the badge's erasers or the switches below it. */
+  const visibilitySaver = useVisibilitySave((saved) => setLoad({ state: "ready", person: saved }));
   const [attempt, setAttempt] = useState(0);
   const [original, setOriginal] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -220,14 +226,19 @@ export function ProfileForm() {
   }
 
   const row = { onOpen: startEditing };
+  // The same hiding rules as step 2: hidden lines aren't on the badge, and an eraser hides one.
+  const visibility = person.visibility ?? SHOW_ALL;
+  const hide = (section: keyof typeof visibility) => void visibilitySaver.save({ ...visibility, [section]: false });
   const badge = (
     <Badge
       name={d.name.trim() || "Your name"}
       handle={person.githubLogin}
       avatar={person.avatar}
-      label={countryName(person.filters.country)}
+      avatarColour={person.avatarColour ? colourHex(person.avatarColour) : undefined}
+      label={<BadgeCountry country={countryName(person.filters.country)} shown={visibility.country} onHide={hide} />}
       onName={() => startEditing(FIELD.name)}
     >
+      <BadgeLines workplace={workplaceLabel(aboutFromProfile(person).workplace)} hiring={person.filters.hiring} visibility={visibility} onHide={hide} />
       <BadgeRow {...row} field={FIELD.bio} caption="Bio">
         {d.bio.trim() ? (
           <span className="block text-sm leading-snug break-words">{d.bio.trim()}</span>
@@ -262,28 +273,31 @@ export function ProfileForm() {
 
   if (!editing) {
     return (
-      <>
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-16">
-        <div className="flex flex-col">
-          <h1 className={headingClass}>{HEADING}</h1>
-          <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
-          <div className="mt-8 lg:hidden">{badge}</div>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button onClick={() => (clearOnboardingTab(), router.push(NEXT_STEP))} className="text-lg sm:px-8">
-              Yes, that&apos;s me
-            </Button>
-            <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">
-              No, let me fix it
-            </Button>
-          </div>
+      <div className="flex flex-col">
+        <h1 className={headingClass}>{HEADING}</h1>
+        <p className="mt-3 max-w-md text-lg text-muted">Here&apos;s what we found from your public info.</p>
+        {/*
+          Your badge on the left; on the right, the row other people see (your public profile) with
+          what to hide right under it. One column on phones: badge, then the public row.
+        */}
+        <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
+          <div>{badge}</div>
+          <SeenByOthers person={person} saver={visibilitySaver} />
         </div>
-        <div className="hidden lg:block">
-          <div className="lg:sticky lg:top-6">{badge}</div>
+        <ContactSection contact={contact} />
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button
+            onClick={() => void contact.save().then((ok) => ok && (clearOnboardingTab(), router.push(NEXT_STEP)))}
+            disabled={contact.saving}
+            className="text-lg sm:px-8"
+          >
+            {contact.saving ? "Saving…" : "Yes, that's me"}
+          </Button>
+          <Button variant="secondary" onClick={() => startEditing(FIELD.name)} className="text-lg sm:px-8">
+            No, let me fix it
+          </Button>
         </div>
       </div>
-      {/* Before sending any requests: the row other people see, and what it shows. */}
-      <SeenByOthers person={person} onSaved={(saved) => setLoad({ state: "ready", person: saved })} />
-      </>
     );
   }
 

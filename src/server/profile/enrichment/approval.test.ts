@@ -36,7 +36,8 @@ function stagePrivateInputs() {
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date(now)); mocks.writes = 0;
   mocks.user = { ...people[0], createdAt: new Date(now), revision: 8, textVersion: 3, expertise: null, profileEvidence: [], profileSources: [],
-    profileEvidencePending: false, githubEvidence: [], githubEvidencePending: false, workplaceName: "My workplace", badgeColour: "mint", avatar: "moon",
+    profileEvidencePending: false, githubEvidence: [], githubEvidencePending: false, workplaceName: "My workplace", badgeColour: "mint", avatar: "moon", avatarColour: null,
+    contactEmail: null, contactPhone: null, contactShare: "email",
     visibility: { country: false, workplace: false, hiring: false } };
   mocks.data = emptyOwnerData(); mocks.data.generation = 2;
   const sources = (["github", "research", "public_profile", "cv"] as const).map(source => ({ source, sourceId: `${owner}:${source}`,

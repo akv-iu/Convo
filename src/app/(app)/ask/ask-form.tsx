@@ -257,7 +257,7 @@ export function AskForm() {
               Find people
             </Button>
           )}
-          <Button variant="secondary" onClick={askAgain} className="text-lg">
+          <Button variant="alternate" onClick={askAgain} className="text-lg">
             Ask something else
           </Button>
         </div>
