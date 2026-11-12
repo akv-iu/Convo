@@ -30,7 +30,9 @@ async function seed(page: Page, person: string, times: { start: string; end: str
   expect(res.ok()).toBe(true);
 }
 
-const NINE_TO_TEN = [{ start: "2026-11-09T09:00:00-07:00", end: "2026-11-09T10:00:00-07:00" }];
+// The fake's demo day: tomorrow in venue time, as CONFERENCE_DAY in src/contracts/fixtures.
+const DAY = new Date(Date.now() + 17 * 3_600_000).toISOString().slice(0, 10);
+const NINE_TO_TEN = [{ start: `${DAY}T09:00:00-07:00`, end: `${DAY}T10:00:00-07:00` }];
 
 async function stored(page: Page, person: string) {
   const res = await page.request.get("/api/availability", { headers: { "x-demo-user": person } });
@@ -60,8 +62,8 @@ test.describe("free time (A1 step 4)", () => {
     await expect(page.getByRole("status").filter({ hasText: "4 hours" })).toContainText("9:00 AM – 12:00 PM, 2:00 PM – 3:00 PM");
 
     const expected = [
-      { start: "2026-11-09T09:00:00-07:00", end: "2026-11-09T12:00:00-07:00" },
-      { start: "2026-11-09T14:00:00-07:00", end: "2026-11-09T15:00:00-07:00" },
+      { start: `${DAY}T09:00:00-07:00`, end: `${DAY}T12:00:00-07:00` },
+      { start: `${DAY}T14:00:00-07:00`, end: `${DAY}T15:00:00-07:00` },
     ];
     const saving = page.waitForRequest(isSave);
     await finish(page).click();
@@ -77,8 +79,8 @@ test.describe("free time (A1 step 4)", () => {
   test("saved times the grid can't show are kept when saving", async ({ page, isMobile }) => {
     // One fixture person per project, so the phone and laptop runs can't overwrite each other.
     const person = isMobile ? "p_003" : "p_001";
-    const otherDay = { start: "2026-11-10T09:00:00-07:00", end: "2026-11-10T10:00:00-07:00" };
-    const early = { start: "2026-11-09T07:00:00-07:00", end: "2026-11-09T07:45:00-07:00" };
+    const otherDay = { start: "2099-01-01T09:00:00-07:00", end: "2099-01-01T10:00:00-07:00" };
+    const early = { start: `${DAY}T07:00:00-07:00`, end: `${DAY}T07:45:00-07:00` };
     await seed(page, person, [early, ...NINE_TO_TEN, otherDay]);
     await open(page, person);
     await expect(page.getByText("You also have 2 saved times this grid can't show.")).toBeVisible();
@@ -86,7 +88,7 @@ test.describe("free time (A1 step 4)", () => {
     await block(page, "2:00 PM to 2:30 PM").click();
     const saving = page.waitForRequest(isSave);
     await finish(page).click();
-    const two = { start: "2026-11-09T14:00:00-07:00", end: "2026-11-09T14:30:00-07:00" };
+    const two = { start: `${DAY}T14:00:00-07:00`, end: `${DAY}T14:30:00-07:00` };
     expect((await saving).postDataJSON()).toEqual([early, two, otherDay]);
     await expect(page).toHaveURL(/\/onboarding\/profile$/, { timeout: AFTER_SUBMIT });
     expect(await stored(page, person)).toEqual([early, two, otherDay]);
