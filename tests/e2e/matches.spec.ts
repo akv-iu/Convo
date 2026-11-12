@@ -182,6 +182,8 @@ test.describe("match list (A2 steps 1-2)", () => {
     expect(await rows(page).count()).toBeLessThanOrEqual(3);
     for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
+      // The theme change fades colours; a scan mid-fade reads blended ones.
+      await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
       expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, colorScheme).toEqual([]);
     }
   });
