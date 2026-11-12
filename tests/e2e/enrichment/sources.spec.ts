@@ -430,6 +430,10 @@ test.describe("profile enrichment: details and sources", () => {
     await expect(page.getByText("Sign-in was cancelled")).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue with GitHub" })).toBeVisible();
+    // Neither looks required: the same style for both, and the line saying either will do.
+    await expect(page.getByText("Use whichever account you have.")).toBeVisible();
+    const style = (name: string) => page.getByRole("button", { name }).getAttribute("class");
+    expect(await style("Continue with Google")).toBe(await style("Continue with GitHub"));
     await scan(page, "signed out");
 
     await page.goto("/signin/sources?reason=%3Cscript%3E");
