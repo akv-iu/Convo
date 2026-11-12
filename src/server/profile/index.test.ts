@@ -38,4 +38,12 @@ describe("GitHub profile builder", () => {
     expect(evidence[19].title).toBe("repo-5");
     expect(repos[0].name).toBe("repo-0");
   });
+
+  it("keeps GitHub's recent-first order among equal stars, with practice and profile repos last", () => {
+    const repo = (name: string, description: string | null = null) =>
+      ({ name, description, language: "TypeScript", html_url: `https://github.com/ada/${name}`, stargazers_count: 0 });
+    const repos = [repo("neetcode-submissions-x", "My NeetCode.io problem submissions"), repo("zero-trust-gateway"), repo("ada"), repo("Portfolio"), repo("agent-runner")];
+    const { evidence } = buildProfile("github:1", { login: "ada", name: null, bio: null, repos, orgs: [] });
+    expect(evidence.map((e) => e.title)).toEqual(["zero-trust-gateway", "agent-runner", "neetcode-submissions-x", "ada", "Portfolio"]);
+  });
 });
