@@ -96,6 +96,8 @@ export const requests = pgTable(
     fromUserId: text("from_user_id").notNull().references(() => users.id),
     toPersonId: text("to_person_id").notNull(),
     question: text("question").notNull(),
+    /** The sender's own note to this person, or null. */
+    message: text("message"),
     minutes: integer("minutes").notNull(),
     status: text("status", { enum: ["sent", "accepted", "declined", "answered", "scheduled"] }).notNull().default("sent"),
     reply: text("reply"),

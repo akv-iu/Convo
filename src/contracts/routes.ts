@@ -198,9 +198,10 @@ export const routes = {
   sendRequest: def({
     method: "POST",
     path: "/api/requests",
-    description: "Swipe right: send the refined question to a person. One request per person per ask; sending again returns it.",
+    description:
+      "Swipe right: send the refined question to a person, with an optional note to them. One request per person per ask; sending again returns it.",
     usedBy: "A2",
-    body: z.object({ askId: z.string(), toPersonId: z.string() }),
+    body: z.object({ askId: z.string(), toPersonId: z.string(), message: z.string().trim().max(500).optional() }),
     response: Request,
   }),
   inbox: def({

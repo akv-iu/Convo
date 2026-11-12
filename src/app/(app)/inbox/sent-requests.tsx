@@ -204,6 +204,12 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
       <div className="mt-3">
         <PersonBadge person={request.person} caption="Sent to" />
       </div>
+      {request.message && (
+        <p className="mt-3 rounded-xl border-2 border-border px-4 py-3 break-words">
+          <span className="block text-xs font-semibold text-muted">Your message</span>
+          {request.message}
+        </p>
+      )}
 
       {request.status === "sent" && <p className="mt-2 text-sm text-muted">Waiting for {name ?? "them"} to answer.</p>}
       {request.status === "declined" && <p className="mt-2 text-muted">{who} declined this one.</p>}

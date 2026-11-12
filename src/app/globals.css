@@ -12,18 +12,20 @@
   --accent-hover: #1e40af;
   /* Text on an accent background */
   --on-accent: #ffffff;
+  --accent-2: #0f766e;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1120;
-    --surface: #1e293b;
-    --foreground: #f1f5f9;
-    --muted: #cbd5e1;
-    --border: #334155;
+    --background: #141414;
+    --surface: #212121;
+    --foreground: #f5f5f4;
+    --muted: #c2bfba;
+    --border: #3a3a3a;
     --accent: #60a5fa;
     --accent-hover: #93c5fd;
-    --on-accent: #0b1120;
+    --on-accent: #141414;
+    --accent-2: #5eead4;
   }
 }
 
@@ -36,6 +38,7 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-on-accent: var(--on-accent);
+  --color-accent-2: var(--accent-2);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

@@ -76,8 +76,8 @@ export async function sendRequest(userId: string, body: RouteBody<"sendRequest">
     const refined = ask.refined === null ? null : RefinedAsk.parse(ask.refined);
     value = Request.parse({
       id: randomUUID(), askId: body.askId, fromUserId: userId, toPersonId: body.toPersonId,
-      question: refined?.text ?? ask.rawText, minutes: refined?.minutes ?? MEETING_MINUTES,
-      status: "sent", reply: null, slot: null, createdAt: new Date().toISOString(),
+      question: refined?.text ?? ask.rawText, message: body.message?.trim() || null,
+      minutes: refined?.minutes ?? MEETING_MINUTES, status: "sent", reply: null, slot: null, createdAt: new Date().toISOString(),
     });
   } catch {
     throw new RequestError("Stored ask is invalid. No request was sent.", 503);

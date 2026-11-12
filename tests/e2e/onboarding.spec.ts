@@ -233,14 +233,14 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
-  test("the switches sit centred against the badge, beside it", async ({ page, isMobile }) => {
+  test("the switches sit beside the badge, level with the top of the card", async ({ page, isMobile }) => {
     test.skip(isMobile, "on phones the switches stack under the badge");
     await openWithDraft(page, "p_003");
     const card = await page.locator("[data-badge]:visible [data-badge-stripe]").locator("..").boundingBox();
     const switches = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
     expect(card && switches).toBeTruthy();
-    const middle = (b: { y: number; height: number }) => b.y + b.height / 2;
-    expect(Math.abs(middle(card!) - middle(switches!))).toBeLessThanOrEqual(8);
+    // The card hangs at a slight tilt on laptops, so its box reaches a few pixels past its edges.
+    expect(Math.abs(card!.y - switches!.y)).toBeLessThanOrEqual(12);
     expect(switches!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
   });
 
@@ -305,6 +305,7 @@ test.describe("your badge (step 2)", () => {
       return route.fulfill({ json: { ...me, ...route.request().postDataJSON() } });
     });
     // The picture can have its own colour; the stripe keeps the badge colour.
+    await page.getByRole("button", { name: "Picture", exact: true }).click();
     const pictureColours = page.getByRole("group", { name: "Picture colour" });
     await expect(pictureColours.getByRole("radio", { name: "Same as badge" })).toBeChecked();
     await pictureColours.locator("label").filter({ has: page.getByRole("radio", { name: "Lilac" }) }).click();

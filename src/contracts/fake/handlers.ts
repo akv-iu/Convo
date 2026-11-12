@@ -154,6 +154,7 @@ export const fake: Api = {
       fromUserId: userId,
       toPersonId: body.toPersonId,
       question: ask.refined?.text ?? ask.rawText,
+      message: body.message?.trim() || null,
       minutes: ask.refined?.minutes ?? MEETING_MINUTES,
       status: "sent" as const,
       reply: null,

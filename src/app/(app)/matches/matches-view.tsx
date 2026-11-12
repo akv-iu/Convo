@@ -83,6 +83,8 @@ function AskMatches({ askId }: { askId: string }) {
   const [attempt, setAttempt] = useState(0);
   /** The person whose full profile is open (one at a time), or null. */
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Notes being written to people found by searching, by person. */
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   /**
    * Set after a pass or send: keep the keyboard's place once the list updates. It runs once per
    * action (not on every change of the open row), and only if focus is still on the person acted on,
@@ -261,7 +263,7 @@ function AskMatches({ askId }: { askId: string }) {
   }
 
   const act = useCallback(
-    async (kind: "pass" | "send", match: MatchResult) => {
+    async (kind: "pass" | "send", match: MatchResult, message?: string) => {
       if (busyRef.current || lockedIds.has(match.person.id) || blockerSaving) return;
       busyRef.current = true;
       setBusy(kind);
@@ -290,7 +292,7 @@ function AskMatches({ askId }: { askId: string }) {
             : await fetch("/api/requests", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ askId, toPersonId: match.person.id }),
+                body: JSON.stringify({ askId, toPersonId: match.person.id, ...(message?.trim() ? { message: message.trim() } : {}) }),
               });
         const body = await res.json().catch(() => null);
         // If the list reloaded meanwhile (Search, Refresh or the switch), the result, a failure,
@@ -305,7 +307,7 @@ function AskMatches({ askId }: { askId: string }) {
         if (kind === "send") {
           const saved: RequestView = { ...(body as Request), type: null, person: match.person };
           setSent((previous) => [...previous.filter((request) => request.id !== saved.id), saved]);
-          setAnnounce(`Request sent to ${who}.`);
+          setAnnounce(message?.trim() ? `Message sent to ${who}.` : `Request sent to ${who}.`);
           if (!stale) openNext(matches);
           return;
         }
@@ -456,7 +458,7 @@ function AskMatches({ askId }: { askId: string }) {
           </section>
         )}
         <div className="mt-8">
-          <Button href="/ask">Ask something else</Button>
+          <Button href="/ask" variant="alternate">Ask something else</Button>
         </div>
       </div>
     );
@@ -599,6 +601,27 @@ function AskMatches({ askId }: { askId: string }) {
                     {note ? (
                       <p className="mt-4 font-semibold">{note}</p>
                     ) : (
+                      <>
+                      {/* Found by searching: write to them, not just send the question. */}
+                      {applied && (
+                        <div className="mt-5">
+                          <label htmlFor={`message-${m.person.id}`} className="block text-sm font-semibold">
+                            Message to {m.person.name}
+                          </label>
+                          <textarea
+                            id={`message-${m.person.id}`}
+                            rows={3}
+                            maxLength={500}
+                            value={drafts[m.person.id] ?? ""}
+                            onChange={(e) => {
+                              const text = e.target.value;
+                              setDrafts((cur) => ({ ...cur, [m.person.id]: text }));
+                            }}
+                            placeholder="Say hello and why you'd like to talk. They'll see your question too."
+                            className="mt-1 w-full rounded-xl border-2 border-border bg-background px-3 py-2 text-base placeholder:text-muted focus-visible:border-accent focus-visible:outline-none"
+                          />
+                        </div>
+                      )}
                       <div className="mt-5 grid grid-cols-2 gap-3">
                         <Button
                           variant="secondary"
@@ -609,13 +632,14 @@ function AskMatches({ askId }: { askId: string }) {
                           {busy === "pass" ? "Passing…" : "Pass"}
                         </Button>
                         <Button
-                          onClick={() => void act("send", m)}
+                          onClick={() => void act("send", m, applied ? drafts[m.person.id] : undefined)}
                           aria-disabled={off}
                           className="text-lg aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                         >
-                          {busy === "send" ? "Sending…" : "Send request"}
+                          {busy === "send" ? "Sending…" : applied ? "Send message" : "Send request"}
                         </Button>
                       </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -662,14 +686,14 @@ function AskMatches({ askId }: { askId: string }) {
               </>
             )}
             <div className="mt-5">
-              <Button href="/ask" variant="secondary">
+              <Button href="/ask" variant="alternate">
                 Ask something else
               </Button>
             </div>
           </div>
         ) : (
           <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <Button href="/ask">Ask something else</Button>
+            <Button href="/ask" variant="alternate">Ask something else</Button>
             {canSeeAgain && (
               <Button variant="secondary" onClick={refresh}>
                 See them again
