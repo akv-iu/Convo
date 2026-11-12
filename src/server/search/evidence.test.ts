@@ -29,6 +29,8 @@ describe("keyTerms", () => {
   it("keeps what an ask is about and drops what kind of ask it is", () => {
     expect(keyTerms("I want to meet a potential employer from healthcare. What kind of roles are you hiring for?")).toBe("healthcare");
     expect(keyTerms("I want to work at Stripe. What experience did you have before joining, and what made the difference?")).toBe("Stripe");
+    // A sharpened ask's follow-up words aren't the topic: 4 of 6 terms had to match, so no one did.
+    expect(keyTerms("I want to meet someone from the medical industry. What did your own path into it look like, and what should I know first if I want to work there?")).toBe("medical");
     expect(keyTerms("How do I tune PostgreSQL autovacuum for a write-heavy table?")).toBe("tune PostgreSQL autovacuum write-heavy table");
   });
 

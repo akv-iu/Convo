@@ -71,7 +71,8 @@ looking lot made make me meet more most much my need needs not of on or our out 
 questions really role roles sort someone something specifically stand start started tell that the there these they this
 those tips to together type understand up very want wants was we what when where which who why will with would you your
 work works working job jobs career careers hire hires hiring hired employer employers company companies position positions
-opportunity opportunities experience experiences advice explain application team teams open`.split(/\s+/));
+opportunity opportunities experience experiences advice explain application team teams open
+own path first should industry`.split(/\s+/));
 
 /** The words of an ask that say what it's about, for keyword search. Falls back to the whole ask. */
 export function keyTerms(text: string): string {
