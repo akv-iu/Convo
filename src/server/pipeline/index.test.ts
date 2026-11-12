@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { people } from "@/contracts/fixtures";
 import type { Ask } from "@/contracts/types";
+import type { Explanation } from "@/server/ai";
 
 const search = vi.hoisted(() => ({ searchCandidates: vi.fn(), whoIsLookingFor: vi.fn() }));
-const ai = vi.hoisted(() => ({ refineAsk: vi.fn(), explain: vi.fn(async (_ask: unknown, list: unknown[]) => list.map(() => "Why")) }));
+const ai = vi.hoisted(() => ({ refineAsk: vi.fn(), explain: vi.fn(async (_ask: unknown, list: unknown[]): Promise<Explanation[]> => list.map(() => ({ why: "Why" }))) }));
 vi.mock("@/server/search", () => ({ search }));
 vi.mock("@/server/ai", () => ({ ai }));
 
@@ -122,5 +123,72 @@ describe("evidence highlights", () => {
     // The explain step sees no links, so its cache keys (built from highlights) are unchanged.
     const sent = ai.explain.mock.calls.at(-1)![1] as { evidence: unknown[] }[];
     expect(sent[0].evidence).toEqual([]);
+  });
+});
+
+describe("fit", () => {
+  it("leaves out people the model judged unrelated, keeping everyone's rank, and passes the fit on", async () => {
+    const third = structuredClone(people[3]);
+    search.searchCandidates.mockResolvedValueOnce([
+      { person: onlyWanted, highlights: ["a"], score: 3 },
+      { person: alsoLooking, highlights: ["b"], score: 2 },
+      { person: third, highlights: ["c"], score: 1 },
+    ]);
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+    ai.explain.mockResolvedValueOnce([{ why: "Strong.", fit: "strong" }, { why: "Unrelated.", fit: "none" }, { why: "Not judged." }]);
+
+    const results = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null });
+
+    expect(results.map((r) => [r.person.id, r.rank, r.explanation, r.fit])).toEqual([
+      [onlyWanted.id, 0, "Strong.", "strong"],
+      [third.id, 2, "Not judged.", undefined],
+    ]);
+    expect(results[1]).not.toHaveProperty("fit");
+  });
+});
+
+describe("no strong fit", () => {
+  it("shows only the three nearest when the model found no strong fit", async () => {
+    const five = people.slice(0, 5).map((p, i) => ({ person: structuredClone(p), highlights: [`e${i}`], score: 5 - i }));
+    search.searchCandidates.mockResolvedValueOnce(five.slice(1)); // the requester is never a candidate
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+    ai.explain.mockResolvedValueOnce([{ why: "a", fit: "partial" }, { why: "b", fit: "none" }, { why: "c", fit: "partial" }, { why: "d", fit: "partial" }]);
+    const results = await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null });
+    expect(results.map((r) => r.explanation)).toEqual(["a", "c", "d"]);
+
+    search.searchCandidates.mockResolvedValueOnce(five.slice(1));
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+    ai.explain.mockResolvedValueOnce([{ why: "a", fit: "partial" }, { why: "b", fit: "partial" }, { why: "c", fit: "partial" }, { why: "d", fit: "strong" }]);
+    expect((await runMatch({ ask, requester, excludeIds: [], hiddenBelowRank: null })).map((r) => r.explanation)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("hiring preference", () => {
+  const ranked = () => [
+    { person: { ...structuredClone(onlyWanted), filters: { ...onlyWanted.filters, hiring: false } }, highlights: ["a"], score: 3 },
+    { person: { ...structuredClone(alsoLooking), filters: { ...alsoLooking.filters, hiring: true } }, highlights: ["b"], score: 2.5 },
+  ];
+  const match = async (type: "career" | "hiring" | "knowledge", list = ranked()) => {
+    search.searchCandidates.mockResolvedValueOnce(list);
+    search.whoIsLookingFor.mockResolvedValueOnce([]);
+    const results = await runMatch({ ask: { ...ask, refined: { ...ask.refined!, type } }, requester, excludeIds: [], hiddenBelowRank: null });
+    return results.map((r) => r.person.id);
+  };
+
+  it("puts people who are hiring first for a career ask, and people who aren't for a hiring ask", async () => {
+    expect(await match("career")).toEqual([alsoLooking.id, onlyWanted.id]);
+    expect(await match("hiring")).toEqual([onlyWanted.id, alsoLooking.id]);
+    expect(await match("knowledge")).toEqual([onlyWanted.id, alsoLooking.id]);
+  });
+
+  it("never lets a hidden hiring flag change the order, for a career or a hiring ask", async () => {
+    const hiddenHiring = ranked();
+    hiddenHiring[1].person.visibility = { country: true, workplace: true, hiring: false };
+    expect(await match("career", hiddenHiring)).toEqual([onlyWanted.id, alsoLooking.id]);
+
+    // A hidden "not hiring" must not read as "not hiring" either: no boost for a hiring ask.
+    const hiddenNotHiring = ranked().reverse().map((c, i) => ({ ...c, score: 3 - i * 0.5 }));
+    hiddenNotHiring[1].person.visibility = { country: true, workplace: true, hiring: false };
+    expect(await match("hiring", hiddenNotHiring)).toEqual([alsoLooking.id, onlyWanted.id]);
   });
 });

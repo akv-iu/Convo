@@ -1,6 +1,6 @@
 /**
  * Load everything searchable into Elasticsearch through the same ingestion path
- * real sign-ups use (B1): the fixture people, the 500 synthetic attendees, every
+ * real sign-ups use (B1): the fixture people, the synthetic attendees, every
  * signed-up user who finished onboarding (with all approved evidence saved in
  * Postgres), and every open ask. Safe to re-run: newer saves win. Failed users
  * are reported by ID; other users, open asks and the final refresh still run.
@@ -20,7 +20,7 @@ import { asks, users } from "../db/schema";
 const SYNTHETIC = "scripts/synthetic/people.json";
 const PARALLEL = 8;
 
-/** A few at a time: each ingest waits for a refresh (about a second), so one by one takes minutes for 500. */
+/** A few at a time: each ingest waits for a refresh (about a second), so one by one takes minutes for hundreds. */
 async function eachInParallel<T>(items: readonly T[], ingest: (item: T) => Promise<unknown>): Promise<void> {
   let next = 0;
   let failed = false;

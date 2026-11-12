@@ -3,7 +3,7 @@
  * shows the slowest one at a glance.
  */
 import { trace } from "@opentelemetry/api";
-import type { Ask, MatchResult, Person } from "@/contracts/types";
+import type { Ask, AskType, MatchResult, Person } from "@/contracts/types";
 import { ai } from "@/server/ai";
 import { search } from "@/server/search";
 import { narrowTo, readNarrowing } from "./narrow";
@@ -52,6 +52,20 @@ export interface MatchInput {
   hiddenBelowRank: number | null;
 }
 
+/** How many partly fitting people to show when no one fits strongly. */
+const NEAREST = 3;
+/** Added to a person's 0-5 score when their shown hiring flag is what the ask wants. */
+const HIRING_PREFERENCE = 0.75;
+/** A career ask wants people who are hiring; a hiring ask wants people who aren't; others don't mind. */
+const WANTS_HIRING: Partial<Record<AskType, boolean>> = { career: true, hiring: false };
+
+/**
+ * Whether this person gets the hiring preference. Only a shown flag counts, either way: a hidden flag
+ * must never change rank, not even by reading as "not hiring" for a hiring ask.
+ */
+const hiringPreferred = (person: Person, wantsHiring: boolean | undefined) =>
+  wantsHiring !== undefined && person.visibility?.hiring !== false && person.filters.hiring === wantsHiring;
+
 /** Evidence without Elasticsearch's <em> marks, for the model (and its cache keys). */
 const plain = (highlight: string) => highlight.replace(/<\/?em>/g, "");
 
@@ -71,8 +85,10 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   // Mutual: the candidate's own asks match the requester. One reverse search covers every candidate.
   const mutual = await step("mutual", async () => new Set(await search.whoIsLookingFor(input.requester)));
 
+  const wantsHiring = WANTS_HIRING[refined.type];
   const ranked = candidates
-    .map((c) => ({ ...c, score: c.score + (mutual.has(c.person.id) ? 1 : 0) }))
+    .map((c) => ({ ...c, score: c.score + (mutual.has(c.person.id) ? 1 : 0)
+      + (hiringPreferred(c.person, wantsHiring) ? HIRING_PREFERENCE : 0) }))
     .sort((a, b) => b.score - a.score);
   // Rank first, then hide, so ranks don't shift as people are passed on or sent a request.
   // Hidden results are never shown, so they are never explained (or paid for).
@@ -88,14 +104,24 @@ export async function runMatch(input: MatchInput): Promise<MatchResult[]> {
   const explanations = await step("explain", () =>
     ai.explain(refined, shown.map((c) => ({ person: c.person, highlights: c.highlights.map(plain), evidence: [], score: c.score }))));
 
-  return shown.map((c, i) => ({
-    person: c.person,
-    highlights: c.highlights,
-    evidence: c.evidence,
-    badges: badgesFor(c.person),
-    mutual: mutual.has(c.person.id),
-    explanation: explanations[i] ?? "",
-    score: c.score,
-    rank: c.rank,
-  }));
+  // People the model judged unrelated are left out (they keep their rank); unjudged people stay.
+  // With no strong fit at all, only the few nearest are shown: the screen says they're the nearest.
+  const noStrongFit = explanations.some((e) => e?.fit) && !explanations.some((e) => e?.fit === "strong");
+  let kept = 0;
+  return shown.flatMap((c, i) => {
+    const { why = "", fit } = explanations[i] ?? {};
+    if (fit === "none" || (noStrongFit && kept >= NEAREST)) return [];
+    kept += 1;
+    return [{
+      person: c.person,
+      highlights: c.highlights,
+      evidence: c.evidence,
+      badges: badgesFor(c.person),
+      mutual: mutual.has(c.person.id),
+      explanation: why,
+      ...(fit ? { fit } : {}),
+      score: c.score,
+      rank: c.rank,
+    }];
+  });
 }
