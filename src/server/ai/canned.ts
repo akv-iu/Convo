@@ -231,7 +231,10 @@ export const cannedAi: AiService = {
   },
 
   async explain(ask, candidates) {
-    return candidates.map((c) => whyThem(ask.text, c.person, c.highlights));
+    // No fit, so the fake API and fallbacks never drop anyone; except "[demo:nearest]" in the ask, which rates
+    // everyone a partial fit so screens can show "no close match" (the real model judges each person).
+    const nearest = ask.text.includes("[demo:nearest]");
+    return candidates.map((c) => ({ why: whyThem(ask.text, c.person, c.highlights), ...(nearest ? { fit: "partial" as const } : {}) }));
   },
 };
 

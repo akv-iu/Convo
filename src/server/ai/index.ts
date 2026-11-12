@@ -22,8 +22,14 @@ export interface AiService {
    * AskBlockedError (422) if it's flagged, and rethrows if the check itself fails.
    */
   moderate(text: string): Promise<void>;
-  /** ONE batched call: a "why this person" line per candidate, from their highlights. */
-  explain(ask: RefinedAsk, candidates: Candidate[]): Promise<string[]>;
+  /**
+   * ONE batched call: a "why this person" line per candidate, from their highlights, and how well they
+   * fit the question. fit is absent when it couldn't be judged (no AI, no evidence, or the call failed).
+   */
+  explain(ask: RefinedAsk, candidates: Candidate[]): Promise<Explanation[]>;
 }
+
+export type Fit = "strong" | "partial" | "none";
+export interface Explanation { why: string; fit?: Fit }
 
 export const ai: AiService = config.fakeAi || config.fakeApi ? cannedAi : openAi;

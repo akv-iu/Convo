@@ -10,9 +10,8 @@
  */
 import { Client, errors, type estypes } from "@elastic/elasticsearch";
 import { Person, type EvidenceDoc, type MatchEvidence, type TimeBlock } from "@/contracts/types";
-import { addEvidence, checkEvidence, expertiseOf, profileDocId } from "./evidence";
+import { addEvidence, checkEvidence, expertiseOf, keyTerms, profileDocId, shownWorkplace } from "./evidence";
 import type { Candidate, SearchFilters, SearchService } from "./index";
-import { keywordQuery } from "./terms";
 
 export const INDEX = { people: "people", evidence: "evidence", asks: "asks" } as const;
 const RERANKER = ".jina-reranker-v3.5";
@@ -21,6 +20,9 @@ const WINDOW = 50; // results fused by RRF and re-read by the reranker
 const SEMANTIC_MIN_SCORE = 4; // measured on ELSER: related evidence scores 4 to 8, relevant 14+, noise under 3
 const FREE_TIME_BOOST = 0.5;
 const ASK_MIN_MATCH = "2<60%"; // share of an ask's key terms a profile must contain
+// Keyword half: up to two topic words must all match, more than two need 70%. Matching any one word
+// let generic words ("roles", "design", "tune") rank unrelated people (try-search --audit).
+const KEYWORD_MIN_MATCH = "2<70%";
 
 let cached: Client | undefined;
 
@@ -45,9 +47,13 @@ function parsePerson(value: unknown): Person | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** Bio, organisations, languages and approved expertise; empty when the person has none of them. */
+/**
+ * Bio, workplace (only when the person shows it), organisations, languages and approved expertise;
+ * empty when the person has none of them. Without the workplace, "I want to work at Stripe" found no
+ * one at Stripe.
+ */
 function profileText(person: Person): string {
-  return [person.bio.trim(), person.organisations.join(", "), person.languages.join(", "), expertiseOf(person).join(", ")]
+  return [person.bio.trim(), shownWorkplace(person), person.organisations.join(", "), person.languages.join(", "), expertiseOf(person).join(", ")]
     .filter(Boolean).join(" · ");
 }
 
@@ -170,7 +176,9 @@ function hybrid(query: string, filters: SearchFilters): estypes.RetrieverContain
   return {
     rrf: {
       retrievers: [
-        { standard: { query: { bool: { must: [{ multi_match: { query: keywordQuery(query), fields: ["title^2", "text"] } }], should } }, collapse } },
+        { standard: { query: { bool: { must: [{ multi_match: {
+          query: keyTerms(query), fields: ["title^2", "text"], minimum_should_match: KEYWORD_MIN_MATCH,
+        } }], should } }, collapse } },
         // Semantic search always returns its nearest documents, however distant: keep only real matches.
         { standard: { query: { bool: { must: [{ semantic: { field: "content", query } }], should } }, collapse, min_score: SEMANTIC_MIN_SCORE } },
       ],
@@ -296,7 +304,7 @@ export const elasticSearch: SearchService = {
     const request = (retriever: estypes.RetrieverContainer) => es.search<EvidenceSource>({
       index: INDEX.evidence, size: WINDOW, retriever, _source: ["person_id", "kind", "title", "text", "url"], allow_partial_search_results: false,
       highlight: {
-        highlight_query: { multi_match: { query: keywordQuery(query), fields: ["title", "text"] } },
+        highlight_query: { multi_match: { query: keyTerms(query), fields: ["title", "text"] } }, // mark topic words, not "hiring"
         fields: { text: { number_of_fragments: 1, fragment_size: 160 } },
       },
     });

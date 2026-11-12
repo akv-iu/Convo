@@ -8,6 +8,7 @@ vi.mock("@/server/profile/service", () => ({ syncProfile }));
 vi.mock("../db", () => ({ db: () => ({ select: () => ({ from: (table: unknown) => ({ where: async () => table === asksTable ? asks : users }) }) }) }));
 
 import { elasticSearch } from "@/server/search/elastic";
+import { COUNT } from "./synthetic/plan";
 import { seedSynthetic, seedUsers } from "./seed";
 
 beforeEach(() => {
@@ -31,11 +32,11 @@ describe("seeding the synthetic attendees", () => {
       inFlight -= 1;
     });
 
-    await expect(seedSynthetic()).resolves.toBe(500);
+    await expect(seedSynthetic()).resolves.toBe(COUNT);
 
-    expect(ingestPerson).toHaveBeenCalledTimes(500);
+    expect(ingestPerson).toHaveBeenCalledTimes(COUNT);
     for (const [person, docs] of ingestPerson.mock.calls as [Person, EvidenceDoc[]][]) {
-      expect(docs.length).toBeGreaterThanOrEqual(2);
+      expect(docs.length).toBeGreaterThanOrEqual(6);
       expect(docs.every((doc) => doc.personId === person.id)).toBe(true);
     }
     expect(most).toBe(8);

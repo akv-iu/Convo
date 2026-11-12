@@ -174,6 +174,25 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(rows(page).nth(0)).toContainText("Request sent");
   });
 
+  test("with no close match, the list says these are the nearest people, at most three", async ({ page }) => {
+    // The fake API rates everyone a partial fit for "[demo:nearest]", as the model does when no one fits strongly.
+    const askId = await newAsk(page, "how does the Kubernetes scheduler do preemption [demo:nearest]");
+    await open(page, askId);
+    await expect(page.getByText(/^No close match\. The (\d nearest people|nearest person)$/)).toBeVisible();
+    await expect(page.getByText(/^No one here works on exactly this\./)).toBeVisible();
+    expect(await rows(page).count()).toBeLessThanOrEqual(3);
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations, colorScheme).toEqual([]);
+    }
+  });
+
+  test("an ordinary ask counts the people found, with no nearest note", async ({ page }) => {
+    await open(page, await newAsk(page));
+    await expect(page.getByText(/^\d+ (people|person) found$/)).toBeVisible();
+    await expect(page.getByText(/^No close match/)).toHaveCount(0);
+  });
+
   test("a card shows evidence highlights, the mutual marker, and hides fields the person hid", async ({ page }) => {
     await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(3) }));
     await open(page, "made-up");
@@ -523,9 +542,10 @@ test.describe("match list (A2 steps 1-2)", () => {
     await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("That's everyone for now");
     await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches yet");
+    await expect(list(page).getByRole("heading", { level: 2 })).toHaveText("No one matches your search");
     await expect(list(page)).toContainText("Try a different search, or show everyone.");
     await expect(page.getByRole("button", { name: "See them again" })).toHaveCount(0);
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0); // an empty search never offers to close the ask
   });
 
   test("after a save, focus stays where the user moved it", async ({ page, isMobile }) => {
@@ -628,6 +648,14 @@ test.describe("match list (A2 steps 1-2)", () => {
     await page.route("**/api/match", (route) => route.fulfill({ json: [] }));
     await open(page, "made-up");
     await expect(page.getByRole("heading", { name: "No one matches yet" })).toBeVisible();
+    // With no search, the empty list asks whether to keep the request open; Yes keeps it.
+    await expect(page.getByText("Leave as active request?")).toBeVisible();
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Your request stays active." })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Find people who can help" }).fill("Haskell");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "No one matches your search" })).toBeVisible();
+    await expect(page.getByText("Leave as active request?")).toHaveCount(0);
     await page.unroute("**/api/match");
 
     await open(page, "not-a-real-ask");
