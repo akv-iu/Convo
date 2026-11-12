@@ -41,7 +41,7 @@ export function MatchSummary({
             )}
             {p.synthetic && (
               <span className="rounded-full border border-dashed border-border px-2.5 py-0.5 text-xs font-semibold">
-                Synthetic profile<span className="sr-only">: a made-up demo attendee</span>
+                Demo profile<span className="sr-only">: a made-up attendee</span>
               </span>
             )}
           </span>

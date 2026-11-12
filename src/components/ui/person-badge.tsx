@@ -58,7 +58,7 @@ export function PersonBadge({ person, caption, nameId }: { person: CardPerson | 
           <ul aria-label={`About ${person.name}`} className="mt-1.5 flex flex-wrap gap-1.5">
             {person.synthetic && (
               <li className="rounded-md border-2 border-dashed border-border px-2 py-0.5 text-xs font-semibold">
-                Synthetic profile<span className="sr-only">: a made-up demo attendee</span>
+                Demo profile<span className="sr-only">: a made-up attendee</span>
               </li>
             )}
             {chips.map((chip, i) => (

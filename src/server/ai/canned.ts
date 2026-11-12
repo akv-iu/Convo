@@ -1,7 +1,9 @@
-import type { AskType } from "@/contracts/types";
+import type { AskType, Person } from "@/contracts/types";
 import type { AiService } from "./index";
 import { AskBlockedError } from "./blocked";
 import { MEETING_MINUTES } from "./minutes";
+import { contentTerms } from "@/server/search/terms";
+import { expertiseOf } from "@/server/search/evidence";
 
 function classify(text: string): AskType {
   const t = text.toLowerCase();
@@ -232,9 +234,26 @@ export const cannedAi: AiService = {
     // No fit, so the fake API and fallbacks never drop anyone; except "[demo:nearest]" in the ask, which rates
     // everyone a partial fit so screens can show "no close match" (the real model judges each person).
     const nearest = ask.text.includes("[demo:nearest]");
-    return candidates.map((c) => ({
-      why: c.highlights.length ? `Evidence: ${c.highlights[0]}.` : `Profile mentions what you're asking about.`,
-      ...(nearest ? { fit: "partial" as const } : {}),
-    }));
+    return candidates.map((c) => ({ why: whyThem(ask.text, c.person, c.highlights), ...(nearest ? { fit: "partial" as const } : {}) }));
   },
 };
+
+const sentence = (text: string) => {
+  const t = text.trim().replace(/\s+/g, " ");
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+};
+
+/**
+ * The "why them" line without a model: the strongest evidence itself; otherwise the skills,
+ * organisations or expertise they share with the question; otherwise the start of their bio.
+ */
+export function whyThem(question: string, person: Person, highlights: string[]): string {
+  if (highlights.length) return sentence(highlights[0].replace(/<\/?em>/g, ""));
+  const wanted = new Set(contentTerms(question));
+  const labels = [...person.languages, ...person.organisations, ...expertiseOf(person)];
+  const shared = [...new Set(labels.filter((label) => contentTerms(label).some((w) => wanted.has(w))))].slice(0, 3);
+  if (shared.length) return `Works with ${shared.length > 1 ? `${shared.slice(0, -1).join(", ")} and ${shared.at(-1)}` : shared[0]}.`;
+  const bio = person.bio.split(/(?<=[.!?])\s/)[0]?.trim();
+  if (bio) return sentence(bio.length > 110 ? `${bio.slice(0, 107).trimEnd()}...` : bio);
+  return "Their profile mentions what you're asking about.";
+}

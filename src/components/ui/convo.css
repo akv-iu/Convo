@@ -25,30 +25,13 @@
   --danger-border: #b91c1c;
   --popover-shadow: 0 18px 40px -18px rgb(28 25 23 / 0.4); /* badge and pop-ups */
 
+  /* Always the light design, whatever the device setting (Aaron, 9 Nov 2026). */
+  color-scheme: light;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-onb), system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  .onb {
-    --background: #141414; /* charcoal, no blue cast */
-    --surface: #212121;
-    --foreground: #f5f5f4;
-    --muted: #c2bfba;
-    --border: #3a3a3a;
-    --accent: #ff9e6d; /* apricot, 9.6:1 on the background */
-    --accent-hover: #ffbb94;
-    --on-accent: #141414;
-    --accent-2: #5eead4; /* teal */
-    --success: #4ade80; /* green */
-    --on-success: #052e16;
-    --skeleton: #2e2e2e;
-    --danger: #fca5a5; /* error text: light red, distinct from the apricot accent */
-    --danger-border: #f87171;
-    --popover-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.7);
-  }
-}
 
 /*
  * The badge colour follows the checked swatch of a ColourPicker inside
@@ -94,4 +77,15 @@
   0%, 70%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.8); }
   8% { opacity: 1; transform: translate(-50%, -50%) scale(1.6); }
   30% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Confirmations (toast.tsx) and a request-sent card (matches) arrive with a small lift. Used only through motion-safe:. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sent-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.015); }
+  100% { transform: scale(1); }
 }

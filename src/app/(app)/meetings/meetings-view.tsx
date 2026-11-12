@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { MeetingBooked } from "@/components/ui/meeting-booked";
+import { CardSkeleton, EmptyState, pageSubtitleClass, pageTitleClass } from "@/components/ui/page";
 import { PersonBadge } from "@/components/ui/person-badge";
 import { SharedContactCard } from "@/components/ui/shared-contact";
 import type { RequestView } from "@/contracts/types";
@@ -43,13 +44,13 @@ export function MeetingsView() {
 
   return (
     <section aria-labelledby="meetings-heading" className="mt-2">
-      <h1 id="meetings-heading" className="text-[2.6rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl">
+      <h1 id="meetings-heading" className={pageTitleClass}>
         Meetings
       </h1>
-      <p className="mt-3 text-lg text-muted">Your booked meetings, soonest first.</p>
+      <p className={pageSubtitleClass}>Your booked meetings, soonest first.</p>
 
       <div className="mt-6">
-        {load.state === "loading" && <p role="status">Loading your meetings…</p>}
+        {load.state === "loading" && <CardSkeleton label="Loading your meetings…" />}
         {load.state === "failed" && (
           <div>
             <p role="alert" className="text-lg">
@@ -61,29 +62,30 @@ export function MeetingsView() {
           </div>
         )}
         {load.state === "ready" && load.meetings.length === 0 && (
-          <div className="rounded-2xl border-2 border-border bg-surface p-6">
-            <h2 className="text-2xl font-extrabold tracking-tight">No meetings booked yet</h2>
-            <p className="mt-2 text-muted">When you and someone agree on a time, the meeting shows up here.</p>
-            <div className="mt-5">
+          <EmptyState
+            title="No meetings booked yet"
+            action={
               <Button href="/inbox" variant="secondary">
                 Go to your requests
               </Button>
-            </div>
-          </div>
+            }
+          >
+            When you and someone agree on a time, the meeting shows up here.
+          </EmptyState>
         )}
         {load.state === "ready" && load.meetings.length > 0 && (
           <ul className="flex flex-col gap-4">
             {load.meetings.map((m) => (
               <li key={m.id}>
                 <article aria-labelledby={`meeting-${m.id}`} className="rounded-2xl border-2 border-border bg-surface p-5">
-                  <MeetingBooked when={venueRange(m.slot)} className="" />
+                  <MeetingBooked id={m.id} when={venueRange(m.slot)} slot={m.slot} withName={m.person?.name ?? "them"} question={m.question} className="" />
                   <div className="mt-3">
                     <PersonBadge person={m.person} caption={m.mine ? "With (you asked)" : "With (they asked)"} />
                   </div>
                   <h2 id={`meeting-${m.id}`} className="mt-3 text-lg font-semibold leading-snug break-words">
                     {m.question}
                   </h2>
-                  {m.contact && <SharedContactCard contact={m.contact} name={m.person?.name ?? "them"} />}
+                  {m.contact && <SharedContactCard contact={m.contact} name={m.person?.name ?? "them"} question={m.question} />}
                 </article>
               </li>
             ))}

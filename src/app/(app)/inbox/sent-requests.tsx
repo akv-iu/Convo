@@ -10,6 +10,8 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
+import { CardSkeleton, EmptyState } from "@/components/ui/page";
 import { SharedContactCard } from "@/components/ui/shared-contact";
 import { MeetingBooked } from "@/components/ui/meeting-booked";
 import type { Request, RequestView } from "@/contracts/types";
@@ -24,6 +26,7 @@ export function SentRequests() {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [announce, setAnnounce] = useState("");
+  const toast = useToast();
   /** The questions opened to show their people; all start closed. */
   const [openAsks, setOpenAsks] = useState<ReadonlySet<string>>(() => new Set());
   const groups = useMemo(() => (load.state === "ready" ? groupByQuestion(load.requests) : []), [load]);
@@ -62,6 +65,7 @@ export function SentRequests() {
 
   function booked(updated: Request) {
     setAnnounce(updated.slot ? `Meeting booked: ${venueRange(updated.slot)}` : "Meeting booked.");
+    toast(updated.slot ? `Meeting booked: ${venueRange(updated.slot)}` : "Meeting booked");
     // A booking returns a plain request: keep the receiver's badge and the ask type already shown.
     setLoad((cur) =>
       cur.state === "ready"
@@ -82,9 +86,7 @@ export function SentRequests() {
 
       <div className="mt-5">
         {load.state === "loading" && (
-          <output aria-busy="true" className="block text-muted">
-            Loading what you asked…
-          </output>
+          <CardSkeleton label="Loading what you asked…" count={1} />
         )}
 
         {load.state === "failed" && (
@@ -101,12 +103,17 @@ export function SentRequests() {
         )}
 
         {load.state === "ready" && load.requests.length === 0 && (
-          <p className="text-muted">
-            You haven&apos;t sent anyone a question yet.{" "}
-            <a href="/ask" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Ask one
-            </a>
-          </p>
+          <EmptyState
+            title="Nothing asked yet"
+            headingLevel={3}
+            action={
+              <Button href="/ask" variant="secondary">
+                Ask a question
+              </Button>
+            }
+          >
+            You haven&apos;t sent anyone a question yet. Ask one, and the people you send it to show up here.
+          </EmptyState>
         )}
 
         {load.state === "ready" && groups.length > 0 && (
@@ -141,7 +148,7 @@ function QuestionGroup({
   return (
     <section
       aria-labelledby={`asked-${group.askId}-q`}
-      className={`overflow-hidden rounded-2xl border-2 bg-surface ${open ? "border-accent" : "border-border"}`}
+      className={`overflow-hidden rounded-2xl border-2 bg-surface ${open ? "border-foreground/50" : "border-border"}`}
     >
       <button
         type="button"
@@ -163,7 +170,7 @@ function QuestionGroup({
         <span
           aria-hidden="true"
           className={`flex size-10 shrink-0 items-center justify-center rounded-full border-2 ${
-            open ? "border-accent bg-accent text-on-accent" : "border-border bg-background text-foreground"
+            open ? "border-foreground bg-foreground text-background" : "border-border bg-background text-foreground"
           }`}
         >
           <svg viewBox="0 0 24 24" className={`size-6 ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
@@ -217,7 +224,7 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
       {request.status === "declined" && <p className="mt-2 text-muted">{who} declined this one.</p>}
       {(request.status === "accepted" || request.status === "scheduled") &&
         (request.contact ? (
-          <SharedContactCard contact={request.contact} name={name ?? "them"} />
+          <SharedContactCard contact={request.contact} name={name ?? "them"} question={request.question} />
         ) : (
           <p className="mt-2 text-sm text-muted">{who} accepted. They haven&apos;t added contact details yet.</p>
         ))}
@@ -228,7 +235,7 @@ function SentCard({ request, onBooked, onReload }: { request: RequestView; onBoo
         </p>
       )}
       {request.status === "scheduled" && request.slot && (
-        <MeetingBooked when={venueRange(request.slot)} />
+        <MeetingBooked id={request.id} when={venueRange(request.slot)} slot={request.slot} withName={name ?? "them"} question={request.question} />
       )}
       {request.status === "accepted" && !request.slot && <SlotPicker request={request} onBooked={onBooked} onReload={onReload} />}
     </article>

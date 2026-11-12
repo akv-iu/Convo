@@ -1,5 +1,5 @@
 /**
- * The Meetings tab: booked meetings from both sides, soonest first. Replies are made up, as
+ * The Meetings tab: booked meetings from both sides, soonest first, each with Add to calendar. Replies are made up, as
  * no-github.spec.ts does, so the list doesn't depend on other tests' requests.
  */
 import AxeBuilder from "@axe-core/playwright";
@@ -25,7 +25,7 @@ async function openMeetings(page: Page, inbox: unknown, sent: unknown) {
 }
 
 test.describe("meetings", () => {
-  test("lists booked meetings from both sides, soonest first, with contact details and Add to calendar", async ({ page }) => {
+  test("lists booked meetings from both sides, soonest first, with contact details and a calendar file", async ({ page }) => {
     const ada = person("ada", "Ada Example");
     const linus = person("linus", "Linus Example");
     await openMeetings(
@@ -44,11 +44,12 @@ test.describe("meetings", () => {
     await expect(meetings.nth(1)).toContainText("With (they asked)");
     await expect(meetings.nth(1).getByRole("link", { name: "ada@example.com" })).toHaveAttribute("href", "mailto:ada@example.com");
 
-    // Add to calendar isn't built yet: it says so, out loud too.
-    await meetings.nth(0).getByRole("button", { name: /to your calendar$/ }).click();
-    await expect(meetings.nth(0).getByRole("status").filter({ hasText: "Coming soon" })).toBeVisible();
-    await expect(meetings.nth(1).getByRole("status").filter({ hasText: "Coming soon" })).toHaveCount(0);
     expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze()).violations).toEqual([]);
+
+    // Add to calendar saves a calendar file for that meeting.
+    const download = page.waitForEvent("download");
+    await meetings.nth(0).getByRole("button", { name: "Add to calendar (meeting with Linus Example)" }).click();
+    expect((await download).suggestedFilename()).toMatch(/^Lanyard-.*\.ics$/);
   });
 
   test("with nothing booked, it says so and points to your requests", async ({ page }) => {

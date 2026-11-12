@@ -175,13 +175,13 @@ test.describe("requests and inbox (A2 step 4)", () => {
     await empty.goto("/inbox");
     await expect(empty.getByRole("heading", { name: "No requests yet" })).toBeVisible();
 
-    let calls = 0;
-    await empty.route("**/api/inbox", (route) => {
-      calls++;
-      return calls === 1 ? route.fulfill({ status: 503, json: { error: "down" } }) : route.fulfill({ json: [] });
-    });
+    // Failing until Try again: the header's counts read the inbox too, so "the first call" isn't the page's.
+    let failing = true;
+    await empty.route("**/api/inbox", (route) =>
+      failing ? route.fulfill({ status: 503, json: { error: "down" } }) : route.fulfill({ json: [] }));
     await empty.reload();
     await expect(alertWithText(empty)).toHaveText("Your requests didn't load. Try again in a moment.");
+    failing = false;
     await empty.getByRole("button", { name: "Try again" }).click();
     await expect(empty.getByRole("heading", { name: "No requests yet" })).toBeVisible();
     await empty.context().close();

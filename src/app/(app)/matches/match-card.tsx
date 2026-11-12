@@ -69,11 +69,6 @@ export function MatchDetails({
         </div>
       )}
 
-      <p className="rounded-xl bg-accent/10 px-4 py-3 leading-snug">
-        <span className="block text-xs font-semibold">Why them</span>
-        {match.explanation}
-      </p>
-
       {match.highlights.length > 0 && (
         <div>
           <h3 className="text-xs font-semibold text-muted">Evidence</h3>

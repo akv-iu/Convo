@@ -26,6 +26,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { BackLink } from "@/components/ui/back-link";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/components/ui/toast";
+import { pageTitleClass } from "@/components/ui/page";
 import { githubProfile } from "@/components/ui/person-badge";
 import type { MatchResult, Request, RequestView } from "@/contracts/types";
 import { recallAsk } from "../ask/asks";
@@ -42,8 +44,7 @@ import {
   type Failure,
 } from "./matches";
 
-const headingClass =
-  "text-[2.2rem] font-extrabold leading-[1.02] tracking-[-0.03em] [font-stretch:85%] sm:text-5xl";
+const headingClass = pageTitleClass;
 const errorClass = "text-sm font-medium text-[var(--danger)]";
 
 type Load =
@@ -128,6 +129,7 @@ function AskMatches({ askId }: { askId: string }) {
   /** The save in flight, as a ref: state only updates after a re-render, too late to stop a second press. */
   const busyRef = useRef(false);
   const [announce, setAnnounce] = useState("");
+  const toast = useToast();
   const [sent, setSent] = useState<RequestView[]>([]);
   const [sentStatus, setSentStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [sentAttempt, setSentAttempt] = useState(0);
@@ -311,12 +313,14 @@ function AskMatches({ askId }: { askId: string }) {
           const saved: RequestView = { ...(body as Request), type: null, person: match.person };
           setSent((previous) => [...previous.filter((request) => request.id !== saved.id), saved]);
           setAnnounce(message?.trim() ? `Message sent to ${who}.` : `Request sent to ${who}.`);
+          toast(message?.trim() ? `Message sent to ${who}` : `Request sent to ${who}`);
           if (!stale) openNext(matches);
           return;
         }
         // A pass: they leave the list (unless the switch is off), and the server's cutoff may hide more.
         const cutoff = (body as { hiddenBelowRank: number | null }).hiddenBelowRank;
         setAnnounce(`Passed on ${who}.`);
+        toast(`Passed on ${who}`, "neutral");
         setPassedAny(true);
         setPassedIds((cur) => new Set(cur).add(match.person.id));
         const passedId = match.person.id;
@@ -339,7 +343,7 @@ function AskMatches({ askId }: { askId: string }) {
         setBusy(null);
       }
     },
-    [askId, blockerSaving, lockedIds, matches, passedIds, sentIds],
+    [askId, blockerSaving, lockedIds, matches, passedIds, sentIds, toast],
   );
 
   async function toggleBlocker(enabled: boolean) {
@@ -555,7 +559,9 @@ function AskMatches({ askId }: { askId: string }) {
                 key={m.person.id}
                 id={`match-${m.person.id}-item`}
                 className={`relative overflow-hidden rounded-2xl border-2 transition-colors motion-reduce:transition-none ${
-                  isSent ? "border-success bg-success/10" : `bg-surface ${open ? "border-accent" : "border-border"}`
+                  isSent
+                    ? "border-success bg-success/10 motion-safe:animate-[sent-pop_400ms_ease-out]"
+                    : `bg-surface ${open ? "border-foreground/50" : "border-border"} ${isPassed ? "opacity-70" : ""}`
                 }`}
               >
                 <button
@@ -576,7 +582,7 @@ function AskMatches({ askId }: { askId: string }) {
                   <span
                     aria-hidden="true"
                     className={`mt-1 flex size-10 shrink-0 items-center justify-center rounded-full border-2 transition-colors motion-reduce:transition-none ${
-                      open ? "border-accent bg-accent text-on-accent" : "border-border bg-background text-foreground"
+                      open ? "border-foreground bg-foreground text-background" : "border-border bg-background text-foreground"
                     }`}
                   >
                     <svg

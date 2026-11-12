@@ -11,6 +11,7 @@ vi.mock("@neondatabase/serverless", async (importOriginal) => ({
 
 import { AskBlockedError } from "./blocked";
 import { openAi } from "./openai";
+import { whyThem } from "./canned";
 
 const requester = people[0];
 const ask: RefinedAsk = { text: "How does the Kubernetes scheduler pick pods to preempt?", type: "knowledge", minutes: 5 };
@@ -18,6 +19,8 @@ const reply = (value: unknown, extra: object = {}) => ({
   id: "resp_1", model: "gpt-5.4-mini-2026-03-17", status: "completed", output_text: JSON.stringify(value),
   usage: { input_tokens: 120, output_tokens: 30 }, ...extra,
 });
+/** The line for a card without evidence: what they share with the question, or their bio (see whyThem). */
+const noEvidence = whyThem(ask.text, requester, []);
 const card = (id: string, highlights: string[]): Candidate => ({ person: { ...requester, id }, highlights, evidence: [], score: 1 });
 const statements = (verb: "select" | "insert") =>
   query.mock.calls.filter(([text]) => String(text).toLowerCase().startsWith(verb));
@@ -173,7 +176,7 @@ describe("explain", () => {
 
     await expect(openAi.explain(ask, cards)).resolves.toEqual([
       { why: "Maintains kube-scheduler preemption.", fit: "strong" },
-      { why: "Profile mentions what you're asking about." }, // no evidence: never judged, never dropped
+      { why: noEvidence }, // no evidence: never judged, never dropped
       { why: "Built a scheduler simulator.", fit: "partial" },
     ]);
 
@@ -214,7 +217,7 @@ describe("explain", () => {
     create.mockRejectedValueOnce(new Error("Request timed out."));
 
     await expect(openAi.explain(ask, [card("a", ["kube-scheduler: preemption"])]))
-      .resolves.toEqual([{ why: "Evidence: kube-scheduler: preemption." }]);
+      .resolves.toEqual([{ why: "kube-scheduler: preemption." }]);
 
     expect(statements("insert")).toHaveLength(0);
   });
@@ -225,14 +228,14 @@ describe("explain", () => {
     ] }));
 
     await expect(openAi.explain(ask, [card("a", ["x"]), card("b", ["y"])]))
-      .resolves.toEqual([{ why: "Evidence: x." }, { why: "Evidence: y." }]);
+      .resolves.toEqual([{ why: "x." }, { why: "y." }]);
 
     expect(statements("insert")).toHaveLength(0);
   });
 
   it("calls nothing for an empty list or cards without evidence", async () => {
     await expect(openAi.explain(ask, [])).resolves.toEqual([]);
-    await expect(openAi.explain(ask, [card("b", [])])).resolves.toEqual([{ why: "Profile mentions what you're asking about." }]);
+    await expect(openAi.explain(ask, [card("b", [])])).resolves.toEqual([{ why: noEvidence }]);
 
     expect(query).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();

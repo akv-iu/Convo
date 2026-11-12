@@ -1,13 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import "@/components/ui/convo.css";
+import { AppNav } from "@/components/ui/app-nav";
 import { Logo } from "@/components/ui/logo";
 import { convoThemeClass } from "@/components/ui/theme";
+import { ToastProvider } from "@/components/ui/toast";
 
 /**
  * Shell for the signed-in screens (ask, matches, requests, meetings): the same look as
- * onboarding, with a slim header. A skip link lets keyboard users jump
- * straight to the screen's content.
+ * onboarding, with a slim header whose tabs show where you are and what's waiting. A skip link
+ * lets keyboard users jump straight to the screen's content. Confirmations show as toasts.
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -18,43 +20,22 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="border-b border-border">
-        <nav aria-label="Main" className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-4 sm:px-8">
-          <Link
-            href="/ask"
-            className="mr-auto rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <Logo nameClassName="max-sm:sr-only" />
-          </Link>
-          <Link
-            href="/ask"
-            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
-          >
-            Ask
-          </Link>
-          <Link
-            href="/inbox"
-            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
-          >
-            Requests
-          </Link>
-          <Link
-            href="/meetings"
-            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
-          >
-            Meetings
-          </Link>
-          <Link
-            href="/onboarding/profile"
-            className="flex min-h-11 items-center rounded-lg px-2 text-[15px] font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:px-3 sm:text-base"
-          >
-            Profile
-          </Link>
-        </nav>
-      </header>
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 pb-10 pt-6 sm:px-8 sm:pt-10">
-        {children}
-      </main>
+      <ToastProvider>
+        <header className="border-b border-border">
+          <nav aria-label="Main" className="mx-auto flex h-14 w-full max-w-5xl items-center gap-1 px-4 sm:px-8">
+            <Link
+              href="/ask"
+              className="mr-auto rounded-md px-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <Logo nameClassName="max-sm:sr-only" />
+            </Link>
+            <AppNav />
+          </nav>
+        </header>
+        <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-4 pb-10 pt-6 sm:px-8 sm:pt-10">
+          {children}
+        </main>
+      </ToastProvider>
     </div>
   );
 }
