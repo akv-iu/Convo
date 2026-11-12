@@ -383,7 +383,9 @@ describe("matching a saved ask", () => {
     expect(await matchAsk(person.id, ask.id, "raft")).toEqual([]);
     expect(query.mock.calls[0][0]).toContain('where ("asks"."id" = $1 and "asks"."user_id" = $2)');
     expect(query.mock.calls[0][1]).toEqual([ask.id, person.id, 1]);
-    expect(runMatch).toHaveBeenCalledWith({ ask, requester: person, query: "raft", excludeIds: [], hideIds: [], hiddenBelowRank: null });
+    expect(runMatch).toHaveBeenCalledWith({
+      ask, requester: person, query: "raft", excludeIds: [], hideIds: [], hiddenBelowRank: null, savedVisibility: expect.any(Function),
+    });
   });
 
   it("hides existence of another user's or a missing ask", async () => {
