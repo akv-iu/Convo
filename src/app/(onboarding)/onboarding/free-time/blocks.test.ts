@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { routes } from "@/contracts/routes";
-import { block, people } from "@/contracts/fixtures";
+import { block, CONFERENCE_DAY, people } from "@/contracts/fixtures";
 import {
   availabilityBody,
   blocksForDay,
@@ -70,8 +70,9 @@ describe("pickedFromSaved", () => {
 
   it("round-trips the fixture user's free times", () => {
     const saved = people[0].freeTimes; // 9-10, 13-14:30, 16:30-17:30
-    const picked = pickedFromSaved(blocks, saved);
-    expect(toTimeBlocks(blocks, picked, "2026-11-09")).toEqual(saved);
+    const today = blocksForDay(CONFERENCE_DAY); // the fixture's day
+    const picked = pickedFromSaved(today, saved);
+    expect(toTimeBlocks(today, picked, CONFERENCE_DAY)).toEqual(saved);
     expect(saved[0]).toEqual(block("09:00", "10:00"));
   });
 });
@@ -117,15 +118,16 @@ describe("hiddenFromGrid (saved times the grid can't show are kept)", () => {
   });
 
   it("a save sends the picks plus the hidden times, in time order, and the API accepts it", () => {
-    const hidden = [t("2026-11-10T09:00:00-07:00", "2026-11-10T10:00:00-07:00"), t("2026-11-09T07:00:00-07:00", "2026-11-09T07:30:00-07:00")];
-    const body = availabilityBody(blocks, new Set([2, 3]), hidden);
+    const d = CONFERENCE_DAY; // the grid saves on the event day
+    const hidden = [t("2099-01-01T09:00:00-07:00", "2099-01-01T10:00:00-07:00"), t(`${d}T07:00:00-07:00`, `${d}T07:30:00-07:00`)];
+    const body = availabilityBody(blocksForDay(d), new Set([2, 3]), hidden);
     expect(body).toEqual([
-      t("2026-11-09T07:00:00-07:00", "2026-11-09T07:30:00-07:00"),
-      t("2026-11-09T09:00:00-07:00", "2026-11-09T10:00:00-07:00"),
-      t("2026-11-10T09:00:00-07:00", "2026-11-10T10:00:00-07:00"),
+      t(`${d}T07:00:00-07:00`, `${d}T07:30:00-07:00`),
+      t(`${d}T09:00:00-07:00`, `${d}T10:00:00-07:00`),
+      t("2099-01-01T09:00:00-07:00", "2099-01-01T10:00:00-07:00"),
     ]);
     expect(routes.putAvailability.body.safeParse(body).success).toBe(true);
     // Clearing the grid still keeps what it can't show.
-    expect(availabilityBody(blocks, new Set(), hidden)).toHaveLength(2);
+    expect(availabilityBody(blocksForDay(d), new Set(), hidden)).toHaveLength(2);
   });
 });
