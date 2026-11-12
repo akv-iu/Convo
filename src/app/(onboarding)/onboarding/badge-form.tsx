@@ -22,11 +22,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { EraserIcon } from "@/components/ui/eraser-icon";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, avatars } from "@/components/ui/avatars";
 import type { AvatarId, Person, ProfileVisibility } from "@/contracts/types";
-import { Badge, BadgeChip } from "../_components/badge";
+import { Badge } from "../_components/badge";
+import { BadgeCountry, BadgeLines } from "../_components/badge-lines";
 import { DEFAULT_COLOUR, isBadgeColour, readBadgePrefs, showSavedColour, writeBadgePrefs, type BadgeColour } from "../_components/badge-prefs";
 import { colourFollowsPicker, ColourPicker } from "../_components/colour-picker";
 import { clearDraft, readDraft } from "../_components/draft";
@@ -226,16 +226,6 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
     setVisibility((cur) => ({ ...cur, [id]: !cur[id] }));
   }
 
-  /**
-   * A line on the badge people can hide: tap it (pointer) to hide it, and it
-   * disappears from the badge. The labelled switches beside the badge bring
-   * it back, and do the same for keyboard and screen-reader users, since the
-   * badge itself is decorative.
-   */
-  const tappable = "group/line cursor-pointer rounded-md -mx-1 px-1 hover:bg-accent/10";
-  /** The eraser marking a line you can remove; it darkens when you point at the line. */
-  const eraser = <EraserIcon className="opacity-75 group-hover/line:opacity-100" />;
-  const hideHint = "Tap to hide from your badge";
 
   function closePicker() {
     setPickerOpen(false);
@@ -263,53 +253,9 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           <span aria-hidden="true">+</span>
         </button>
       }
-      label={
-        visibility.country ? (
-          <span
-            role="presentation"
-            title={hideHint}
-            onClick={() => toggleSection("country")}
-            className={`inline-flex items-center gap-1 ${tappable}`}
-          >
-            {countryName(about.country)}
-            {eraser}
-          </span>
-        ) : (
-          " "
-        )
-      }
+      label={<BadgeCountry country={countryName(about.country)} shown={visibility.country} onHide={toggleSection} />}
     >
-      {visibility.workplace && (
-        <span
-          role="presentation"
-          title={hideHint}
-          onClick={() => toggleSection("workplace")}
-          className={`mt-4 flex items-start gap-2 ${tappable}`}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs text-muted">Works at</span>
-            <span className="block font-semibold leading-snug break-words">{workplaceLabel(about.workplace)}</span>
-          </span>
-          <span className="mt-0.5">{eraser}</span>
-        </span>
-      )}
-      {visibility.hiring && (
-        <span
-          role="presentation"
-          title={hideHint}
-          onClick={() => toggleSection("hiring")}
-          className={`mt-3 flex w-fit flex-wrap items-center gap-1.5 ${tappable}`}
-        >
-          {hiring === null ? (
-            <BadgeChip className="w-20" />
-          ) : (
-            <BadgeChip className={hiring ? "bg-accent text-on-accent" : "bg-[var(--skeleton)]"}>
-              {hiring ? "Hiring" : "Not hiring"}
-            </BadgeChip>
-          )}
-          {eraser}
-        </span>
-      )}
+      <BadgeLines workplace={workplaceLabel(about.workplace)} hiring={hiring} visibility={visibility} onHide={toggleSection} />
     </Badge>
   );
 
@@ -349,10 +295,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
       {/* The badge, with what changes it right beside it (rendered once). */}
       <section
         aria-label="Your badge's look"
-        className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:gap-14"
+        className="mt-10 grid items-start gap-8 sm:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] sm:items-center lg:gap-14"
       >
-        <div className="flex w-full flex-col items-center gap-6">
-          <div className="w-full">{badge}</div>
+        <div className="w-full sm:col-start-1 sm:row-start-1">{badge}</div>
+        {/* Under the badge: the picture picker (when open) and the colours. */}
+        <div className="flex w-full flex-col items-center gap-6 sm:col-start-1 sm:row-start-2">
           {pickerOpen && (
             <fieldset
               id="avatar-picker"
@@ -394,8 +341,11 @@ export function BadgeForm({ enrichment = false }: { enrichment?: boolean }) {
           )}
           <ColourPicker defaultColour={colour} centred />
         </div>
-        {/* From 1024 px the badge hangs from a strap (lg:mt-16), so start level with its card, not the strap. */}
-        <div className="flex flex-col gap-6 lg:pt-16">
+        {/*
+          Beside the badge, centred on it. From 1024 px the badge hangs from a strap (lg:mt-16), so the
+          same margin here centres on the card, not on the strap.
+        */}
+        <div className="flex flex-col gap-6 sm:col-start-2 sm:row-start-1 sm:self-center lg:mt-16">
           <fieldset className="border-0 p-0" aria-describedby="visibility-note">
             <legend className="mb-1 text-base font-semibold">Show on your badge</legend>
             <p id="visibility-note" className="mb-2 text-sm text-muted">

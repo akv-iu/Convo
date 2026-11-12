@@ -230,6 +230,42 @@ test.describe("your badge (step 2)", () => {
     await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/signin");
   });
 
+  test("the switches sit centred against the badge, beside it", async ({ page, isMobile }) => {
+    test.skip(isMobile, "on phones the switches stack under the badge");
+    await openWithDraft(page, "p_003");
+    const card = await page.locator("[data-badge]:visible [data-badge-stripe]").locator("..").boundingBox();
+    const switches = await page.getByRole("group", { name: "Show on your badge" }).locator("..").boundingBox();
+    expect(card && switches).toBeTruthy();
+    const middle = (b: { y: number; height: number }) => b.y + b.height / 2;
+    expect(Math.abs(middle(card!) - middle(switches!))).toBeLessThanOrEqual(8);
+    expect(switches!.x).toBeGreaterThan(card!.x + card!.width); // beside it, not under it
+  });
+
+  test("each eraser sits right after the text it removes", async ({ page }) => {
+    await openWithDraft(page, "p_003");
+    const badge = visibleBadge(page);
+    const text = await badge.getByText("University of Oxford", { exact: true }).boundingBox();
+    const erasers = badge.locator("[data-eraser]");
+    await expect(erasers).toHaveCount(3);
+    // The workplace eraser is the one on the same line, just after the name.
+    const boxes = await erasers.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+    const sameLine = boxes.filter((b) => Math.abs(b.y + b.height / 2 - (text!.y + text!.height / 2)) < text!.height);
+    expect(sameLine).toHaveLength(1);
+    expect(sameLine[0].x - (text!.x + text!.width)).toBeGreaterThanOrEqual(0);
+    expect(sameLine[0].x - (text!.x + text!.width)).toBeLessThanOrEqual(16);
+  });
+
+  test("step 3's badge shows the details entered on step 1, not other ones", async ({ page }) => {
+    await openWithDraft(page, "p_003", { name: "Grace Hopper", country: "US", workplace: { kind: "custom", name: "Harbor Compilers" } });
+    await page.goto("/onboarding/free-time"); // the step 1 answers are still in this tab
+    const badge = visibleBadge(page);
+    await expect(badge).toContainText("Grace Hopper");
+    await expect(badge).toContainText("Harbor Compilers");
+    await expect(badge).toContainText("United States");
+    const me = await stored(page, "p_003");
+    if (me.name !== "Grace Hopper") await expect(badge).not.toContainText(me.name);
+  });
+
   test("the + on the badge picks a picture: it shows on the badge and is saved with Continue", async ({ page, isMobile }) => {
     await openWithDraft(page, "p_003");
     const badge = visibleBadge(page);

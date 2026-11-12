@@ -16,12 +16,13 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Button } from "@/components/ui/button";
 import type { Person } from "@/contracts/types";
 import { Badge, BadgeBar, BadgeChip } from "../../_components/badge";
+import { BadgeCountry, BadgeLines } from "../../_components/badge-lines";
 import { clearOnboardingTab } from "../../_components/draft";
 import { showSavedColour } from "../../_components/badge-prefs";
-import { saveErrorMessage } from "../answers";
+import { aboutFromProfile, saveErrorMessage, SHOW_ALL, workplaceLabel } from "../answers";
 import { countryName } from "@/components/ui/countries";
 import { ChipEditor } from "./chip-editor";
-import { SeenByOthers } from "./seen-by-others";
+import { SeenByOthers, useVisibilitySave } from "./seen-by-others";
 import { addPending, changesFrom, draftFrom, LIMITS, loadProblem, nameProblem, type Draft } from "./edits";
 
 export const NEXT_STEP = "/ask";
@@ -72,6 +73,8 @@ function BadgeRow({
 export function ProfileForm() {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ state: "loading" });
+  /** Show/hide choices save at once, from the badge's erasers or the switches below it. */
+  const visibilitySaver = useVisibilitySave((saved) => setLoad({ state: "ready", person: saved }));
   const [attempt, setAttempt] = useState(0);
   const [original, setOriginal] = useState<Draft | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -220,14 +223,18 @@ export function ProfileForm() {
   }
 
   const row = { onOpen: startEditing };
+  // The same hiding rules as step 2: hidden lines aren't on the badge, and an eraser hides one.
+  const visibility = person.visibility ?? SHOW_ALL;
+  const hide = (section: keyof typeof visibility) => void visibilitySaver.save({ ...visibility, [section]: false });
   const badge = (
     <Badge
       name={d.name.trim() || "Your name"}
       handle={person.githubLogin}
       avatar={person.avatar}
-      label={countryName(person.filters.country)}
+      label={<BadgeCountry country={countryName(person.filters.country)} shown={visibility.country} onHide={hide} />}
       onName={() => startEditing(FIELD.name)}
     >
+      <BadgeLines workplace={workplaceLabel(aboutFromProfile(person).workplace)} hiring={person.filters.hiring} visibility={visibility} onHide={hide} />
       <BadgeRow {...row} field={FIELD.bio} caption="Bio">
         {d.bio.trim() ? (
           <span className="block text-sm leading-snug break-words">{d.bio.trim()}</span>
@@ -282,7 +289,7 @@ export function ProfileForm() {
         </div>
       </div>
       {/* Before sending any requests: the row other people see, and what it shows. */}
-      <SeenByOthers person={person} onSaved={(saved) => setLoad({ state: "ready", person: saved })} />
+      <SeenByOthers person={person} saver={visibilitySaver} />
       </>
     );
   }
