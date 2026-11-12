@@ -107,6 +107,7 @@ test.describe("your details (step 4)", () => {
     page.on("request", (req) => {
       if (isSave(req)) saved = true;
     });
+    await page.getByRole("textbox", { name: "Email" }).fill("demo@example.com");
     await yes(page).click();
     await expect(page).toHaveURL(/\/ask$/, { timeout: AFTER_SUBMIT });
     expect(saved).toBe(false);
@@ -300,4 +301,43 @@ test.describe("your details (step 4)", () => {
       await scan("ask screen");
     });
   }
+});
+
+test.describe("contact details (step 4)", () => {
+  const email = (page: Page) => page.getByRole("textbox", { name: "Email" });
+  const saved = { email: "saved@example.com", phone: null, share: "email" };
+
+  test("saved details that arrive late don't replace what was already typed", async ({ page }) => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let served = false;
+    await page.route("**/api/me/contact", async (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      await held;
+      served = true;
+      await route.fulfill({ json: saved });
+    });
+    await open(page, "p_006");
+    await email(page).fill("typed@example.com");
+    release();
+    await expect.poll(() => served).toBe(true);
+    await expect(email(page)).toHaveValue("typed@example.com");
+
+    await page.reload(); // nothing typed: the saved details fill the form
+    await expect(email(page)).toHaveValue("saved@example.com");
+  });
+
+  test("a failed load says so, with Try again, instead of an empty form", async ({ page }) => {
+    let failing = true;
+    await page.route("**/api/me/contact", (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      return failing ? route.fulfill({ status: 503, json: { error: "Unavailable" } }) : route.fulfill({ json: saved });
+    });
+    await open(page, "p_006");
+    await expect(page.getByRole("alert").filter({ hasText: "Your saved contact details didn't load" })).toBeVisible();
+    failing = false;
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(email(page)).toHaveValue("saved@example.com");
+    await expect(page.getByRole("alert").filter({ hasText: "didn't load" })).toHaveCount(0);
+  });
 });

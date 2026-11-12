@@ -177,6 +177,25 @@ export const Request = z.object({
 });
 export type Request = z.infer<typeof Request>;
 
+/** Which of your contact details go to someone once you both agree to meet. */
+export const ContactShare = z.enum(["email", "phone", "both"]);
+export type ContactShare = z.infer<typeof ContactShare>;
+
+/**
+ * Your own contact details. Private: never on a badge, a card or in search. Lanyard shares the
+ * ones `share` picks with one person, only once a request between you is agreed (accepted or booked).
+ */
+export const ContactDetails = z.object({
+  email: z.email().max(254).nullable(),
+  phone: z.string().trim().regex(/^\+?[0-9][0-9 ()-]{5,23}$/, "Enter a phone number, e.g. +44 7700 900123").nullable(),
+  share: ContactShare,
+});
+export type ContactDetails = z.infer<typeof ContactDetails>;
+
+/** What the other person shared with you on an agreed request: their chosen email and/or phone. */
+export const SharedContact = z.object({ email: z.string().nullable(), phone: z.string().nullable() });
+export type SharedContact = z.infer<typeof SharedContact>;
+
 /** A request as it appears in the inbox or sent list: with the other person's badge and the ask's type. */
 export const RequestView = Request.extend({
   /** What kind of conversation it is; null for an ask that was never refined. */
@@ -186,6 +205,8 @@ export const RequestView = Request.extend({
    * the receiver in sent requests. Null if that profile can't be found any more.
    */
   person: CardPerson.nullable(),
+  /** The other person's shared contact details, once the request is agreed (accepted or booked); otherwise absent or null. */
+  contact: SharedContact.nullish(),
 });
 export type RequestView = z.infer<typeof RequestView>;
 

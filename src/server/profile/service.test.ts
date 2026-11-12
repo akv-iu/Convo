@@ -67,7 +67,7 @@ describe("real profile and availability services", () => {
       badgeColour: "sunflower" as const, visibility: { country: true, workplace: true, hiring: true },
       githubEvidence: evidence, githubEvidencePending: true, avatar: null,
       profileEvidence: null, profileSources: [], profileEvidencePending: false, expertise: null, textVersion: 0,
-      avatarColour: null,
+      avatarColour: null, contactEmail: null, contactPhone: null, contactShare: "email" as const,
     };
     const synced = { ...person, avatar: null, avatarColour: null }; // no picture chosen: initials on the badge colour
 

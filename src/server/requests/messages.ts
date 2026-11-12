@@ -8,6 +8,8 @@ import { toPerson } from "@/server/profile/service";
 import { visiblePerson } from "@/server/profile/visibility";
 import { MEETING_MINUTES } from "@/server/ai/minutes";
 import { search } from "@/server/search";
+import { contactFromRow } from "@/server/profile/contact";
+import { sharedContact } from "./contact-share";
 
 class RequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -31,6 +33,8 @@ async function withBadges(rows: Request[], other: (request: Request) => string):
     db().select({ id: asks.id, refined: asks.refined }).from(asks).where(inArray(asks.id, [...new Set(rows.map((r) => r.askId))])),
   ]);
   const people = new Map<string, CardPerson>();
+  // Contact details come with the account; they only reach the other side on an agreed request.
+  const contacts = new Map(accounts.map((user) => [user.id, contactFromRow(user)]));
   for (const user of accounts) {
     if (user.filters === null) continue;
     const person = toPerson(user);
@@ -42,7 +46,12 @@ async function withBadges(rows: Request[], other: (request: Request) => string):
     people.set(person.id, visiblePerson(person, person.synthetic ? person.visibility : HIDE_ALL));
   }
   const types = new Map(asked.map((ask) => [ask.id, RefinedAsk.safeParse(ask.refined).data?.type ?? null]));
-  return rows.map((r) => ({ ...r, type: types.get(r.askId) ?? null, person: people.get(other(r)) ?? null }));
+  return rows.map((r) => ({
+    ...r,
+    type: types.get(r.askId) ?? null,
+    person: people.get(other(r)) ?? null,
+    contact: sharedContact(contacts.get(other(r)), r.status),
+  }));
 }
 
 export async function sendRequest(userId: string, body: RouteBody<"sendRequest">): Promise<Request> {

@@ -81,3 +81,13 @@
   from { transform: translateY(-12%); opacity: 0.35; }
   to { transform: none; opacity: 1; }
 }
+
+/* The empty-inbox radar (scan-radar.tsx). Used only through motion-safe:. */
+@keyframes scan-sweep {
+  to { transform: rotate(-360deg); }
+}
+@keyframes scan-ping {
+  0%, 70%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.8); }
+  8% { opacity: 1; transform: translate(-50%, -50%) scale(1.6); }
+  30% { opacity: 0.8; transform: translate(-50%, -50%) scale(1); }
+}

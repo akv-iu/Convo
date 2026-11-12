@@ -11,6 +11,7 @@ import {
 import {
   Ask,
   AskType,
+  ContactDetails,
   MatchResult,
   Person,
   RefinedAsk,
@@ -119,6 +120,21 @@ export const routes = {
     usedBy: "A1",
     body: Person.partial().omit({ id: true, synthetic: true, githubLogin: true, expertise: true }),
     response: Person,
+  }),
+  getContact: def({
+    method: "GET",
+    path: "/api/me/contact",
+    description: "The signed-in user's private contact details, and which to share once a request is agreed.",
+    usedBy: "A1",
+    response: ContactDetails,
+  }),
+  putContact: def({
+    method: "PUT",
+    path: "/api/me/contact",
+    description: "Save the signed-in user's contact details and what to share when a request is agreed.",
+    usedBy: "A1",
+    body: ContactDetails,
+    response: ContactDetails,
   }),
   searchRor: def({
     method: "GET",

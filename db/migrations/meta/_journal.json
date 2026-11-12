@@ -92,6 +92,13 @@
       "when": 1794194077879,
       "tag": "0012_request_message",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794194205235,
+      "tag": "0013_contact_details",
+      "breakpoints": true
     }
   ]
 }
