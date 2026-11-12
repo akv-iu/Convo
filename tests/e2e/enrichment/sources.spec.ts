@@ -126,6 +126,12 @@ test.describe("profile enrichment: details and sources", () => {
     await page.getByRole("button", { name: "Connect GitHub" }).click();
     await expect(github.getByText("Connected as @demo-connected.", { exact: false })).toBeVisible();
     await expect(page.getByText("GitHub wasn't connected")).toHaveCount(0);
+    // Linked, Connect becomes Reconnect: it renews GitHub access when an import says "GitHub needs reconnecting".
+    await expect(page.getByRole("button", { name: "Connect GitHub", exact: true })).toHaveCount(0);
+    const reconnecting = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/api/profile-enrichment/github/connect"));
+    await page.getByRole("button", { name: "Reconnect GitHub", exact: true }).click();
+    await reconnecting;
+    await expect(github.getByText("Connected as @demo-connected.", { exact: false })).toBeVisible();
     const owner = await api(page, user);
     expect(owner.signIn.provider).toBe("google"); // connecting never switches the account
     expect(owner.github).toEqual({ connected: true, login: "demo-connected" });

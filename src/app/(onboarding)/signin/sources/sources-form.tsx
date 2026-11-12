@@ -563,6 +563,15 @@ export function SourcesForm({
                   {shown("github_connect") && <p className={errorClass}>Connect GitHub, or turn off GitHub.</p>}
                 </div>
               )}
+              {/*
+                Connected is the account link; reading GitHub also needs this sign-in's access, which is gone after
+                signing in with Google or when GitHub revokes it ("GitHub needs reconnecting"). Reconnecting renews it.
+              */}
+              {owner.github.connected && (
+                <Button id="github-reconnect" variant="secondary" className="self-start" aria-disabled={connecting} onClick={connectGitHub}>
+                  {connecting ? "Reconnecting…" : "Reconnect GitHub"}
+                </Button>
+              )}
               {githubFailure && <HowToFix reason={githubFailure} />}
             </>
           )}
