@@ -7,6 +7,7 @@ import {
   loadAsk,
   highlightParts,
   matchFailure,
+  onlyNearest,
   passFailure,
   resolveFailure,
   sendFailure,
@@ -148,5 +149,14 @@ describe("the saved ask (GET /api/asks/:id)", () => {
     expect(await loadAsk("a1")).toBe(503);
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     expect(await loadAsk("a1")).toBe(0);
+  });
+});
+
+describe("onlyNearest", () => {
+  it("is true only when the AI judged the cards and none fits strongly", () => {
+    expect(onlyNearest([match({ rank: 0, fit: "partial" }), match({ rank: 1, fit: "partial" })])).toBe(true);
+    expect(onlyNearest([match({ rank: 0, fit: "partial" }), match({ rank: 1, fit: "strong" })])).toBe(false);
+    expect(onlyNearest([match({ rank: 0 }), match({ rank: 1 })])).toBe(false); // not judged: fake API or AI down
+    expect(onlyNearest([])).toBe(false);
   });
 });
