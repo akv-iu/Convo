@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/b6372eda-da63-4eab-957c-1d2029497a13
+
 # Convo
 
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=akv-iu_Convo&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=akv-iu_Convo)
