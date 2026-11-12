@@ -114,7 +114,7 @@ test.describe("match list (A2 steps 1-2)", () => {
     const first = expected[0];
     await expect(card(page).getByRole("heading", { level: 2 })).toHaveText(first.person.name);
     await expect(page.getByText(`${expected.length} ${expected.length === 1 ? "person" : "people"} found`)).toBeVisible();
-    await expect(card(page)).toContainText(first.explanation);
+    await expect(rows(page).first()).toContainText(first.explanation); // why them is on the row
     if (first.person.synthetic) await expect(card(page)).toContainText("Demo profile");
   });
 
@@ -946,14 +946,16 @@ test.describe("match list (A2 steps 1-2)", () => {
       headers: { "x-demo-user": ME }, data: { askId, toPersonId: first.person.id },
     });
     expect(sent.ok()).toBe(true);
-    let loads = 0;
+    // Failing until Try again: the header's counts read sent requests too, so "the first call" isn't the page's.
+    let failing = true;
     await page.route("**/api/requests/sent", async route => {
-      if (++loads === 1) return route.fulfill({ status: 503, json: { error: "unavailable" } });
+      if (failing) return route.fulfill({ status: 503, json: { error: "unavailable" } });
       return route.fulfill({ response: await route.fetch() });
     });
     await open(page, askId);
     const error = page.getByRole("alert").filter({ hasText: "Your sent requests didn't load." });
     await expect(error).toBeVisible();
+    failing = false;
     await error.getByRole("button", { name: "Try again" }).click();
     await expect(error).toHaveCount(0);
     await page.getByRole("button", { name: "Mark as answered" }).click();
@@ -978,7 +980,8 @@ test.describe("match list (A2 steps 1-2)", () => {
 
   for (const scheme of ["light", "dark"] as const) {
     test(`has no accessibility violations in ${scheme} mode`, async ({ page }) => {
-      await page.emulateMedia({ colorScheme: scheme });
+      // Reduced motion: the sent toast fades in, and a scan mid-fade reads blended colours.
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.route("**/api/match", (route) => route.fulfill({ json: fakeMatches(2) }));
       let sends = 0; // each request gets its own ID, as on the server
       await page.route("**/api/requests", (route) => route.fulfill({ json: { id: `r${++sends}` } }));
